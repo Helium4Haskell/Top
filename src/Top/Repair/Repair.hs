@@ -11,8 +11,8 @@ import Top.Repair.AExpr
 import Data.Maybe
 
 -------------------
-repairSystem :: RepairInfo info => AExpr info -> [String]
-repairSystem aexpr = [showSimple aexpr]
+repair :: RepairInfo info => AExpr info -> [String]
+repair aexpr = [showSimple aexpr]
 
 -- | use a state monad to store information about used type-variables and equalityconstraints
 type TI a = State (Int, [EqualityConstraint ()]) a

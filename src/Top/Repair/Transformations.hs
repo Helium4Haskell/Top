@@ -68,7 +68,7 @@ flattenAppRev (App info fun args) =
                 flattenRev as newrlists
         flattenRev [] rlists = rlists
     in
-        [App info fun args' | args' <- flattenRev args [[]], args'/=args]
+        [App info fun args' | args' <- flattenRev args [[]] {- , args'/=args -} ]
 flattenAppRev _ = []
 
 
@@ -85,7 +85,7 @@ curryTuple (App info fun args) =
         currySingle notup = [notup]
         
     in
-        [App info fun args' | args' <- (optmap currySingle args [[]]), args'/=args]
+        [App info fun args' | args' <- (optmap currySingle args [[]]) {- , args'/=args -} ]
 curryTuple _ = []
 
 -- | sibling identifiers

@@ -6,7 +6,7 @@ import Data.List (intersperse)
 -- * Classes
 
 -- | storing things about specific nodes in 'AExpr'
-class (Eq info, Show info) => RepairInfo info where
+class RepairInfo info where
     -- | extract type information
     getType :: info -> Maybe Tp
     -- | set type information
