@@ -42,7 +42,8 @@ data BasicState m info = BasicState
    { constraints :: Constraints m          -- ^ A stack of constraints that is to be solved
    , debug       :: ShowS                  -- ^ All the debug information
    , errors      :: [(info, ErrorLabel)]   -- ^ The detected errors
-   , conditions  :: [(m Bool, String)]     -- ^ Conditions to check (for the solved constraints) 
+   , conditions  :: [(m Bool, String)]     -- ^ Conditions to check (for the solved constraints)
+   , singleError :: Bool                   -- ^ Discard all remaining constraints after the first error
    }
 
 -- |An empty BasicState.
@@ -52,6 +53,7 @@ instance Empty (BasicState m info) where
       , debug       = id
       , errors      = []
       , conditions  = []
+      , singleError = False
       }
  
 instance Show (BasicState m info) where 
@@ -78,6 +80,7 @@ pushOperation      :: HasBasic m info => m () -> m ()
 pushNamedOperation :: HasBasic m info => String -> m () -> m ()
 popConstraint      :: HasBasic m info => m (Maybe (Constraint m))
 allConstraints     :: HasBasic m info => m (Constraints m)
+discardConstraints :: HasBasic m info => m ()
 
 pushConstraint x   = basicModify (\s -> s { constraints = x : constraints s })
 pushConstraints xs = basicModify (\s -> s { constraints = xs ++ constraints s })
@@ -88,7 +91,8 @@ popConstraint      = do cs <- allConstraints
                           []     -> return Nothing
                           (x:xs) -> do basicModify (\s -> s { constraints = xs })
                                        return (Just x)
-allConstraints     = basicGets constraints  
+allConstraints     = basicGets constraints
+discardConstraints = basicModify (\s -> s { constraints = [] })
 
 ---------------------------------------------------------------------
 -- * Debugging
@@ -113,8 +117,10 @@ updateErrorInfo  :: HasBasic m info => (info -> m info) -> m ()
 
 addError = addLabeledError NoErrorLabel
 addLabeledError label info = 
-   basicModify (\s -> s { errors = (info, label) : errors s })
-   
+   do basicModify (\s -> s { errors = (info, label) : errors s })
+      stop <- basicGets singleError
+      when stop discardConstraints
+      
 getErrors = getLabeledErrors >>= (return . map fst)
 getLabeledErrors = basicGets errors
 
@@ -176,3 +182,6 @@ startSolving =
 solveAndCheck = 
    do startSolving 
       doChecks
+
+stopAfterFirstError :: HasBasic m info => m ()
+stopAfterFirstError = basicModify (\s -> s { singleError = True })
