@@ -13,6 +13,8 @@
 module Top.Types.Schemes where
 
 import Top.Types.Basics
+import Top.Types.Quantification
+import Top.Types.Qualification
 import Top.Types.Qualified
 import Top.Types.Substitution
 import Top.Types.Synonyms
@@ -26,32 +28,11 @@ import Data.List
 -- |A type scheme consists of a list of quantified type variables, a finite map 
 -- that partially maps these type variables to their original identifier, and a
 -- qualified type.
-data TpScheme = TpScheme 
-                { getQuantifiers     :: [Int]             
-                , getNameMap         :: [(Int,String)]
-                , getQualifiedType   :: QType
-                }
-
--- |List of unique identifiers.(a, b, .., z, a1, b1 .., z1, a2, ..)
-variableList :: [String]
-variableList =  [ [x]        | x <- ['a'..'z'] ]
-             ++ [ (x:show i) | i <- [1 :: Int ..], x <- ['a'..'z'] ]
-
-instance Show TpScheme where
-   show (TpScheme quantifiers namemap qtype) = 
-      let sub1     = filter ((`elem` quantifiers) . fst) namemap 
-          unknown  = quantifiers \\ map fst sub1
-          sub2     = zip unknown [ s | s <- variableList, s `notElem` map snd sub1 ]
-          subTotal = listToSubstitution [ (i, TCon s) | (i, s) <- sub1 ++ sub2 ]
-      in show (subTotal |-> qtype)
-
-instance Substitutable TpScheme where
-   sub |-> (TpScheme quantifiers namemap qtype) = TpScheme quantifiers namemap (removeDom quantifiers sub |-> qtype)
-   ftv     (TpScheme quantifiers _ qtype) = ftv qtype \\ quantifiers
+type TpScheme = Forall QType
 
 ----------------------------------------------------------------------
 -- * Basic functionality for types and type schemes
-
+{-
 generalize :: [Int] -> Predicates -> Tp -> TpScheme
 generalize monos preds tp = 
    let ftvTP             = ftv tp 
@@ -76,11 +57,11 @@ unsafeInstantiate :: TpScheme -> Tp
 unsafeInstantiate scheme = tp
    where magicNumber = 123456789
          (_, _, tp)  = instantiate magicNumber scheme
-
+-}
 -- |Determine the arity of a type scheme.    
 arityOfTpScheme :: TpScheme -> Int
-arityOfTpScheme (TpScheme _ _ (_ :=> tp)) = arityOfTp tp
-
+arityOfTpScheme = arityOfTp . unqualify . unquantify
+{-
 -- |Is the type scheme overloaded (does it contain predicates)?
 isOverloaded :: TpScheme -> Bool
 isOverloaded (TpScheme _ _ (xs :=> _)) = not (null xs)
@@ -107,3 +88,31 @@ genericInstanceOf synonyms classes scheme1 scheme2 =
    in case mguWithTypeSynonyms synonyms tp1 tp2 of
          Left _         -> False
          Right (_,sub2) -> entailList synonyms classes ps1 (sub2 |-> ps2)
+-}
+genericInstanceOf :: OrderedTypeSynonyms -> ClassEnvironment -> TpScheme ->  TpScheme -> Bool
+genericInstanceOf synonyms classes scheme1 scheme2 = 
+   let -- monomorphic type variables are treated as constants
+       s1 = skolemizeFTV scheme1
+       s2 = skolemizeFTV scheme2
+       -- substitution to fix the type variables in the first type scheme
+       sub        = listToSubstitution (zip (quantifiers s1) [ TCon ('+':show i) | i <- [0 :: Int ..]])
+       (ps1, tp1) = split (sub |-> unquantify s1)
+       (ps2, tp2) = split (snd (instantiate 123456789 s2))
+   in case mguWithTypeSynonyms synonyms tp1 tp2 of
+         Left _         -> False
+         Right (_,sub2) -> entailList synonyms classes ps1 (sub2 |-> ps2)
+
+makeScheme :: [Int] -> Predicates -> Tp -> TpScheme
+makeScheme monos preds tp = 
+   let is  = ftv tp \\ monos
+       p   = any (`elem` is) . ftv
+   in quantify is (filter p preds .=>. tp)   
+
+instantiateWithNameMap :: Int -> TpScheme -> (Int, Predicates, Tp) -- get rid of this function.
+instantiateWithNameMap unique (Quantification (qs,nm,qtp)) = 
+   let sub = listToSubstitution [ (i,TCon s) | (i,s) <- nm, i `elem` qs ]
+       (u, qtp') = instantiate unique (Quantification (qs \\ (map fst nm), [], sub |-> qtp))
+       (ps, tp) = split qtp'
+   in (u, ps, tp)
+
+instance (Show q, Show a) => ShowQuantors (Qualification q a)

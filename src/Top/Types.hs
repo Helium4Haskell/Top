@@ -11,7 +11,9 @@
 module Top.Types 
    ( module Top.Types.Basics
    , module Top.Types.Qualified
-   , module Top.Types.Substitution      
+   , module Top.Types.Substitution
+   , module Top.Types.Quantification
+   , module Top.Types.Qualification
    , module Top.Types.Synonyms     
    , module Top.Types.Unification
    , module Top.Types.Classes
@@ -21,7 +23,9 @@ module Top.Types
 
 import Top.Types.Basics
 import Top.Types.Qualified
-import Top.Types.Substitution      
+import Top.Types.Substitution
+import Top.Types.Quantification
+import Top.Types.Qualification
 import Top.Types.Synonyms    
 import Top.Types.Unification
 import Top.Types.Classes

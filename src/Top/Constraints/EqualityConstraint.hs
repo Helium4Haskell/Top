@@ -22,7 +22,7 @@ data EqualityConstraint info = Equality Tp Tp info
 
 instance Show info => Show (EqualityConstraint info) where
    show (Equality t1 t2 info) =
-      show t1++" == "++show t2++"   {"++show info++"}"
+      show t1++" == "++show t2++"   : {"++show info++"}"
       
 instance Substitutable (EqualityConstraint info) where
 

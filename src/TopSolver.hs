@@ -57,9 +57,18 @@ instance HasConstants Predicate where
    applyVarMap varMap (Predicate s tp) = Predicate s (applyVarMap varMap tp)
    allConstants       (Predicate s tp) = allConstants tp
 
+instance HasConstants QType where
+   applyVarMap varMap qtype = 
+      let (ps, tp) = split qtype
+      in (applyVarMap varMap ps .=>. applyVarMap varMap tp)
+      
+   allConstants qtype = 
+      let (ps, tp) = split qtype
+      in allConstants ps ++ allConstants tp
+      
 instance HasConstants TpScheme where
-   applyVarMap varMap (TpScheme xs ys (ps :=> tp)) = TpScheme xs ys (applyVarMap varMap ps :=> applyVarMap varMap tp)
-   allConstants       (TpScheme xs ys (ps :=> tp)) = allConstants tp ++ allConstants ps
+   applyVarMap varMap (Quantification (is, qmap, qtype)) = Quantification (is, qmap, applyVarMap varMap qtype)
+   allConstants = allConstants . unquantify
       
 lexer :: P.TokenParser ()
 lexer = P.makeTokenParser 
@@ -166,7 +175,7 @@ pTypeScheme = do qs <- option [] $
                  ps <- pPredicates
                  tp <- pType
                  let sub = zip qs (map TVar [10000..])
-                 return (TpScheme (ftv $ map snd sub) [] (map (applyVarMap sub) ps :=> applyVarMap sub tp))
+                 return (quantify (ftv $ map snd sub) (map (applyVarMap sub) ps .=>. applyVarMap sub tp))
 
 pPredicates :: CharParser () Predicates
 pPredicates =  try (

@@ -31,11 +31,11 @@ data InstanceConstraint info
 instance Show info => Show (InstanceConstraint info) where
    show (ExplicitInstance tp ts (infoF,_)) =
       let unknowns = (TCon "?",TCon "?")
-      in show tp++" :: "++show ts++"   {"++show (infoF unknowns)++"}"
+      in show tp++" :: "++show ts++"   : {"++show (infoF unknowns)++"}"
    show (ImplicitInstance t1 ms t2 (infoF,_)) =
       let unknowns = (TCon "?",TCon "?")
           monos    = if null ms then "" else "monos="++show (ftv ms)++"; "
-      in show t1++" <= ("++monos++","++show t2++")   {"++show (infoF unknowns)++"}"
+      in show t1++" <= ("++monos++show t2++")   : {"++show (infoF unknowns)++"}"
       
 instance Substitutable (InstanceConstraint info) where
 
@@ -54,8 +54,9 @@ instance (Show info, HasBasic m info, HasTI m info, HasSubst m info)
 
    solveConstraint (ExplicitInstance tp ts (f1, f2)) =            
       do unique <- getUnique
-         let (unique',ps,its) = instantiate unique ts
-             info = f1 (its,tp)
+         let (unique', qtype) = instantiate unique ts
+             (ps,its) = split qtype
+             info     = f1 (its,tp)
          setUnique unique'              
          pushConstraint  (tp .==. its $ info)
          pushConstraints (map (\p -> predicate p (f2 p info)) ps)
@@ -65,5 +66,5 @@ instance (Show info, HasBasic m info, HasTI m info, HasSubst m info)
          t2' <- applySubst t2
          ms' <- mapM applySubst ms
          ps  <- getPredicates
-         let scheme = generalize (ftv ms') (map fst ps) t2'
+         let scheme = makeScheme (ftv ms') (map fst ps) t2'
          pushConstraint (t1 .::. scheme $ (f1,f2))
