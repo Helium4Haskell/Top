@@ -18,7 +18,7 @@ topsolver:
         
 documentation:
 	# make haddock documentation        
-	haddock --title=Top --prologue=prologue -html -o ../doc \
+	haddock --title=Top --prologue=prologue --html -o ../doc \
           Top/*.hs \
 	  Top/*/*.hs \
           

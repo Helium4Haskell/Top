@@ -110,8 +110,8 @@ removeInconsistencies =
    debugTrace "removeInconsistencies" >> toTypeGraph rec 
  where
    rec :: (HasTypeGraph m info, HasTG m info) => m ()
-   rec = do hs   <- getHeuristics
-            errs <- applyHeuristics hs
+   rec = do phs  <- getPathHeuristics
+            errs <- applyHeuristics phs
             mapM_ (fromTypeGraph . deleteEdge) (concatMap fst errs)
             mapM_ (addLabeledError unificationErrorLabel . snd) errs 
             if null errs

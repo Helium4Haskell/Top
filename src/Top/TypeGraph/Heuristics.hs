@@ -10,7 +10,6 @@ module Top.TypeGraph.Heuristics where
 
 import Top.TypeGraph.TypeGraphState
 import Top.TypeGraph.Basics
-import Top.TypeGraph.Paths
 import Top.Types
 import Control.Monad
 import Utils (internalError)
@@ -21,12 +20,10 @@ newtype Heuristic  info = Heuristic (forall m . HasTypeGraph m info => HComponen
 data HasTypeGraph m info => Selector m info 
    = Selector       (String, (EdgeId, info) -> m (Maybe (Int, String, [EdgeId], info)))
    | SelectorList   (String, [(EdgeId, info)] -> m (Maybe (Int, String, [EdgeId], info)))
-   | SelectorPath   (Path (EdgeId, info) -> Selector m info)
 
 data HComponent m info 
      = Filter    String ([(EdgeId, info)] -> m [(EdgeId, info)])
      | Voting   [Selector m info]
-     | PathComponent (Path (EdgeId, info) -> Heuristic info)
           
 resultsEdgeFilter :: (Eq a, Monad m) => ([a] -> a) -> String -> ((EdgeId,info) -> m a) -> HComponent m info
 resultsEdgeFilter selector description function =

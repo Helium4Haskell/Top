@@ -18,35 +18,31 @@ import Top.TypeGraph.ApplyHeuristics
 
 -----------------------------------------------------------------------------
 
-defaultHeuristics :: Show info => [Heuristic info]
-defaultHeuristics = 
-   [ highParticipation 1.00, positionInList ]
+defaultHeuristics :: Show info => Path (EdgeId, info) -> [Heuristic info]
+defaultHeuristics path = 
+   [ highParticipation 1.00 path, positionInList ]
          
 -----------------------------------------------------------------------------
 
 -- |Compute the smallest 'minimal' sets. This computation is very(!) costly
 --   (might take a long time for complex inconsistencies)
-inMininalSet :: Heuristic info
-inMininalSet = 
+inMininalSet :: Path (EdgeId, info) -> Heuristic info
+inMininalSet path =
    Heuristic (
-      PathComponent (\path -> 
-         let sets = minimalSets eqInfo2 path
-             candidates = nubBy eqInfo2 (concat sets)
-         in Heuristic (edgeFilter "In a smallest minimal set"
-               (\e -> return (any (eqInfo2 e) candidates)))))
+      let sets       = minimalSets eqInfo2 path
+          candidates = nubBy eqInfo2 (concat sets)
+          f e        = return (any (eqInfo2 e) candidates)
+      in edgeFilter "In a smallest minimal set" f)
 
 -- |Although not as precise as the minimal set analysis, this calculates the participation of
 -- each edge in all error paths. 
 -- Default ratio = 1.0  (100 percent)
 --   (the ratio determines which scores compared to the best are accepted)
-highParticipation :: Show info => Double -> Heuristic info
-highParticipation ratio = 
-   Heuristic (
-      PathComponent (\path -> 
-         Heuristic (Filter ("Participation ratio [ratio="++show ratio++"]")
-                   (selectTheBest path))))
+highParticipation :: Show info => Double -> Path (EdgeId, info) -> Heuristic info
+highParticipation ratio path =
+   Heuristic (Filter ("Participation ratio [ratio="++show ratio++"]") selectTheBest)
  where
-   selectTheBest path es = 
+   selectTheBest es = 
       let (nrOfPaths, fm)   = participationMap (mapPath (\(EdgeId _ _ cnr,_) -> cnr) path)
           participationList = fmToList (filterFM p fm)
           p cnr _    = cnr `elem` activeCNrs

@@ -25,14 +25,14 @@ import Top.States.TIState
 
 type ErrorInfo info = ([EdgeId], info)
 
-applyHeuristics :: HasTypeGraph m info => [Heuristic info] -> m [ErrorInfo info]
+applyHeuristics :: HasTypeGraph m info => (Path (EdgeId, info) -> [Heuristic info]) -> m [ErrorInfo info]
 applyHeuristics heuristics =
    let rec thePath = 
           case simplifyPath thePath of
              Empty -> internalError "Top.TypeGraph.ApplyHeuristics" "applyHeuristics" "unexpected empty path"
              Fail  -> return []
              path  ->
-                do err <- evalHeuristics path heuristics
+                do err <- evalHeuristics path (heuristics path)
                    let restPath = changeStep (\t@(a,_) -> if a `elem` fst err then Fail else Step t) path
                    errs <- rec restPath
                    return (err : errs)
@@ -62,13 +62,10 @@ evalHeuristics path heuristics =
                printMessage (name ++ " (filter)")
                printMessage ("   " ++ showSet [ i | (EdgeId _ _ i, _) <- edges' ])
                rec edges' rest
-               
-         PathComponent f -> 
-            rec edges (f path : rest)
         
          Voting selectors -> 
             do printMessage ("Voting with "++show (length selectors) ++ " heuristics")
-               results <- mapM (evalSelector edges path) selectors
+               results <- mapM (evalSelector edges) selectors
                let (thePrio, listWithBest) = foldr op (minBound, []) (concat results)
                    op (prio, es, info) best@(i, list) =
                       case compare prio i of
@@ -81,9 +78,8 @@ evalHeuristics path heuristics =
                   _  -> do printMessage ("\n*** Selected with priority "++show thePrio++": "++showSet (map fst listWithBest)++"\n")
                            rec listWithBest rest
                
-evalSelector :: HasTypeGraph m info => [(EdgeId, info)] -> Path (EdgeId, info) 
-                                    -> Selector m info -> m [(Int, [EdgeId], info)]
-evalSelector edges path selector = 
+evalSelector :: HasTypeGraph m info => [(EdgeId, info)] -> Selector m info -> m [(Int, [EdgeId], info)]
+evalSelector edges selector = 
    case selector of
 
       Selector (name, f) -> 
@@ -103,9 +99,6 @@ evalSelector edges path selector =
             case result of 
                Nothing -> return []
                Just (i,_,es,info) -> return [(i,es,info)]
-            
-      SelectorPath f ->
-         evalSelector edges path (f path)
               
 showSet :: Show a => [a] -> String
 showSet as = "{" ++ f (map show as) ++ "}"

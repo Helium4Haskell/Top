@@ -13,7 +13,6 @@ import Top.Constraints.Equality
 import Top.Constraints.Polymorphism (PolymorphismConstraint(..))
 import Top.Solvers.SolveConstraints
 import Top.TypeGraph.TypeGraphSolver
-import Top.TypeGraph.DefaultHeuristics
 import Top.States.States
 import Top.States.BasicState
 import Top.States.TIState
@@ -168,9 +167,9 @@ run p input =
             print err
       Right (cset, unique) -> 
          let result :: SolveResult TopInfo TopQualifiers TopExtraState
-             result  = runTypeGraphPlusDoAtEnd defaultHeuristics doAtEnd standardClasses noOrderedTypeSynonyms unique cset
+             result  = runTypeGraph standardClasses noOrderedTypeSynonyms unique cset
              -- doAtEnd :: TypeGraphX TopInfo TopQualifiers TopExtraState ()
-             doAtEnd = return () -- makeConsistent >> checkSkolems -- >> doAmbiguityCheck
+             --doAtEnd = return () -- makeConsistent >> checkSkolems -- >> doAmbiguityCheck
          in do putStrLn (unlines logo)
                putStrLn (debugFromResult result)
                

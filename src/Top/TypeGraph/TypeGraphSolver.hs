@@ -8,7 +8,7 @@
 
 module Top.TypeGraph.TypeGraphSolver
    ( TypeGraph, TypeGraphX, TypeGraphState
-   , runTypeGraph, runTypeGraphPlusDoAtEnd, solveTypeGraph
+   , runTypeGraph, runTypeGraphPlusDoFirst, runTypeGraphPlusDoAtEnd, solveTypeGraph
    ) where
 
 import Top.TypeGraph.TypeGraphMonad
@@ -24,7 +24,6 @@ import Top.Constraints.Constraints
 import Top.Qualifiers.Qualifiers
 import Top.Types
 import Control.Monad
-import Top.TypeGraph.Heuristics
 
 type TypeGraphX info qs ext = SolveX info qs (TypeGraphState info) ext
 type TypeGraph  info qs     = TypeGraphX info qs ()
@@ -72,38 +71,49 @@ solveTypeGraph ::
    , Solvable constraint (TypeGraphX info qs ext)
    , QualifierList (TypeGraphX info qs ext) info qs qsInfo
    ) => 
-     [Heuristic info] -> TypeGraphX info qs ext () ->
+     TypeGraphX info qs ext () ->
+     TypeGraphX info qs ext () ->
      ClassEnvironment -> OrderedTypeSynonyms -> Int -> [constraint] ->
      TypeGraphX info qs ext (SolveResult info qs ext)
      
-solveTypeGraph hs todo classEnv syns unique = 
+solveTypeGraph extraFirst extraEnd classEnv syns unique = 
    solveConstraints doFirst doAtEnd
       where
          doFirst = 
             do setUnique unique
                setTypeSynonyms syns
                setClassEnvironment classEnv
-               setHeuristics hs
+               extraFirst
          doAtEnd =
-            do todo
+            do extraEnd
                solveResult
-               
-runTypeGraphPlusDoAtEnd :: 
-   ( IsState ext
-   , Solvable constraint (TypeGraphX info qs ext)
-   , QualifierList (TypeGraphX info qs ext) info qs qsInfo
-   ) => 
-     [Heuristic info] -> TypeGraphX info qs ext () -> SolverX constraint info qs ext
-
-runTypeGraphPlusDoAtEnd hs todo classEnv syns unique = 
-   eval . solveTypeGraph hs todo classEnv syns unique
 
 runTypeGraph:: 
    ( IsState ext
    , Solvable constraint (TypeGraphX info qs ext)
    , QualifierList (TypeGraphX info qs ext) info qs qsInfo
    ) => 
-     [Heuristic info] -> SolverX constraint info qs ext
+     SolverX constraint info qs ext
 
-runTypeGraph hs = 
-   runTypeGraphPlusDoAtEnd hs (return ())
+runTypeGraph = 
+   runTypeGraphPlusDoAtEnd (return ())
+
+runTypeGraphPlusDoFirst :: 
+   ( IsState ext
+   , Solvable constraint (TypeGraphX info qs ext)
+   , QualifierList (TypeGraphX info qs ext) info qs qsInfo
+   ) => 
+     TypeGraphX info qs ext () -> SolverX constraint info qs ext
+
+runTypeGraphPlusDoFirst todo classEnv syns unique = 
+   eval . solveTypeGraph todo (return ()) classEnv syns unique
+   
+runTypeGraphPlusDoAtEnd :: 
+   ( IsState ext
+   , Solvable constraint (TypeGraphX info qs ext)
+   , QualifierList (TypeGraphX info qs ext) info qs qsInfo
+   ) => 
+     TypeGraphX info qs ext () -> SolverX constraint info qs ext
+
+runTypeGraphPlusDoAtEnd todo classEnv syns unique = 
+   eval . solveTypeGraph (return ()) todo classEnv syns unique

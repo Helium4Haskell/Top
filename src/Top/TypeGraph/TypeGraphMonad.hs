@@ -10,13 +10,14 @@ module Top.TypeGraph.TypeGraphMonad
    ( createGroup, removeGroup, updateGroupOf, getGroupOf, getAllGroups
    , TypeGraphState, HasTG(..)
    , getPossibleInconsistentGroups, addPossibleInconsistentGroup, setPossibleInconsistentGroups
-   , setHeuristics, getHeuristics, nextConstraintNumber
+   , setHeuristics, setPathHeuristics, getPathHeuristics, nextConstraintNumber
    )
  where
 
 import Top.TypeGraph.EquivalenceGroup
 import Top.TypeGraph.Basics
 import Top.States.States
+import Top.TypeGraph.Paths (Path)
 import Top.TypeGraph.Heuristics (Heuristic)
 import Top.TypeGraph.DefaultHeuristics (defaultHeuristics)
 import Data.Maybe
@@ -30,7 +31,7 @@ data TypeGraphState info = TG
    , equivalenceGroupMap     :: FiniteMap Int (EquivalenceGroup info)
    , equivalenceGroupCounter :: Int
    , possibleErrors          :: [VertexId]
-   , typegraphHeuristics     :: [Heuristic info]
+   , typegraphHeuristics     :: Path (EdgeId, info) -> [Heuristic info]
    , constraintNumber        :: Int
    } 
 
@@ -119,11 +120,15 @@ addPossibleInconsistentGroup vid = tgModify (\x -> x { possibleErrors = vid : po
 --------------------------------------------------------------------------------
 
 setHeuristics :: HasTG m info => [Heuristic info] -> m ()
-setHeuristics hs = 
-   tgModify (\x -> x {typegraphHeuristics = hs})
+setHeuristics = 
+   setPathHeuristics . const 
 
-getHeuristics :: HasTG m info => m [Heuristic info]
-getHeuristics = tgGets typegraphHeuristics
+setPathHeuristics :: HasTG m info => (Path (EdgeId, info) -> [Heuristic info]) -> m ()
+setPathHeuristics phs = 
+   tgModify (\x -> x {typegraphHeuristics = phs})
+   
+getPathHeuristics :: HasTG m info => m (Path (EdgeId, info) -> [Heuristic info])
+getPathHeuristics = tgGets typegraphHeuristics
 
 --------------------------------------------------------------------------------
 
