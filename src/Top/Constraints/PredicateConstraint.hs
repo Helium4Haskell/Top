@@ -4,6 +4,9 @@
 -- Stability   :  experimental
 -- Portability :  unknown
 --
+-- A predicate constraint is a (single parameter) type class constraint constraint
+-- that is part of a context.
+--
 -----------------------------------------------------------------------------
 
 module Top.Constraints.PredicateConstraint where
@@ -14,7 +17,7 @@ import Top.States.TIState
 
 data PredicateConstraint info = PredicateConstraint Predicate info
 
--- constructor
+-- |The constructor of a predicate constraint.
 predicate :: Solvable (PredicateConstraint info) m => Predicate -> info -> Constraint m
 predicate p info = liftConstraint (PredicateConstraint p info)
 

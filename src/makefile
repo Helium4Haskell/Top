@@ -2,7 +2,7 @@
 # Constraint Solver
 #-----------------------------------------------------------------------
 
-# make example   - build the Top constraint solver
+# make examp le   - build the Top constraint solver
 # make doc       - make haddock documentation 
 # make clean	 - remove .hi and .o files and documentation
 # make web       - make a distribution for the web (Bastiaan only)
@@ -19,7 +19,7 @@ topsolver:
         
 documentation:
 	# make haddock documentation        
-	haddock -html -o ../doc \
+	haddock --title=Top --prologue=prologue -html -o ../doc \
           Top/*.hs \
 	  Top/*/*.hs \
           

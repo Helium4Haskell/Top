@@ -33,9 +33,9 @@ applyHeuristics heuristics =
                    (edgeID2, info2) <- rec restPath
                    return (edgeID1++edgeID2, info1++info2)
    in 
-      do (errorPath, errorGroups) <- allErrorPaths         
+      do errorPath     <- allErrorPaths         
          rec (removeSomeDuplicates eqInfo3 errorPath)   
-
+	 
 evalHeuristics :: HasTypeGraph m info => Path (EdgeID, Int, info) -> [Heuristic info] -> m ([EdgeID], [info])
 evalHeuristics path heuristics = 
    let 
@@ -90,7 +90,7 @@ showSet as = "{" ++ f (map show as) ++ "}"
    where f [] = ""
          f xs = foldr1 (\x y -> x++","++y)  (map show xs)
       
-allErrorPaths :: HasTypeGraph m info => m (Path (EdgeID, Int, info), [Int])
+allErrorPaths :: HasTypeGraph m info => m (Path (EdgeID, Int, info))
 allErrorPaths = 
    do 
       is      <- possibleInconsistentGroups      
@@ -98,23 +98,20 @@ allErrorPaths =
       let toCheck = nub $ concat (is : [ [a,b] | ((a,b),_) <- cGraph ])
       paths1  <- constantClashPaths toCheck                                    
       paths2  <- infiniteTypePaths cGraph        
-      let errorPath = simplifyPath . altList $ map snd (paths1 ++ paths2)                          
-      total <- expandPath errorPath 
-      return (total, nub (concatMap fst (paths1 ++ paths2)))
-      
+      let errorPath = simplifyPath (altList (paths1 ++ paths2))                          
+      expandPath errorPath 
                                          
 ----------------------------
 
 -- not simplified: can also contain implied edges
-constantClashPaths :: HasTypeGraph m info => [VertexID] -> m [([Int], Path (EdgeID, EdgeInfo info))]
+constantClashPaths :: HasTypeGraph m info => [VertexID] -> m [Path (EdgeID, EdgeInfo info)]
 constantClashPaths []     = return []
 constantClashPaths (i:is) = 
-   do vertices <- verticesInGroupOf i   
-      repr     <- representativeInGroupOf i   
+   do vertices <- verticesInGroupOf i    
       paths1   <- pathInGroup vertices         
       paths2   <- let vs = map fst vertices
                   in constantClashPaths (filter (`notElem` vs) is)
-      return $ [([repr], path) | path <- paths1] ++ paths2
+      return (paths1 ++ paths2)
 
  where 
   pathInGroup vertices = 
@@ -138,7 +135,7 @@ constantClashPaths (i:is) =
 ----------------------------     
 
 -- not simplified: can also contain implied edges
-infiniteTypePaths :: HasTypeGraph m info => ChildGraph -> m [([Int], Path (EdgeID, EdgeInfo info))]
+infiniteTypePaths :: HasTypeGraph m info => ChildGraph -> m [Path (EdgeID, EdgeInfo info)]
 infiniteTypePaths = rec
 
   where   
@@ -156,7 +153,7 @@ infiniteTypePaths = rec
             groupChildList = concatMap snd groupGraph                                              
         in do paths1 <- mapM (\(x,y) -> allSubPathsList groupChildList y [x]) childEdges              
               paths2 <- rec rest
-              return $ (iGroup, altList paths1) :  paths2
+              return (altList paths1 :  paths2)
 
 type ChildGraph = [((VertexID, VertexID), [(VertexID, VertexID)])]
       

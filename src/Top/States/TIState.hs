@@ -4,6 +4,10 @@
 -- Stability   :  experimental
 -- Portability :  unknown
 --
+-- Additional state information that should be stored in order to perform
+-- type inference (a counter for fresh type variables, known type synonyms, and
+-- a list of predicates).
+--
 -----------------------------------------------------------------------------
 
 module Top.States.TIState where
@@ -12,8 +16,9 @@ import Top.Types
 import Data.FiniteMap
 
 ---------------------------------------------------------------------
--- A state for type inferencers
+-- * A state for type inferencers
 
+-- |A type class for monads that contain a type inference state.
 class Monad m => HasTI m info | m -> info where  
    tiGet :: m (TIState info)
    tiPut :: TIState info -> m ()
@@ -25,11 +30,12 @@ tiGets :: HasTI m info => (TIState info -> a) -> m a
 tiGets   f = do a <- tiGet ; return (f a)
 
 data TIState info = TIState
-   { counter       :: Int
-   , synonyms      :: OrderedTypeSynonyms
-   , predicates    :: [(Predicate, info)]
+   { counter       :: Int                    -- ^ A counter for fresh type variables
+   , synonyms      :: OrderedTypeSynonyms    -- ^ All known type synonyms
+   , predicates    :: [(Predicate, info)]    -- ^ A list of predicates
    }
 
+-- |An empty type inference state.
 emptyTI :: TIState info
 emptyTI = TIState
    { counter      = 0
@@ -44,7 +50,7 @@ instance Show (TIState info) where
                     ]  
    
 ---------------------------------------------------------------------
--- unique counter
+-- * Unique counter
 
 getUnique      :: HasTI m info => m Int
 setUnique      :: HasTI m info => Int -> m ()  
@@ -65,7 +71,7 @@ zipWithUniques f as =
       return (zipWith f [i..] as)   
    
 ---------------------------------------------------------------------
--- type synonyms
+-- * Type synonyms
 
 setTypeSynonyms :: HasTI m info => OrderedTypeSynonyms -> m ()
 getTypeSynonyms :: HasTI m info => m OrderedTypeSynonyms 
@@ -74,7 +80,7 @@ setTypeSynonyms xs = tiModify (\x -> x { synonyms = xs })
 getTypeSynonyms    = tiGets synonyms
    
 ---------------------------------------------------------------------
--- predicates
+-- * Predicates
    
 getPredicates :: HasTI m info => m [(Predicate, info)]
 addPredicate  :: HasTI m info => (Predicate, info) -> m ()

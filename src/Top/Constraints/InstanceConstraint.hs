@@ -4,6 +4,13 @@
 -- Stability   :  experimental
 -- Portability :  unknown
 --
+-- An instance constraint represents the instantiation of a type scheme (replacement
+-- of the universally quantified type variables by fresh type variables), after which
+-- it is transformed into and solved as an equality constraint. There are two kinds of
+-- instance constraints: the explicit instance constraint (the type scheme is given 
+-- explicitly), and an implicit instance constraint for which the type scheme can be
+-- obtained by generalizing a type over a set of monomorphic type variables. 
+--
 -----------------------------------------------------------------------------
 
 module Top.Constraints.InstanceConstraint where
@@ -21,10 +28,11 @@ data InstanceConstraint info
    = ExplicitInstance Tp TpScheme  ((Tp,Tp) -> info {- to equality -}, Predicate -> info -> info {- to predicates -})
    | ImplicitInstance Tp Tps Tp    ((Tp,Tp) -> info {- to equality -}, Predicate -> info -> info {- to predicates -})
    
--- constructors
+-- |The constructor of an explicit instance constraint.
 (.::.) :: Solvable (InstanceConstraint info) m => Tp -> TpScheme -> ((Tp,Tp) -> info, Predicate -> info -> info) -> Constraint m
 (tp .::. ts) (f1, f2) = liftConstraint (ExplicitInstance tp ts (f1, f2))
 
+-- |The constructor of an implicit instance constraint. The types (ms) are the set of monomorphic type variables.
 (.<=.) :: Solvable (InstanceConstraint info) m => Tp -> (Tps, Tp) -> ((Tp,Tp) -> info) -> Constraint m
 (t1 .<=. (ms,t2)) infoF = liftConstraint (ImplicitInstance t1 ms t2 (infoF, const id))
 

@@ -6,22 +6,9 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.ComposedSolvers.CombinationSolver (solveCombination) where
+module Top.ComposedSolvers.CombinationSolver where
 
-import Top.ComposedSolvers.Tree
-import Top.Solvers.GreedySolver (Greedy, solveGreedy)
-import Top.TypeGraph.TypeGraphSolver (TypeGraph, solveTypeGraph)
 import Top.Solvers.SolveConstraints
-import Top.Constraints.Constraints
-import Top.Types
-import Top.TypeGraph.Heuristics
-
-solveCombination :: ( Solvable constraint (Greedy info)
-                    , Solvable constraint (TypeGraph info)
-                    , Show info
-                    ) => [Heuristic info] -> Solver constraint info
-solveCombination hs =
-   solveGreedy |>>| solveTypeGraph hs
 
 -- |The first solver is used to solve the constraint set. If this fails (at least one 
 -- error is returned), then the second solver takes over.     

@@ -50,9 +50,17 @@ edgeFilter description function =
    Filter description $ \edges -> 
       filterM function edges
 
+
 -----------------------------------------------------------------------------
-     
-doWithoutEdge :: HasTypeGraph m info => (EdgeID,info) -> m result -> m result
+
+doWithoutEdges :: HasTypeGraph m info => [(EdgeID, info)] -> m result -> m result
+doWithoutEdges xs computation = 
+   case xs of 
+      []   -> computation
+      [e]  -> doWithoutEdge e computation
+      e:es -> doWithoutEdge e (doWithoutEdges es computation)
+
+doWithoutEdge :: HasTypeGraph m info => (EdgeID, info) -> m result -> m result
 doWithoutEdge (edge@(EdgeID v1 v2),info) computation =
    do deleteEdge edge       
       result <- computation           

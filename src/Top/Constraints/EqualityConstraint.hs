@@ -4,6 +4,9 @@
 -- Stability   :  experimental
 -- Portability :  unknown
 --
+-- An equality constraint represents a unification of two types. At the end,
+-- the two constraints should be equivalent.
+--
 -----------------------------------------------------------------------------
 
 module Top.Constraints.EqualityConstraint where
@@ -16,14 +19,14 @@ import Data.List (union)
 
 data EqualityConstraint info = Equality Tp Tp info
 
--- constructor
+-- |The constructor of an equality constraint.
 (.==.) :: Solvable (EqualityConstraint info) m => Tp -> Tp -> info -> Constraint m
 (t1 .==. t2) info = liftConstraint (Equality t1 t2 info)
 
 instance Show info => Show (EqualityConstraint info) where
    show (Equality t1 t2 info) =
       show t1++" == "++show t2++"   : {"++show info++"}"
-      
+
 instance Substitutable (EqualityConstraint info) where
 
    sub |-> (Equality t1 t2 info) =

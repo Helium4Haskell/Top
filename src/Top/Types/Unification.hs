@@ -103,3 +103,11 @@ unifiable typesynonyms t1 t2 =
    case mguWithTypeSynonyms typesynonyms t1 t2 of
       Left  _ -> False
       Right _ -> True
+      
+-- |Same as unifiable, but takes as input a list of types
+unifiableList :: OrderedTypeSynonyms -> Tps -> Bool
+unifiableList typesynonyms (t1:t2:ts) = 
+   case mguWithTypeSynonyms typesynonyms t1 t2 of
+      Left _         -> False
+      Right (_, sub) -> unifiableList typesynonyms (sub |-> (t2:ts))
+unifiableList _ _ = True

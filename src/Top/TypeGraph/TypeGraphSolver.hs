@@ -6,7 +6,7 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.TypeGraph.TypeGraphSolver (TypeGraph, TypeGraphX, evalTypeGraph, TypeGraphState, solveTypeGraph) where
+module Top.TypeGraph.TypeGraphSolver (TypeGraph, TypeGraphX, evalTypeGraph, TypeGraphState, solveTypeGraph, solveTypeGraphPlusDoAtEnd) where
 
 import Top.TypeGraph.TypeGraphMonad
 import Top.TypeGraph.TypeGraphSubst
@@ -38,6 +38,11 @@ solveTypeGraph :: (Show info, Solvable constraint (TypeGraph info))
 solveTypeGraph hs synonyms unique = 
    evalTypeGraph . solveConstraints (setHeuristics hs) solveResult synonyms unique
 
+solveTypeGraphPlusDoAtEnd :: (Show info, Solvable constraint (TypeGraph info))  
+                     => [Heuristic info] -> TypeGraph info () -> Solver constraint info
+solveTypeGraphPlusDoAtEnd hs doAtEnd synonyms unique = 
+   evalTypeGraph . solveConstraints (setHeuristics hs) (doAtEnd >> solveResult) synonyms unique
+   
 instance Show info => IsState (TypeGraphState info) where
    empty = emptyTypeGraph 
 
