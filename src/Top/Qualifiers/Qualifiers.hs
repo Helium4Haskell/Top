@@ -92,6 +92,7 @@ class ( ShowQualifiers qs
       removeAnnotation  :: qsInfo -> m qs
    
       getToProveUpdated :: HasSubst m info => m qsInfo
+      getGeneralized    :: m qsInfo
       putToProve        :: qsInfo -> m ()
       addToProve        :: qsInfo -> m ()
       addToGeneralized  :: qsInfo -> m ()
@@ -127,6 +128,7 @@ instance ( QualifierList m info as asInfo
       annotate info (as, bs)    = distribute (annotate info as) (annotate info bs)
       removeAnnotation (as, bs) = distribute (removeAnnotation as) (removeAnnotation bs)
       getToProveUpdated         = distribute getToProveUpdated getToProveUpdated
+      getGeneralized            = distribute getGeneralized getGeneralized
       putToProve (as, bs)       = putToProve as  >> putToProve bs
       addToProve (as, bs)       = addToProve as  >> addToProve bs
       addToGeneralized (as, bs) = addToGeneralized as  >> addToGeneralized bs
@@ -143,6 +145,7 @@ instance (Qualifier m info p, HasQual m qs info) => QualifierList m info [p] [(p
       annotate info as    = return (zip as (repeat info))
       removeAnnotation    = return . map fst
       getToProveUpdated   = getToProveUpdatedHelper
+      getGeneralized      = do n <- currentGroup ; qm <- get ; return (getGeneralizedQsInGroup n qm)
       putToProve ps       = do n <- currentGroup ; modify (setQualifiersInGroup n ps)
       addToProve ps       = do n <- currentGroup ; modify (addQualifiersInGroup n ps)
       addToGeneralized ps = do n <- currentGroup ; modify (addGeneralizedQsInGroup n ps)
@@ -153,7 +156,7 @@ getToProveUpdatedHelper =
    do n <- currentGroup
       qmOld <- get
       qmNew <- applySubst qmOld
-      newQs <- let p x = do b <- entails (getAssumptions qmNew) (fst x)
+      newQs <- let p x = do b <- entails (getAssumptionsInGroup n qmNew ++ getGeneralizedQsInGroup n qmNew) (fst x)
                             return (not b)
                in filterM p (getQualifiersInGroup n qmNew)
       modify (const (setQualifiersInGroup n newQs qmNew))
@@ -179,7 +182,10 @@ doGeneralization monos alphas qs =
           allAlphas = newAlphas ++ alphas
       if null newAlphas 
          then 
-            return (allAlphas, psGen, psNew)
+            -- In the end, add the predicates that have already been generalized
+            do qs2   <- getGeneralized
+               allQs <- combineList psGen qs2
+               return (allAlphas, allQs, psNew)
          else
             do (is, qs2, rest) <- doGeneralization monos allAlphas psNew
                allQs <- combineList psGen qs2

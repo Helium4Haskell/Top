@@ -70,7 +70,7 @@ instance ( HasBasic m info
                
                let someAlphas = ftv tpNew \\ ftv monosNew
                (allAlphas, psGen, psNew) <- doGeneralization (ftv monosNew) someAlphas ps
-               psGenSimple    <- removeAnnotation psGen
+               psGenSimple <- removeAnnotation psGen
                putToProve psNew
                addToGeneralized psGen
                
