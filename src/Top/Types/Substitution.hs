@@ -162,6 +162,11 @@ instance (Substitutable a, Substitutable b) => Substitutable (Either a b) where
    sub |-> x = either (Left . (sub |->)) (Right . (sub |->)) x
    ftv       = either ftv ftv
 
+freezeFTV :: Substitutable a => a -> a
+freezeFTV a =
+   let sub = listToSubstitution [ (i, TCon ('_':show i)) | i <- ftv a ]
+   in sub |-> a 
+   
 allTypeVariables :: HasTypes a => a -> [Int]
 allTypeVariables = ftv . getTypes
 
