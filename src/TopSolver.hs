@@ -10,6 +10,7 @@ import Top.Constraints.InstanceConstraint
 import Top.Constraints.PredicateConstraint
 import Top.Solvers.SolveConstraints
 import Top.TypeGraph.TypeGraphSolver
+import Top.TypeGraph.DefaultHeuristics
 import Top.States.BasicState
 import Top.States.SubstState
 import Top.States.TIState
@@ -78,7 +79,7 @@ run p input
                       vars     = filter (isLower . head) (nub (concat xs))    
                       sub      = zip vars (map TVar [0..])
                       cs'      = map ($ sub) ys
-                      result   = solveTypeGraph [] noOrderedTypeSynonyms (length vars) cs'
+                      result   = solveTypeGraph defaultHeuristics noOrderedTypeSynonyms (length vars) cs'
                   in do putStrLn (debugFromResult result)
                         putStrLn (replicate 50 '-')
                         case errorsFromResult result of
