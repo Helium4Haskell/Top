@@ -4,6 +4,7 @@ import Top.Types
 import Top.States.States
 import Data.FiniteMap
 import Data.List
+import Utils (internalError)
 
 -- |A type class for monads that contain a qualifier state.
 class Monad m => HasQual m qs info | m -> qs, m -> info where  
@@ -43,7 +44,7 @@ allTypeSchemes =
 
 getTypeScheme :: HasQual m qs info => Int -> m (Scheme qs)
 getTypeScheme i =  
-   let err = error "sigma var not found in map"
+   let err = internalError "Top.States.QualifierState" "getTypeScheme" "sigma var not found in map"
    in qualGets (\s -> lookupWithDefaultFM (schemeMap s) err i)
 
 storeTypeScheme :: HasQual m qs info => Int -> Scheme qs -> m ()
