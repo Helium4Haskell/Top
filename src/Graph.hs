@@ -24,7 +24,7 @@
 
 --  $Id$
 
-module Graph( topSort ) where
+module Graph where
 
 {-
         ( Graph, Table, Vertex, Tree(Node), Forest
