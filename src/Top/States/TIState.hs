@@ -35,11 +35,15 @@ tiGets :: HasTI m info => (TIState info -> a) -> m a
 tiGets f = do a <- tiGet ; return (f a)
 
 data TIState info = TIState
-   { counter      :: Int                         -- ^ A counter for fresh type variables
-   , synonyms     :: OrderedTypeSynonyms         -- ^ All known type synonyms
-   , classenv     :: ClassEnvironment            -- ^ All known type classes and instances
-   , predicates   :: QualifierMap Predicate info -- ^ Type class assertions
-   , skolems      :: [(Int, info)]               -- ^ List of skolem constants
+   { counter            :: Int                         -- ^ A counter for fresh type variables
+   , synonyms           :: OrderedTypeSynonyms         -- ^ All known type synonyms
+   , classenv           :: ClassEnvironment            -- ^ All known type classes and instances
+   , predicates         :: QualifierMap Predicate info -- ^ Type class assertions
+   , neverDirectives    :: [(Predicate, info)]         -- ^ "Never" directives for type class assertions
+   , closeDirectives    :: [(String, info)]            -- ^ "Close" directives for type class assertions
+   , disjointDirectives :: [([String], info)]          -- ^ "Disjoint" directives for type class assertions
+   , defaultDirectives  :: [(String, (Tps, info))]     -- ^ "Default" directives for type class assertions
+   , skolems            :: [(Int, info)]               -- ^ List of skolem constants
    }
 
 type SchemeMap qs = FiniteMap Int (Scheme qs)
@@ -47,11 +51,15 @@ type SchemeMap qs = FiniteMap Int (Scheme qs)
 -- |An empty type inference state.
 instance Show info => Empty (TIState info) where
    empty = TIState
-      { counter      = 0
-      , synonyms     = noOrderedTypeSynonyms
-      , classenv     = emptyClassEnvironment
-      , predicates   = makeQualifierMap globalQM
-      , skolems      = []
+      { counter            = 0
+      , synonyms           = noOrderedTypeSynonyms
+      , classenv           = emptyClassEnvironment
+      , predicates         = makeQualifierMap globalQM
+      , neverDirectives    = []
+      , closeDirectives    = []
+      , disjointDirectives = []
+      , defaultDirectives  = []
+      , skolems            = []
       }
 
 instance Show info => Show (TIState info) where
@@ -59,6 +67,10 @@ instance Show info => Show (TIState info) where
                     , "skolem constants: " ++ show (skolems s)
                     , "synonyms: " ++ concat [ t++"; " | t <- keysFM (fst (synonyms s)) ]
                     , "classenv: " ++ concat [ t++"; " | t <- keysFM (classenv s) ]
+                    , "never directives: " ++ concat [ show p++"; " | (p, _) <- neverDirectives s ]
+                    , "close directives: " ++ concat [ p++"; " | (p, _) <- closeDirectives s ]
+                    , "disjoint directives: " ++ concat [ concat (intersperse "," p) ++ "; " | (p, _) <- disjointDirectives s ]
+                    , "default directives: " ++ concat [ cn ++ " ("++concat (intersperse "," (map show tps)) ++ "); " | (cn, (tps, _)) <- defaultDirectives s ]
                     , "type class assertions:"
                     , show (predicates s)
                     ]  
@@ -117,7 +129,23 @@ getPredicates =
       classEnv <- getClassEnvironment
       ps       <- gets (\qms -> getQualifiers qms ++ getGeneralizedQs qms)
       return (fst (contextReduction syns classEnv (map fst ps)))
-  
+
+addNeverDirective :: HasTI m info => Predicate -> info -> m ()
+addNeverDirective p info = 
+   tiModify (\s -> s { neverDirectives = (p, info) : neverDirectives s })
+   
+addCloseDirective :: HasTI m info => String -> info -> m ()
+addCloseDirective c info =
+   tiModify (\s -> s { closeDirectives = (c, info) : closeDirectives s })
+
+addDisjointDirective :: HasTI m info => [String] -> info -> m ()
+addDisjointDirective cs info =
+   tiModify (\s -> s { disjointDirectives = (cs, info) : disjointDirectives s })
+
+addDefaultDirective :: HasTI m info => String -> Tps -> info -> m ()
+addDefaultDirective cn tps info =
+   tiModify (\s -> s { defaultDirectives = (cn, (tps, info)) : defaultDirectives s })
+   
 ---------------------------------------------------------------------
 -- * Instantiation and skolemization
 

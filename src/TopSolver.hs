@@ -55,12 +55,16 @@ addTopInfo :: String -> String -> TopInfo -> TopInfo
 addTopInfo s1 s2 (TopInfo xs) = TopInfo ((s1, s2) : xs)
 
 instance TypeConstraintInfo TopInfo where
-   ambiguousPredicate p  = addTopInfo "ambiguous predicate"  (show p)
-   unresolvedPredicate p = addTopInfo "unresolved predicate" (show p)
-   equalityTypePair pair = addTopInfo "type pair"            (show pair)
+   ambiguousPredicate p    = addTopInfo "ambiguous predicate"  (show p)
+   unresolvedPredicate p   = addTopInfo "unresolved predicate" (show p)
+   equalityTypePair pair   = addTopInfo "type pair"            (show pair)
+   parentPredicate p       = addTopInfo "parent predicate"     (show p)
+   neverDirective tuple    = addTopInfo "never directive"      (show tuple)
+   closeDirective tuple    = addTopInfo "close directive"      (show tuple)
+   disjointDirective t1 t2 = addTopInfo "disjoint directive"   (show (t1, t2))
    
 instance PolyTypeConstraintInfo TopQualifiers TopInfo where
-   originalTypeScheme s  = addTopInfo "type scheme" (show s)   
+   originalTypeScheme s  = addTopInfo "type scheme" (show s)
    
 ---------------------------------------------------------------------
 -- * Top qualifiers
@@ -128,7 +132,8 @@ lexer = P.makeTokenParser
                 { reservedOpNames = ["==", "::", "<=", "=>", ":=", "~>", "<:" ] 
                 , reservedNames   = ["forall", "Generalize", "Instantiate", "Skolemize", "Implicit",
                                      "Prove", "Assume", "MakeConsistent", "PrintState", "Stop", "ContextReduction",
-                                     "Declare", "Enter", "Leave", "Class", "Instance" ]
+                                     "Declare", "Enter", "Leave", "Class", "Instance", "Never", "Close", 
+                                     "Disjoint", "Default" ]
                 })
 
 runLex :: Parser (Constraints TopSolve, Int) -> String -> IO ()
@@ -183,13 +188,12 @@ pStatements =
 
 pStatement :: Parser (Either (Result TopConstraint) (Result (Constraint TopSolve)))
 pStatement = 
-   tryList [ pOperation     >>= (return . Right)
-           , pSubtypingRule >>= (return . Right)
-           , pClassDecl     >>= (return . Right)
-           , pInstanceDecl  >>= (return . Right)
-           , pConstraint    >>= (return . Left)
-           ]
-
+   tryList (map (\m -> m >>= (return . Right)) decl ++ [ pConstraint >>= (return . Left) ])
+ where
+   decl = [ pOperation, pSubtypingRule, pClassDecl, pInstanceDecl, pNeverDecl
+          , pCloseDecl, pDisjointDecl, pDefaultDecl
+          ]
+          
 ---------------------------------------------------------------------
 -- * Top constraint parser 
 
@@ -347,7 +351,7 @@ pClassDecl =
       let change :: ClassEnvironment -> ClassEnvironment
           change env = addToFM_C (\(s1,is1) (s2,is2) -> (s1 `union` s2,is1 `union` is2)) env className (supers, [])
       
-      return $ ([], \_ -> Constraint
+      return ([], \_ -> Constraint
          (tiModify (\s -> s { classenv = change (classenv s) }), return True, "Class "++show tuple))
   
 pInstanceDecl :: Parser (Result (Constraint TopSolve))
@@ -361,9 +365,55 @@ pInstanceDecl =
           change :: ClassEnvironment -> ClassEnvironment
           change env = addToFM_C (\(s1,is1) (s2,is2) -> (s1 `union` s2,is1 `union` is2)) env className ([], [tuple'])
       
-      return $ ([], \_ -> Constraint
+      return ([], \_ -> Constraint
          (tiModify (\s -> s { classenv = change (classenv s) }), return True, "Instance "++show tuple))
 
+pNeverDecl :: Parser (Result (Constraint TopSolve))
+pNeverDecl = 
+   do P.reserved lexer "Never"
+      p    <- pPredicate
+      info <- pInfo
+      
+      let vars   = filter (isLower . head) . nub . allTypeConstants $ p
+          varmap = zip vars [0..]
+          p'     = applyVarMap varmap p
+      
+      return ([], \_ -> Constraint 
+         (addNeverDirective p' info, return True, "Never " ++ show p ++ "   : {" ++ show info ++ "}"))
+
+pCloseDecl :: Parser (Result (Constraint TopSolve))
+pCloseDecl = 
+   do P.reserved lexer "Close"
+      s    <- P.identifier lexer
+      info <- pInfo
+      
+      return ([], \_ -> Constraint 
+         (addCloseDirective s info, return True, "Close " ++ s ++ "   : {" ++ show info ++ "}"))
+
+pDisjointDecl :: Parser (Result (Constraint TopSolve))
+pDisjointDecl = 
+   do P.reserved lexer "Disjoint"
+      ss    <- commas (P.identifier lexer)
+      info <- pInfo
+      
+      return ([], \_ -> Constraint 
+         (addDisjointDirective ss info, return True, "Disjoint " ++ show ss ++ "   : {" ++ show info ++ "}"))
+
+pDefaultDecl :: Parser (Result (Constraint TopSolve))
+pDefaultDecl = 
+   do P.reserved lexer "Default"
+      className <- P.identifier lexer    
+      typeList  <- 
+         let single = pType >>= \tp -> return [tp]
+             more   = P.parens lexer (commas pType)
+         in tryList [more, single]
+      info      <- pInfo
+      return ([], \_ -> Constraint 
+         ( addDefaultDirective className typeList info
+         , return True
+         , "Default " ++ className ++ " (" ++ concat (intersperse "," (map show typeList)) ++ ")   : {" ++ show info ++ "}")
+         )
+       
 ---------------------------------------------------------------------
 -- * Other parsers 
          
