@@ -32,10 +32,10 @@ instance Show Predicate where
 
 instance Substitutable Predicate where
    sub |-> (Predicate s tp) = Predicate s (sub |-> tp)
-   ftv     (Predicate s tp) = ftv tp
+   ftv     (Predicate _ tp) = ftv tp
 
 instance HasTypes Predicate where
-   getTypes      (Predicate s tp) = [tp] 
+   getTypes      (Predicate _ tp) = [tp] 
    changeTypes f (Predicate s tp) = Predicate s (f tp)
 
 instance ShowQualifiers Predicate

@@ -123,8 +123,8 @@ simplifyPath path =
       _ -> path
 
 tailSharingBy :: (a -> a -> Ordering) -> Path a -> Path a
-tailSharingBy compf path =
-   case simplifyPath path of 
+tailSharingBy compf thePath =
+   case simplifyPath thePath of 
       Empty -> Empty
       Fail  -> Fail
       p     -> rec p
@@ -150,7 +150,7 @@ tailSharingBy compf path =
             case tailSharingBy compf (altList1 (map removeTail paths)) of 
                Fail  -> Fail
                Empty -> Step tl
-               path  -> path :+: Step tl
+               p     -> p :+: Step tl
             
      in altList1 sharedTail
   
@@ -271,17 +271,19 @@ limitNumberOfPaths size = fst . rec size
    fromInt :: Num a => Int -> a
    fromInt = fromInteger . toInteger
    
-   rec size path = 
+   rec sz path = 
       case path of
          Empty     -> (path, 1)
          Fail      -> (path, 0)
-         Step a    -> (path, 1)
-         p1 :+: p2 -> let (p1', n1) = rec size p1
-                          newSize   = if n1 == 0 then size else ceiling (fromInt size / fromInt n1)
+         Step _    -> (path, 1)
+         p1 :+: p2 -> let (p1', n1) = rec sz p1
+                          newSize   
+                             | n1 == 0   = sz 
+                             | otherwise = ceiling ((fromInt sz / fromInt n1) :: Double)
                           (p2', n2) = rec newSize p2
                       in (p1' :+: p2', n1*n2)
-         p1 :|: p2 -> let both@(p1' , n1) = rec size p1
-                          (p2', n2) = rec (size - n1) p2
-                      in if n1 >= size
+         p1 :|: p2 -> let both@(p1' , n1) = rec sz p1
+                          (p2', n2) = rec (sz - n1) p2
+                      in if n1 >= sz
                            then both
                            else (p1' :|: p2', n1 + n2)

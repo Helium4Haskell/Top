@@ -95,10 +95,10 @@ instance (ShowQualifiers qs, Substitutable qs) => Show (Sigma qs) where
    show (SigmaScheme s) = show s
 
 instance Substitutable qs => Substitutable (Sigma qs) where   
-   sub |-> sv@(SigmaVar _) = sv 
+   _   |-> sv@(SigmaVar _) = sv 
    sub |-> (SigmaScheme s) = SigmaScheme (sub |-> s)   
    
-   ftv (SigmaVar i)    = []
+   ftv (SigmaVar _)    = []
    ftv (SigmaScheme s) = ftv s 
 
 -- |A substitution for type scheme variables

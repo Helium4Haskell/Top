@@ -13,7 +13,7 @@ import Top.Types
 import Utils (internalError)
 import Debug.Trace (trace)
 import Data.Maybe
-import Data.List (sort, nub, partition, intersperse)
+import Data.List (sort, partition, intersperse)
 
 ---------------------------------------------------------------------------------
 
@@ -72,7 +72,7 @@ data PathStep info
    | Child    ChildSide
    
 instance Show (PathStep info) where
-   show (Initial info)   = "Initial"
+   show (Initial _)      = "Initial"
    show (Implied cs x y) = "(" ++ show cs ++ " : " ++ show (x, y) ++ ")"
    show (Child i)        = "(" ++ show i ++ ")"
    
@@ -92,7 +92,7 @@ instance Ord Clique where
    compare (CliqueX xs) (CliqueX ys) = compare xs ys
 
 isSubsetClique :: Clique -> Clique -> Bool
-isSubsetClique (CliqueX xs) (CliqueX ys) = rec xs ys 
+isSubsetClique (CliqueX as) (CliqueX bs) = rec as bs
  where
    rec [] _ = True
    rec _ [] = False
@@ -102,7 +102,7 @@ isSubsetClique (CliqueX xs) (CliqueX ys) = rec xs ys
       | otherwise = False
    
 isDisjointClique :: Clique -> Clique -> Bool
-isDisjointClique (CliqueX xs) (CliqueX ys) = rec xs ys
+isDisjointClique (CliqueX as) (CliqueX bs) = rec as bs
  where
    rec [] _ = True
    rec _ [] = True
@@ -129,9 +129,9 @@ mergeCliques list = CliqueX (foldr op [] [ xs | CliqueX xs <- list ])
    op xs [] = xs
    op [] ys = ys
    op a@(x:xs) b@(y:ys)
-      | x == y = x : op xs ys
-      | x < y  = x : op xs b 
-      | x > y  = y : op a ys
+      | x < y     = x : op xs b
+      | x == y    = x : op xs ys 
+      | otherwise = y : op a ys
    
 makeClique :: [ParentChild] -> Clique
 makeClique list

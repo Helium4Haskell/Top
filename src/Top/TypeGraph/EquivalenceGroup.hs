@@ -21,7 +21,6 @@ module Top.TypeGraph.EquivalenceGroup
 import Top.TypeGraph.Paths
 import Top.TypeGraph.Basics
 import Top.Types
-import Utils (internalError)
 import Debug.Trace (trace)
 import Data.List
 import qualified Data.Set as S
@@ -101,15 +100,15 @@ splitGroup eqgroup =
    let (vs, es, cs) = (vertices eqgroup, edges eqgroup, cliques eqgroup)
        eqcs = map (\(a, b) -> insertVertex a b emptyGroup) vs
 
-       addClique clique cs = 
+       addClique clique groups = 
           let is         = childrenInClique clique
-              (cs1, cs2) = partition (any ((`elem` is) . fst) . vertices) cs    
-          in insertClique clique (foldr combineGroups emptyGroup cs1) : cs2
+              (gs1, gs2) = partition (any ((`elem` is) . fst) . vertices) groups    
+          in insertClique clique (foldr combineGroups emptyGroup gs1) : gs2
 
-       addEdge (edge@(EdgeId v1 v2 _), info) cs =
+       addEdge (edge@(EdgeId v1 v2 _), info) groups =
           let is         = [v1, v2] 
-              (cs1, cs2) = partition (any ((`elem` is) . fst) . vertices) cs
-          in insertEdge edge info (foldr combineGroups emptyGroup cs1) : cs2
+              (gs1, gs2) = partition (any ((`elem` is) . fst) . vertices) groups
+          in insertEdge edge info (foldr combineGroups emptyGroup gs1) : gs2
 
    in foldr addEdge (foldr addClique eqcs cs) es
 
@@ -128,13 +127,13 @@ consistent eqgroup =
       _   -> False
        
 equalPaths  :: S.Set VertexId -> VertexId -> [VertexId] -> EquivalenceGroup info -> TypeGraphPath info
-equalPaths without v1 targets eqgroup =
+equalPaths without start targets eqgroup =
    (if debugTypeGraph then trace msg else id)
    reduceNumberOfPaths $
       tailSharingBy (\(e1, _) (e2, _) -> e1 `compare` e2) $
-      rec v1 (edgeList, cliqueList)
+      rec start (edgeList, cliqueList)
  where   
-      msg        = "Path from "++show v1++" to "++show targets++" without "++show (S.setToList without)
+      msg        = "Path from "++show start++" to "++show targets++" without "++show (S.setToList without)
       edgeList   = let p (EdgeId v1 v2 _, _) = 
                           not (v1 `S.elementOf` without) && not (v2 `S.elementOf` without)
                    in filter p (edges eqgroup)
@@ -146,16 +145,16 @@ equalPaths without v1 targets eqgroup =
       secondCliqueVisit = False
       
       rec :: VertexId -> ([(EdgeId, info)], [[ParentChild]]) -> TypeGraphPath info
-      rec v1 (es, cliques)
+      rec v1 (es, cs)
         | v1 `S.elementOf` targetSet  = Empty
         | otherwise =
              let (edges1,es' ) = partition (\(EdgeId a _ _, _) -> v1 == a) es
                  (edges2,es'') = partition (\(EdgeId _ a _, _) -> v1 == a) es'
                  (neighbourCliques, otherCliques) = 
-                    partition ((v1 `elem`) . map child) cliques 
+                    partition ((v1 `elem`) . map child) cs 
                  rest@(_, restCliques)
                     | secondCliqueVisit = (es'', removeFromClique v1 neighbourCliques ++ otherCliques)
-                    | otherwise         = (es'', otherCliques)
+                    | otherwise         = (es'', cs)
              in 
                 altList $ 
                 map (\(EdgeId _ neighbour edgeNr, info) -> 
@@ -169,13 +168,13 @@ equalPaths without v1 targets eqgroup =
                                sourceParents     = map parent sources
                                neighbours        = nub (map child others)
                                f neighbour       = altList 
-                                  [ steps :+: restPath
+                                  [ beginPath :+: restPath
                                   | pc <- others
                                   , child pc == neighbour
-                                  , let restPath   
+                                  , let beginPath = altList1 (map g sourceParents)
+                                        restPath   
                                            | secondCliqueVisit = rec neighbour (es'', map (filter (/= pc)) restCliques)
                                            | otherwise         = rec neighbour rest
-                                        steps = altList1 (map g sourceParents)
                                         g sp = Step ( EdgeId v1 neighbour impliedEdgeNr
                                                     , Implied (childSide pc) sp (parent pc)
                                                     )
@@ -193,20 +192,20 @@ equalPaths without v1 targets eqgroup =
 typeOfGroup :: OrderedTypeSynonyms -> EquivalenceGroup info -> Maybe Tp
 typeOfGroup synonyms eqgroup
 
-   | length constants > 1                        =  Nothing
-   | not (null constants) && not (null applies)  =  Nothing
+   | length allConstants > 1                           =  Nothing
+   | not (null allConstants) && not (null allApplies)  =  Nothing
    
-   | not (null originals)  =  Just (theBestType synonyms originals)
-   | not (null constants)  =  Just (TCon (head constants))
-   | not (null applies)    =  Just $  let (VertexId  l, VertexId r) = head applies
-                                      in (TApp (TVar l) (TVar r)) 
-   | otherwise             =  Just (TVar (head variables))
+   | not (null allOriginals)  =  Just (theBestType synonyms allOriginals)
+   | not (null allConstants)  =  Just (TCon (head allConstants))
+   | not (null allApplies)    =  Just $  let (VertexId  l, VertexId r) = head allApplies
+                                         in (TApp (TVar l) (TVar r)) 
+   | otherwise                =  Just (TVar (head allVariables))
    
   where
-    variables  =       [ i       |  (VertexId i, _)     <- vertices eqgroup  ]
-    constants  =  nub  [ s       |  (_, (VCon s, _))    <- vertices eqgroup  ]
-    applies    =       [ (l, r)  |  (_, (VApp l r, _))  <- vertices eqgroup  ]       
-    originals  =       [ tp      |  (_, (_, Just tp))   <- vertices eqgroup  ]
+    allVariables  =       [ i       |  (VertexId i, _)     <- vertices eqgroup  ]
+    allConstants  =  nub  [ s       |  (_, (VCon s, _))    <- vertices eqgroup  ]
+    allApplies    =       [ (l, r)  |  (_, (VApp l r, _))  <- vertices eqgroup  ]       
+    allOriginals  =       [ tp      |  (_, (_, Just tp))   <- vertices eqgroup  ]
 
 theBestType :: OrderedTypeSynonyms -> Tps -> Tp 
 theBestType = foldr1 . equalUnderTypeSynonyms

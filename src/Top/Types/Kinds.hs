@@ -13,7 +13,6 @@ module Top.Types.Kinds where
 import Top.Types.Basics
 import Top.Types.Substitution
 import Top.Types.Quantification
-import Top.Types.Qualification
 import Top.Types.Schemes
 
 type Kind       = Tp
@@ -38,7 +37,7 @@ showKind kind =
    let sub = listToSubstitution [ (i, TCon ('k':show i)) | i <- ftv kind ]
    in show (sub |-> kind)
 
--- showKindScheme :: Quantification Universal (Qualification q Tp) -> String
+showKindScheme :: KindScheme -> String
 showKindScheme scheme = 
    let sub = listToSubstitution
                 $  [ (i, TCon ('k':show j)) | (i, j) <- zip (quantifiers scheme) [1 :: Int ..] ] 

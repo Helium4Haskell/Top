@@ -22,7 +22,6 @@ import Data.FiniteMap
 import Graph (topSort)
 import Top.States.BasicState (printMessage)
 import Top.States.TIState
-import Debug.Trace
 
 type ErrorInfo info = ([EdgeId], info)
 
@@ -89,8 +88,8 @@ evalSelector edges path selector =
 
       Selector (name, f) -> 
          do printMessage ("- "++name++" (selector)")
-            let op list edge@(edgeId, info) =
-                   do x <- f (edgeId, info)
+            let op list edge =
+                   do x <- f edge
                       case x of
                          Nothing -> return list
                          Just (prio, string, es, info) -> 
@@ -112,9 +111,6 @@ showSet :: Show a => [a] -> String
 showSet as = "{" ++ f (map show as) ++ "}"
    where f [] = ""
          f xs = foldr1 (\x y -> x++","++y)  (map show xs)
-
-maxPathSize :: Integer
-maxPathSize = 1
 
 allErrorPaths :: HasTypeGraph m info => m (Path (EdgeId, info))
 allErrorPaths = 
@@ -261,29 +257,29 @@ allSubPathsList childList vertex targets = rec S.emptySet vertex
 	           
 expandPath :: HasTypeGraph m info => TypeGraphPath info -> m (Path (EdgeId, info))
 expandPath Fail = return Fail
-expandPath path =
-   let impliedEdges = nub [ intPair (v1, v2) | (_, Implied _ (VertexId v1) (VertexId v2)) <- steps path ]
-   in do expandTable <- impliedEdgeTable impliedEdges
-         let 
-             convert history path = 
-                case path of 
-                   Empty -> Empty
-                   Fail  -> Fail
-                   p1 :+: p2 -> convert history p1 :+: convert history p2
-                   p1 :|: p2 -> convert history p1 :|: convert history p2
-                   Step (edge, edgeInfo) -> 
-                      case edgeInfo of
-                         Initial info -> Step (edge, info)
-                         Child _ -> Empty
-                         Implied _ (VertexId v1) (VertexId v2)
-                            | pair `S.elementOf` history ->
-                                 Empty
-                            | otherwise -> 
-                                 convert (S.addToSet history pair) (lookupPair expandTable pair)
-                          where 
-                           pair = intPair (v1, v2)
+expandPath p =
+   do expandTable <- 
+         let impliedEdges = nub [ intPair (v1, v2) | (_, Implied _ (VertexId v1) (VertexId v2)) <- steps p ]
+         in impliedEdgeTable impliedEdges
+      
+      let convert history path = 
+             case path of 
+                Empty -> Empty
+                Fail  -> Fail
+                p1 :+: p2 -> convert history p1 :+: convert history p2
+                p1 :|: p2 -> convert history p1 :|: convert history p2
+                Step (edge, edgeInfo) -> 
+                   case edgeInfo of
+                      Initial info -> Step (edge, info)
+                      Child _ -> Empty
+                      Implied _ (VertexId v1) (VertexId v2)
+                         | pair `S.elementOf` history -> Empty
+                         | otherwise -> 
+                              convert (S.addToSet history pair) (lookupPair expandTable pair)
+                       where 
+                        pair = intPair (v1, v2)
 
-         return (convert S.emptySet path)                 
+      return (convert S.emptySet p)                 
 
 impliedEdgeTable :: HasTypeGraph m info => [IntPair] -> m (PathMap info)
 impliedEdgeTable = insertPairs emptyFM
@@ -359,7 +355,7 @@ predicatePath =
              let f (vid, tp)
                     | null errs = -- everything is okay: recursive call
                          do let -- don't visit these vertices
-                                donts = S.mkSet [ VertexId i | i <- ftv (map snd applys), i `notElem` ftv tp ]
+                                donts = S.mkSet [ VertexId j | j <- ftv (map snd applys), j `notElem` ftv tp ]
                             path'   <- allPathsListWithout history i [vid]
                             simples <- simplePredicates reduced
                             makeList (donts `S.union` newHistory) (path :+: path') simples

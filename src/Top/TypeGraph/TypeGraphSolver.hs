@@ -54,6 +54,14 @@ instance HasTypeGraph (TypeGraphX info qs ext) info where
    getMarkedPossibleErrors = lift0 Impl.getMarkedPossibleErrors
    unmarkPossibleErrors    = lift0 Impl.unmarkPossibleErrors
 
+----------------------------------------------
+-- lift a function
+
+lift0 :: (HasTG m info, HasTypeGraph m info) => Impl.TypeGraph info a -> m a
+lift1 :: (HasTG m info, HasTypeGraph m info) => (t1 -> Impl.TypeGraph info a) -> t1 -> m a
+lift2 :: (HasTG m info, HasTypeGraph m info) => (t1 -> t2 -> Impl.TypeGraph info a) -> t1 -> t2 -> m a
+lift3 :: (HasTG m info, HasTypeGraph m info) => (t1 -> t2 -> t3 -> Impl.TypeGraph info a) -> t1 -> t2 -> t3 -> m a
+
 lift0 f       = Impl.fromTypeGraph f 
 lift1 f x     = Impl.fromTypeGraph $ f x 
 lift2 f x y   = Impl.fromTypeGraph $ f x y
@@ -80,22 +88,22 @@ solveTypeGraph hs todo classEnv syns unique =
             do todo
                solveResult
                
-{-runTypeGraphPlusDoAtEnd :: 
+runTypeGraphPlusDoAtEnd :: 
    ( IsState ext
    , Solvable constraint (TypeGraphX info qs ext)
    , QualifierList (TypeGraphX info qs ext) info qs qsInfo
    ) => 
      [Heuristic info] -> TypeGraphX info qs ext () -> SolverX constraint info qs ext
-     -}
+
 runTypeGraphPlusDoAtEnd hs todo classEnv syns unique = 
    eval . solveTypeGraph hs todo classEnv syns unique
-{-   
+
 runTypeGraph:: 
    ( IsState ext
    , Solvable constraint (TypeGraphX info qs ext)
    , QualifierList (TypeGraphX info qs ext) info qs qsInfo
    ) => 
-     [Heuristic info] -> SolverX constraint info qs ext -}
+     [Heuristic info] -> SolverX constraint info qs ext
 
 runTypeGraph hs = 
    runTypeGraphPlusDoAtEnd hs (return ())
