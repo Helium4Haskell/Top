@@ -35,15 +35,12 @@ tiGets :: HasTI m info => (TIState info -> a) -> m a
 tiGets f = do a <- tiGet ; return (f a)
 
 data TIState info = TIState
-   { counter            :: Int                         -- ^ A counter for fresh type variables
-   , synonyms           :: OrderedTypeSynonyms         -- ^ All known type synonyms
-   , classenv           :: ClassEnvironment            -- ^ All known type classes and instances
-   , predicates         :: QualifierMap Predicate info -- ^ Type class assertions
-   , neverDirectives    :: [(Predicate, info)]         -- ^ "Never" directives for type class assertions
-   , closeDirectives    :: [(String, info)]            -- ^ "Close" directives for type class assertions
-   , disjointDirectives :: [([String], info)]          -- ^ "Disjoint" directives for type class assertions
-   , defaultDirectives  :: [(String, (Tps, info))]     -- ^ "Default" directives for type class assertions
-   , skolems            :: [(Int, info)]               -- ^ List of skolem constants
+   { counter             :: Int                         -- ^ A counter for fresh type variables
+   , synonyms            :: OrderedTypeSynonyms         -- ^ All known type synonyms
+   , classenv            :: ClassEnvironment            -- ^ All known type classes and instances
+   , predicates          :: QualifierMap Predicate info -- ^ Type class assertions
+   , typeclassDirectives :: TypeClassDirectives info   -- ^ Directives for type class assertions
+   , skolems             :: [(Int, info)]               -- ^ List of skolem constants
    }
 
 type SchemeMap qs = FiniteMap Int (Scheme qs)
@@ -51,15 +48,12 @@ type SchemeMap qs = FiniteMap Int (Scheme qs)
 -- |An empty type inference state.
 instance Show info => Empty (TIState info) where
    empty = TIState
-      { counter            = 0
-      , synonyms           = noOrderedTypeSynonyms
-      , classenv           = emptyClassEnvironment
-      , predicates         = makeQualifierMap globalQM
-      , neverDirectives    = []
-      , closeDirectives    = []
-      , disjointDirectives = []
-      , defaultDirectives  = []
-      , skolems            = []
+      { counter             = 0
+      , synonyms            = noOrderedTypeSynonyms
+      , classenv            = emptyClassEnvironment
+      , predicates          = makeQualifierMap globalQM
+      , typeclassDirectives = empty
+      , skolems             = []
       }
 
 instance Show info => Show (TIState info) where
@@ -67,10 +61,7 @@ instance Show info => Show (TIState info) where
                     , "skolem constants: " ++ show (skolems s)
                     , "synonyms: " ++ concat [ t++"; " | t <- keysFM (fst (synonyms s)) ]
                     , "classenv: " ++ concat [ t++"; " | t <- keysFM (classenv s) ]
-                    , "never directives: " ++ concat [ show p++"; " | (p, _) <- neverDirectives s ]
-                    , "close directives: " ++ concat [ p++"; " | (p, _) <- closeDirectives s ]
-                    , "disjoint directives: " ++ concat [ concat (intersperse "," p) ++ "; " | (p, _) <- disjointDirectives s ]
-                    , "default directives: " ++ concat [ cn ++ " ("++concat (intersperse "," (map show tps)) ++ "); " | (cn, (tps, _)) <- defaultDirectives s ]
+                    , "type class directives: " ++ show (typeclassDirectives s)
                     , "type class assertions:"
                     , show (predicates s)
                     ]  
@@ -130,22 +121,58 @@ getPredicates =
       ps       <- gets (\qms -> getQualifiers qms ++ getGeneralizedQs qms)
       return (fst (contextReduction syns classEnv (map fst ps)))
 
-addNeverDirective :: HasTI m info => Predicate -> info -> m ()
-addNeverDirective p info = 
-   tiModify (\s -> s { neverDirectives = (p, info) : neverDirectives s })
-   
-addCloseDirective :: HasTI m info => String -> info -> m ()
-addCloseDirective c info =
-   tiModify (\s -> s { closeDirectives = (c, info) : closeDirectives s })
+---------------------------------------------------------------------
+-- * Type class directives
 
-addDisjointDirective :: HasTI m info => [String] -> info -> m ()
-addDisjointDirective cs info =
-   tiModify (\s -> s { disjointDirectives = (cs, info) : disjointDirectives s })
+type NeverDirective    info = (Predicate, info)
+type CloseDirective    info = (String, info)
+type DisjointDirective info = ([String], info)
+type DefaultDirective  info = (String, (Tps, info))
 
-addDefaultDirective :: HasTI m info => String -> Tps -> info -> m ()
-addDefaultDirective cn tps info =
-   tiModify (\s -> s { defaultDirectives = (cn, (tps, info)) : defaultDirectives s })
-   
+data TypeClassDirectives info = TypeClassDirectives 
+   { neverDirectives    :: [NeverDirective info]
+   , closeDirectives    :: [CloseDirective info]
+   , disjointDirectives :: [DisjointDirective info]
+   , defaultDirectives  :: [DefaultDirective info]
+   }
+
+instance Show info => Show (TypeClassDirectives info) where
+   show tcd = 
+      let f title pf xs
+             | null xs   = ""
+             | otherwise = "\n   "++title++": "++concat (intersperse "; " (map pf xs))
+          p1 (x, _) = show x
+          p2 (x, _) = x
+          p3 (x, _) = concat (intersperse "," x)
+          p4 (cn, (tps, _)) = cn ++ " ("++concat (intersperse "," (map show tps)) ++ ")"
+      in f "never"    p1 (neverDirectives tcd)    ++
+         f "close"    p2 (closeDirectives tcd)    ++
+         f "disjoint" p3 (disjointDirectives tcd) ++
+         f "default"  p4 (defaultDirectives tcd) 
+         
+instance Empty (TypeClassDirectives info) where
+   empty = TypeClassDirectives { neverDirectives = [], closeDirectives = [], disjointDirectives = [], defaultDirectives = [] }
+
+changeTCD :: HasTI m info => (TypeClassDirectives info -> TypeClassDirectives info) -> m ()
+changeTCD f = 
+   tiModify (\s -> s { typeclassDirectives = f (typeclassDirectives s) })
+
+addNeverDirective :: HasTI m info => NeverDirective info -> m ()
+addNeverDirective x = 
+   changeTCD (\s -> s { neverDirectives = x : neverDirectives s })
+  
+addCloseDirective :: HasTI m info => CloseDirective info -> m ()
+addCloseDirective x =
+   changeTCD (\s -> s { closeDirectives = x : closeDirectives s })
+
+addDisjointDirective :: HasTI m info => DisjointDirective info -> m ()
+addDisjointDirective x =
+   changeTCD (\s -> s { disjointDirectives = x : disjointDirectives s })
+
+addDefaultDirective :: HasTI m info => DefaultDirective info -> m ()
+addDefaultDirective x =
+   changeTCD (\s -> s { defaultDirectives = x : defaultDirectives s })
+
 ---------------------------------------------------------------------
 -- * Instantiation and skolemization
 

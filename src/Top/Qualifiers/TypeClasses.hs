@@ -27,9 +27,9 @@ instance ( TypeConstraintInfo info
       simplify psNew = 
          do syns      <- getTypeSynonyms
             classEnv  <- getClassEnvironment
-            nevers    <- tiGets neverDirectives
-            closes    <- tiGets closeDirectives
-            disjoints <- tiGets disjointDirectives
+            nevers    <- tiGets (neverDirectives    . typeclassDirectives)
+            closes    <- tiGets (closeDirectives    . typeclassDirectives)
+            disjoints <- tiGets (disjointDirectives . typeclassDirectives)
          
             let loopIn t@(p@(Predicate className _), info)
                    | inHeadNormalForm p = return [t]
@@ -79,7 +79,7 @@ instance ( TypeConstraintInfo info
       ambiguous (t@(Predicate _ (TVar i), _) : ts) =
          let test (Predicate _ tp', _) = TVar i == tp'
              (ts1, ts2) = partition test ts
-         in do defaults   <- tiGets defaultDirectives
+         in do defaults   <- tiGets (defaultDirectives . typeclassDirectives)
                candidates <- 
                   let f (Predicate cn _) = 
                          case lookup cn defaults of 

@@ -379,7 +379,7 @@ pNeverDecl =
           p'     = applyVarMap varmap p
       
       return ([], \_ -> Constraint 
-         (addNeverDirective p' info, return True, "Never " ++ show p ++ "   : {" ++ show info ++ "}"))
+         (addNeverDirective (p', info), return True, "Never " ++ show p ++ "   : {" ++ show info ++ "}"))
 
 pCloseDecl :: Parser (Result (Constraint TopSolve))
 pCloseDecl = 
@@ -388,7 +388,7 @@ pCloseDecl =
       info <- pInfo
       
       return ([], \_ -> Constraint 
-         (addCloseDirective s info, return True, "Close " ++ s ++ "   : {" ++ show info ++ "}"))
+         (addCloseDirective (s, info), return True, "Close " ++ s ++ "   : {" ++ show info ++ "}"))
 
 pDisjointDecl :: Parser (Result (Constraint TopSolve))
 pDisjointDecl = 
@@ -397,7 +397,7 @@ pDisjointDecl =
       info <- pInfo
       
       return ([], \_ -> Constraint 
-         (addDisjointDirective ss info, return True, "Disjoint " ++ show ss ++ "   : {" ++ show info ++ "}"))
+         (addDisjointDirective (ss, info), return True, "Disjoint " ++ show ss ++ "   : {" ++ show info ++ "}"))
 
 pDefaultDecl :: Parser (Result (Constraint TopSolve))
 pDefaultDecl = 
@@ -409,7 +409,7 @@ pDefaultDecl =
          in tryList [more, single]
       info      <- pInfo
       return ([], \_ -> Constraint 
-         ( addDefaultDirective className typeList info
+         ( addDefaultDirective (className, (typeList, info))
          , return True
          , "Default " ++ className ++ " (" ++ concat (intersperse "," (map show typeList)) ++ ")   : {" ++ show info ++ "}")
          )
