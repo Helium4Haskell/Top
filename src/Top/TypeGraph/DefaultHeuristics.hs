@@ -58,9 +58,34 @@ highParticipation ratio =
                 "{"++show info++"}"
                 
          in Heuristic (Filter ("Participation ratio [ratio="++show ratio++"]")
+               (selectTheBest path))))
+               {-
                (\es -> do printMessage (msg es)	                  
-                          return (filter (\(_,cnr,_) -> cnr `elem` goodCNrs) es)))))
-
+                          return (filter (\(_,cnr,_) -> cnr `elem` goodCNrs) es))))) -}
+ where
+   selectTheBest path es = 
+      let (nrOfPaths, fm)   = participationMap (mapPath (\(_,cnr,_) -> cnr) path)
+          participationList = fmToList (filterFM p fm)
+          p cnr _    = cnr `elem` activeCNrs
+          activeCNrs = [ cnr | (_, cnr, _) <- es ] 
+          maxInList  = maximum (map snd participationList)
+          limit     -- test if one edge can solve it completely
+             | maxInList == nrOfPaths = maxInList 
+             | otherwise              = round (fromIntegral maxInList * ratio) `max` 1
+          goodCNrs   = [ cnr | (cnr, i) <- participationList, i >= limit ]
+          bestEdges  = filter (\(_,cnr,_) -> cnr `elem` goodCNrs) es
+  
+          -- prints a nice report
+          msg    = unlines ("" : title : replicate 50 '-' : map f es)
+          title  = "cnr edge      ratio   info"
+          f (edgeID,cnr,info) = 
+             take 4  (show cnr++(if cnr `elem` goodCNrs then "*" else "")++repeat ' ') ++
+             take 10 (show edgeID++repeat ' ') ++
+             take 8  (show (lookupWithDefaultFM fm 0 cnr * 100 `div` nrOfPaths)++"%"++repeat ' ') ++
+             "{"++show info++"}"
+      in do printMessage msg
+            return bestEdges
+            
 -- |Select the "latest" constraint
 positionInList :: Heuristic info
 positionInList = 
