@@ -1,0 +1,6 @@
+H (F v1) (F v1) == H v0 (F A)       : #1
+G v1 v2         == G (K v0) (F v5)  : #2
+G (K v0) (K v2) == G v4 v4          : #3
+G v1 v5         == G v4 v4          : #4
+G (F v5) (K v2) == G (F B) v5       : #5 
+H v0 (F A)      == H (F B) (F v5)   : #6

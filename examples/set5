@@ -1,0 +1,5 @@
+P A     == P v0     : #1
+M v1    == M v2     : #3
+R v0 v1 == R v3 v3  : #2
+T v2 v5 == T v4 v4  : #4
+S v5    == S B      : #5

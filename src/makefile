@@ -2,20 +2,20 @@
 # Constraint Solver
 #-----------------------------------------------------------------------
 
-# make example   - build an example executable
+# make example   - build the Top constraint solver
 # make doc       - make haddock documentation 
 # make clean	 - remove .hi and .o files and documentation
 # make web       - make a distribution for the web (Bastiaan only)
 
-default: example
+default: topsolver
 
 prof:
-	# build an example executable with profiling
-	ghc -Wall --make -fglasgow-exts -prof -auto-all -o ../bin/csolver ../examples/Examples.hs
+	# build the Top constraint solver with profiling
+	ghc -Wall --make -package text -fglasgow-exts -prof -auto-all -o ../bin/topsolver TopSolver.hs
 
-example:
-	# build an example executable
-	ghc -Wall --make -fglasgow-exts -o ../bin/csolver ../examples/Examples.hs
+topsolver:
+	# build the Top constraint solver
+	ghc -Wall --make -package text -fglasgow-exts -o ../bin/topsolver TopSolver.hs
         
 documentation:
 	# make haddock documentation        
@@ -30,7 +30,7 @@ clean:
 	$(RM) ../doc/*.html
 	$(RM) ../doc/*.css
 	$(RM) ../doc/*.gif                
-	$(RM) ../bin/csolver
+	$(RM) ../bin/topsolver
 
 web:
 	#*** Bastiaan only ***

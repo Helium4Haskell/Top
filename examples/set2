@@ -1,0 +1,4 @@
+P v0 (H v0) == P (F A v2) (H v2)          : #1
+Q v0 v5     == Q (v1) B                   : #2
+R A v2      == R v4 v1                    : #3
+S v1 v3 v3  == S (F v4 v1) (G v4) (G v5)  : #4
