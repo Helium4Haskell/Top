@@ -61,16 +61,16 @@ addVertex :: VertexId -> VertexInfo -> TypeGraph info ()
 addVertex v info = 
    createGroup (insertVertex v info emptyGroup)
 
-addEdge :: EdgeId -> EdgeInfo info -> TypeGraph info ()
-addEdge edge@(EdgeId v1 v2) edgeInfo =
+addEdge :: EdgeId -> info -> TypeGraph info ()
+addEdge edge@(EdgeId v1 v2 _) info =
    debugTrace ("addEdge " ++ show edge) >>      
    do combineClasses [v1, v2]
-      updateGroupOf v1 (insertEdge edge edgeInfo)
+      updateGroupOf v1 (insertEdge edge info)
       propagateEquality v1
          
 -- deconstruct a type graph
 deleteEdge :: EdgeId -> TypeGraph info ()
-deleteEdge edge@(EdgeId v1 _) =
+deleteEdge edge@(EdgeId v1 _ _) =
    debugTrace ("deleteEdge "++show edge) >>
    do updateGroupOf v1 (removeEdge edge)
       propagateRemoval v1
@@ -91,10 +91,10 @@ childrenInGroupOf i =
          | (p, (VApp t1 t2, _)) <- vs 
          ] 
             
-edgesFrom :: VertexId -> TypeGraph info [(EdgeId, EdgeNr, info)]
+edgesFrom :: VertexId -> TypeGraph info [(EdgeId, info)]
 edgesFrom i =
    do eqc <- getGroupOf i
-      let p (EdgeId v1 v2,_,_) = v1 == i || v2 == i
+      let p (EdgeId v1 v2 _, _) = v1 == i || v2 == i
       return (filter p (edges eqc))
          
 -- query a path in an equivalence group         
@@ -110,19 +110,19 @@ removeInconsistencies =
    debugTrace "removeInconsistencies" >> toTypeGraph rec 
  where
    rec :: (HasTypeGraph m info, HasTG m info) => m ()
-   rec = do hs         <- getHeuristics
-            (es, errs) <- applyHeuristics hs
-            mapM_ (fromTypeGraph . deleteEdge) es
-            mapM_ (addLabeledError unificationErrorLabel) errs 
-            if null errs && null es
-	          then -- everything is okay: no errors were found.
-	           fromTypeGraph unmarkPossibleErrors
-              else -- Bug patch 3 february 2004
-	               -- safety first: check whether *everything* is really removed. 
-	           rec
+   rec = do hs   <- getHeuristics
+            errs <- applyHeuristics hs
+            mapM_ (fromTypeGraph . deleteEdge) (concatMap fst errs)
+            mapM_ (addLabeledError unificationErrorLabel . snd) errs 
+            if null errs
+	           then -- everything is okay: no errors were found.
+	              fromTypeGraph unmarkPossibleErrors
+               else -- Bug patch 3 february 2004
+	                -- safety first: check whether *everything* is really removed. 
+	              rec
 
 substituteTypeSafe :: Tp -> TypeGraph info (Maybe Tp) 
-substituteTypeSafe = rec [] 
+substituteTypeSafe = rec []
   where
     rec history (TVar i)
       |  i `elem` history  =  return Nothing

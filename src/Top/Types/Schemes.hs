@@ -103,3 +103,14 @@ instance Substitutable qs => Substitutable (Sigma qs) where
 
 -- |A substitution for type scheme variables
 type TpSchemeMap = FiniteMap SigmaVar TpScheme
+
+type SigmaPreds = Sigma Predicates
+
+class IsSigmaPreds a where
+   toSigmaPreds :: a -> SigmaPreds
+   
+instance IsSigmaPreds SigmaPreds where toSigmaPreds = id 
+instance IsSigmaPreds TpScheme   where toSigmaPreds = SigmaScheme . toTpScheme
+instance IsSigmaPreds QType      where toSigmaPreds = SigmaScheme . toTpScheme
+instance IsSigmaPreds Tp         where toSigmaPreds = SigmaScheme . toTpScheme
+instance IsSigmaPreds Int        where toSigmaPreds = SigmaVar

@@ -28,7 +28,7 @@ typegraphImpl = SubstState
         do v1  <- addTermGraph t1
            v2  <- addTermGraph t2
            cnr <- nextConstraintNumber           
-           addEdge (EdgeId v1 v2) (cnr, info)
+           addEdge (EdgeId v1 v2 cnr) info
            
    , findSubstForVar_impl = \i ->      
         debugTrace ("findSubstForVar " ++ show i) >>

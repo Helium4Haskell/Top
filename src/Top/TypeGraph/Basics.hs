@@ -38,14 +38,16 @@ instance Show VertexId where
 vertexIdToTp :: VertexId -> Tp     
 vertexIdToTp (VertexId i) = TVar i
     
-data EdgeId        = EdgeId VertexId VertexId
-type EdgeInfo info = (EdgeNr, info)
+data EdgeId        = EdgeId VertexId VertexId EdgeNr
 newtype EdgeNr     = EdgeNrX Int deriving (Eq, Ord)
 data ChildSide     = LeftChild | RightChild
    deriving (Eq, Ord)
 
 makeEdgeNr :: Int -> EdgeNr
 makeEdgeNr = EdgeNrX
+
+impliedEdgeNr :: EdgeNr
+impliedEdgeNr = makeEdgeNr (-1)
 
 instance Show EdgeNr where
    show (EdgeNrX i) = "#" ++ show i
@@ -65,12 +67,12 @@ instance Ord ParentChild where
 
 type TypeGraphPath info = Path (EdgeId, PathStep info)
 data PathStep info 
-   = Initial  EdgeNr info
+   = Initial  info
    | Implied  ChildSide VertexId VertexId
    | Child    ChildSide
    
 instance Show (PathStep info) where
-   show (Initial cnr _)  = "#" ++ show cnr
+   show (Initial info)   = "Initial"
    show (Implied cs x y) = "(" ++ show cs ++ " : " ++ show (x, y) ++ ")"
    show (Child i)        = "(" ++ show i ++ ")"
    
@@ -145,33 +147,12 @@ combineCliqueList (x:xs) ys =
    in mergeCliques (x:ys2) : combineCliqueList xs ys1
    
 instance Show EdgeId where
-   show (EdgeId a b) = "("++show a'++"-"++show b'++")"
+   show (EdgeId a b _) = "("++show a'++"-"++show b'++")"
       where (a',b') = if a <= b then (a,b) else (b,a)
      
 instance Eq EdgeId where
-   EdgeId a b == EdgeId c d = (a == c && b == d) || (a == d && b == c)
+   EdgeId a b _ == EdgeId c d _ = (a == c && b == d) || (a == d && b == c)
    
 instance Ord EdgeId where
-   EdgeId a b <= EdgeId c d = order (a,b) <= order (c,d)
+   EdgeId a b _ <= EdgeId c d _ = order (a,b) <= order (c,d)
       where order (i,j) = if i <= j then (i,j) else (j,i)
-
--- don't consider the stored information for equality
-instance Eq (PathStep info) where
-   e1 == e2 = 
-      case (e1, e2) of
-         (Initial cnr1 _, Initial cnr2 _)       -> cnr1 == cnr2
-         (Implied cs1 x1 y1, Implied cs2 x2 y2) -> (cs1, x1, y1) == (cs2, x2, y2)
-         (Child i1, Child i2)                   -> i1 == i2
-         _                                      -> False
-         
--- order edge information without looking at the information that is stored
-instance Ord (PathStep info) where
-   compare e1 e2 = 
-      case (e1, e2) of
-         (Initial cnr1 _, Initial cnr2 _)       -> compare cnr1 cnr2
-         (Initial _ _, _)                       -> LT
-         (_, Initial _ _)                       -> GT
-         (Implied cs1 x1 y1, Implied cs2 x2 y2) -> compare (cs1, x1, y1) (cs2, x2, y2)
-         (Implied _ _ _, _)                     -> LT
-         (_, Implied _ _ _)                     -> GT
-         (Child i1, Child i2)                   -> compare i1 i2

@@ -24,93 +24,89 @@ import Top.States.BasicState (printMessage)
 import Top.States.TIState
 import Debug.Trace
 
-applyHeuristics :: HasTypeGraph m info => [Heuristic info] -> m ([EdgeId], [info])
+type ErrorInfo info = ([EdgeId], info)
+
+applyHeuristics :: HasTypeGraph m info => [Heuristic info] -> m [ErrorInfo info]
 applyHeuristics heuristics =
    let rec thePath = 
           case simplifyPath thePath of
              Empty -> internalError "Top.TypeGraph.ApplyHeuristics" "applyHeuristics" "unexpected empty path"
-             Fail  -> return ([],[])
+             Fail  -> return []
              path  ->
-                do (action, edgeId1, info1) <- evalHeuristics path heuristics
-                   action
-                   let restPath = changeStep (\t@(a,_,_) -> if a `elem` edgeId1 then Fail else Step t) path
-                   (edgeId2, info2) <- rec restPath
-                   return (edgeId1++edgeId2, info1++info2)
+                do err <- evalHeuristics path heuristics
+                   let restPath = changeStep (\t@(a,_) -> if a `elem` fst err then Fail else Step t) path
+                   errs <- rec restPath
+                   return (err : errs)
    in 
       do errorPath <- allErrorPaths
-         rec (removeSomeDuplicates info3ToEdgeNr errorPath)
- 
-evalHeuristics :: HasTypeGraph m info => Path (EdgeId, EdgeNr, info) -> [Heuristic info] -> m (m (), [EdgeId], [info])
-evalHeuristics path heuristics = 
+         rec (removeSomeDuplicates info2ToEdgeNr errorPath)
+
+evalHeuristics :: HasTypeGraph m info => Path (EdgeId, info) -> [Heuristic info] -> m (ErrorInfo info)
+evalHeuristics path heuristics =
    rec edgesBegin heuristics
    
  where
-   edgesBegin = nubBy eqInfo3 (steps path)
+   edgesBegin = nubBy eqInfo2 (steps path)
    
    rec edges [] = 
       case edges of
-         (edgeId, cNR, info) : _ -> 
-            do printMessage ("\n*** The selected constraint: " ++ show cNR ++ " ***\n")
-               return (return (), [edgeId], [info])
+         (edgeId@(EdgeId _ _ cnr), info) : _ -> 
+            do printMessage ("\n*** The selected constraint: " ++ show cnr ++ " ***\n")
+               return ([edgeId], info)
          _ -> internalError "Top.TypeGraph.ApplyHeuristics" "evalHeuristics" "empty list"
              
    rec edges (Heuristic heuristic:rest) = 
       case heuristic of
-          
+      
          Filter name f -> 
             do edges' <- f edges                
                printMessage (name ++ " (filter)")
-               printMessage ("   " ++ showSet (map (\(_,i,_) -> i) edges'))
+               printMessage ("   " ++ showSet [ i | (EdgeId _ _ i, _) <- edges' ])
                rec edges' rest
                
          PathComponent f -> 
-            rec edges (f path : rest)  
-            
+            rec edges (f path : rest)
+        
          Voting selectors -> 
             do printMessage ("Voting with "++show (length selectors) ++ " heuristics")
-               maybeResult <- 
-                  let noAction f x = 
-                         do mTuple <- f x
-                            case mTuple of
-                               Nothing -> return Nothing
-                               Just (a,b,c,d) -> return (Just (return (),a,b,c,d))
-                            
-                      getResults (Selector (name, f)) =
-                         do printMessage ("- "++name++" (selector)")
-                            mapM (noAction f) edges  
-				      
-                      getResults (SelectorList (name, f)) =
-                         do printMessage ("- "++name++" (list selector)")
-                            result <- noAction f edges
-                            return [result]
-				      
-                      getResults (SelectorAction (name, f)) = 
-                         do printMessage ("- "++name++" (action selector)")
-                            mapM f edges
-                            
-                      getResults (SelectorPath f) =
-                         getResults (f path)                    
-		   
-                      op best selector = 
-                         do results <- getResults selector
-                            case catMaybes results of
-                               [] -> return best
-                               rs -> do let f (_,i,s,es,_) = "    "++s++" (prio="++show i++") => "++showSet es
-                                        printMessage (foldr1 (\x y -> x++"\n"++y) (map f rs))
-                                        let best' = maximumBy (\(_,i1,_,_,_) (_,i2,_,_,_) -> i1 `compare` i2) rs
-                                            (_,score,_,_,_) = best'
-                                        case best of
-                                           Just (_,i,_,_,_) | i >= score -> return best
-                                           _ -> return (Just best')                                           
-                  in foldM op Nothing selectors
-                  
-               case maybeResult of                           
-                  Nothing -> 
-                     do printMessage "Unfortunately, none of the heuristics could be applied"
-                        rec edges rest
-                  Just (action,prio, _, edgeIds, infos) ->
-                     do printMessage ("\n*** With priority "++show prio++", "++showSet edgeIds++" was selected\n")
-                        return (action, edgeIds, infos)
+               results <- mapM (evalSelector edges path) selectors
+               let (thePrio, listWithBest) = foldr op (minBound, []) (concat results)
+                   op (prio, es, info) best@(i, list) =
+                      case compare prio i of
+                         LT -> best
+                         EQ -> (i, (head es, info):list)
+                         GT -> (prio, [(head es, info)])
+               case listWithBest of 
+                  [] -> do printMessage "Unfortunately, none of the heuristics could be applied"
+                           rec edges rest
+                  _  -> do printMessage ("\n*** Selected with priority "++show thePrio++": "++showSet (map fst listWithBest)++"\n")
+                           rec listWithBest rest
+               
+evalSelector :: HasTypeGraph m info => [(EdgeId, info)] -> Path (EdgeId, info) 
+                                    -> Selector m info -> m [(Int, [EdgeId], info)]
+evalSelector edges path selector = 
+   case selector of
+
+      Selector (name, f) -> 
+         do printMessage ("- "++name++" (selector)")
+            let op list edge@(edgeId, info) =
+                   do x <- f (edgeId, info)
+                      case x of
+                         Nothing -> return list
+                         Just (prio, string, es, info) -> 
+                            do printMessage ("     "++string++" (prio="++show prio++") => "++showSet es)
+                               return ((prio, es, info) : list)
+            foldM op [] edges
+     
+      SelectorList (name, f) ->
+         do printMessage ("- "++name++" (list selector)")
+            result <- f edges
+            case result of 
+               Nothing -> return []
+               Just (i,_,es,info) -> return [(i,es,info)]
+            
+      SelectorPath f ->
+         evalSelector edges path (f path)
               
 showSet :: Show a => [a] -> String
 showSet as = "{" ++ f (map show as) ++ "}"
@@ -120,7 +116,7 @@ showSet as = "{" ++ f (map show as) ++ "}"
 maxPathSize :: Integer
 maxPathSize = 1
 
-allErrorPaths :: HasTypeGraph m info => m (Path (EdgeId, EdgeNr, info))
+allErrorPaths :: HasTypeGraph m info => m (Path (EdgeId, info))
 allErrorPaths = 
    do is      <- getMarkedPossibleErrors     
       cGraph  <- childrenGraph is     
@@ -263,7 +259,7 @@ allSubPathsList childList vertex targets = rec S.emptySet vertex
                   do extendedPaths <- mapM recDown targetPairs
                      return (altList extendedPaths)           
 	           
-expandPath :: HasTypeGraph m info => TypeGraphPath info -> m (Path (EdgeId, EdgeNr, info))
+expandPath :: HasTypeGraph m info => TypeGraphPath info -> m (Path (EdgeId, info))
 expandPath Fail = return Fail
 expandPath path =
    let impliedEdges = nub [ intPair (v1, v2) | (_, Implied _ (VertexId v1) (VertexId v2)) <- steps path ]
@@ -277,7 +273,7 @@ expandPath path =
                    p1 :|: p2 -> convert history p1 :|: convert history p2
                    Step (edge, edgeInfo) -> 
                       case edgeInfo of
-                         Initial cnr info -> Step (edge, cnr, info)
+                         Initial info -> Step (edge, info)
                          Child _ -> Empty
                          Implied _ (VertexId v1) (VertexId v2)
                             | pair `S.elementOf` history ->

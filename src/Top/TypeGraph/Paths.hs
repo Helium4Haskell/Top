@@ -260,7 +260,7 @@ pathSize _           = 0
 -- (although this number can be exceeded...it is more or less used as approximation)
 -- Nothing indicates that there is no limit
 maxNumberOfEqualPaths :: Maybe Int
-maxNumberOfEqualPaths = Just 25
+maxNumberOfEqualPaths = Just 50
 
 reduceNumberOfPaths :: Path a -> Path a
 reduceNumberOfPaths = maybe id limitNumberOfPaths maxNumberOfEqualPaths

@@ -24,7 +24,7 @@ class (HasBasic m info, HasTI m info, HasSubst m info)
    -- construct a type graph
    addTermGraph :: Tp -> m VertexId
    addVertex    :: VertexId -> VertexInfo -> m ()
-   addEdge      :: EdgeId -> EdgeInfo info ->  m ()
+   addEdge      :: EdgeId -> info ->  m ()
    
    -- deconstruct a type graph
    deleteEdge :: EdgeId -> m ()
@@ -34,7 +34,7 @@ class (HasBasic m info, HasTI m info, HasSubst m info)
    childrenInGroupOf       :: VertexId -> m ([ParentChild], [ParentChild])
    constantsInGroupOf      :: VertexId -> m [String]
    representativeInGroupOf :: VertexId -> m VertexId
-   edgesFrom               :: VertexId -> m [(EdgeId, EdgeNr, info)]
+   edgesFrom               :: VertexId -> m [(EdgeId, info)]
    
    -- query a path in an equivalence group
    allPaths            :: VertexId -> VertexId -> m (TypeGraphPath info)

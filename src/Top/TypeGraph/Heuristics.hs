@@ -19,17 +19,16 @@ import Utils (internalError)
 
 newtype Heuristic  info = Heuristic (forall m . HasTypeGraph m info => HComponent m info)
 data HasTypeGraph m info => Selector m info 
-   = Selector       (String, (EdgeId, EdgeNr, info) -> m (Maybe (Int, String, [EdgeId], [info])))
-   | SelectorList   (String, [(EdgeId, EdgeNr, info)] -> m (Maybe (Int, String, [EdgeId], [info])))
-   | SelectorAction (String, (EdgeId, EdgeNr, info) -> m (Maybe (m (), Int, String, [EdgeId], [info])))
-   | SelectorPath   (Path (EdgeId, EdgeNr, info) -> Selector m info)
+   = Selector       (String, (EdgeId, info) -> m (Maybe (Int, String, [EdgeId], info)))
+   | SelectorList   (String, [(EdgeId, info)] -> m (Maybe (Int, String, [EdgeId], info)))
+   | SelectorPath   (Path (EdgeId, info) -> Selector m info)
 
 data HComponent m info 
-     = Filter    String ([(EdgeId, EdgeNr, info)] -> m [(EdgeId, EdgeNr, info)])
+     = Filter    String ([(EdgeId, info)] -> m [(EdgeId, info)])
      | Voting   [Selector m info]
-     | PathComponent (Path (EdgeId, EdgeNr, info) -> Heuristic info)
+     | PathComponent (Path (EdgeId, info) -> Heuristic info)
           
-resultsEdgeFilter :: (Eq a, Monad m) => ([a] -> a) -> String -> ((EdgeId,EdgeNr,info) -> m a) -> HComponent m info
+resultsEdgeFilter :: (Eq a, Monad m) => ([a] -> a) -> String -> ((EdgeId,info) -> m a) -> HComponent m info
 resultsEdgeFilter selector description function =
    Filter description $ \es -> 
    do tupledList <- let f tuple = 
@@ -41,13 +40,13 @@ resultsEdgeFilter selector description function =
             | otherwise       = selector (map fst tupledList)
       return (map snd (filter ((maximumResult ==) . fst) tupledList))
 
-maximalEdgeFilter :: (Ord a, Monad m) => String -> ((EdgeId,EdgeNr,info) -> m a) -> HComponent m info
+maximalEdgeFilter :: (Ord a, Monad m) => String -> ((EdgeId,info) -> m a) -> HComponent m info
 maximalEdgeFilter = resultsEdgeFilter maximum
 
-minimalEdgeFilter :: (Ord a, Monad m) => String -> ((EdgeId,EdgeNr,info) -> m a) -> HComponent m info
+minimalEdgeFilter :: (Ord a, Monad m) => String -> ((EdgeId,info) -> m a) -> HComponent m info
 minimalEdgeFilter = resultsEdgeFilter minimum
 
-edgeFilter :: Monad m => String -> ((EdgeId, EdgeNr, info) -> m Bool) -> HComponent m info
+edgeFilter :: Monad m => String -> ((EdgeId, info) -> m Bool) -> HComponent m info
 edgeFilter description function = 
    Filter description $ \es -> 
       do xs <- filterM function es
@@ -56,30 +55,30 @@ edgeFilter description function =
 
 -----------------------------------------------------------------------------
 
-doWithoutEdges :: HasTypeGraph m info => [(EdgeId, EdgeNr, info)] -> m result -> m result
+doWithoutEdges :: HasTypeGraph m info => [(EdgeId, info)] -> m result -> m result
 doWithoutEdges xs computation = 
    case xs of 
       []   -> computation
       [e]  -> doWithoutEdge e computation
       e:es -> doWithoutEdge e (doWithoutEdges es computation)
 
-doWithoutEdge :: HasTypeGraph m info => (EdgeId, EdgeNr, info) -> m result -> m result
-doWithoutEdge (edge, cnr, info) computation =
+doWithoutEdge :: HasTypeGraph m info => (EdgeId, info) -> m result -> m result
+doWithoutEdge (edge, info) computation =
    debugTrace ("doWithoutEdge " ++ show edge)  >> 
    do -- copy1 <- mapM showGroupOf [0..100]
       deleteEdge edge       
       result <- computation           
-      addEdge edge (cnr, info)
+      addEdge edge info
       -- copy2 <- mapM showGroupOf [0..100]
       -- if copy1 /= copy2 then 
       --   error ("SAFETY check failed\n\n" ++ head [ x1++x2 | (x1, x2) <- zip copy1 copy2, x1 /= x2]) else
       return result
 
-eqInfo3 :: (EdgeId, EdgeNr, info) -> (EdgeId, EdgeNr, info) -> Bool
-eqInfo3 (_, b1, _) (_, b2, _) = b1 == b2
+eqInfo2 :: (EdgeId, info) -> (EdgeId, info) -> Bool
+eqInfo2 (EdgeId _ _ b1, _) (EdgeId _ _ b2, _) = b1 == b2
 
-info3ToEdgeNr :: (EdgeId, EdgeNr, info) -> EdgeNr
-info3ToEdgeNr (_, i, _) = i
+info2ToEdgeNr :: (EdgeId, info) -> EdgeNr
+info2ToEdgeNr (EdgeId _ _ i, _) = i
 
 -----------------------------------------------------------------------------
 
