@@ -154,7 +154,7 @@ equalPaths without start targets eqgroup =
                     partition ((v1 `elem`) . map child) cs 
                  rest@(_, restCliques)
                     | secondCliqueVisit = (es'', removeFromClique v1 neighbourCliques ++ otherCliques)
-                    | otherwise         = (es'', cs)
+                    | otherwise         = (es'', otherCliques)
              in 
                 altList $ 
                 map (\(EdgeId _ neighbour edgeNr, info) -> 
