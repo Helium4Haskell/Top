@@ -10,16 +10,16 @@
 default: example
 
 prof:
-	# build an example executable
-	ghc -Wall --make -fglasgow-exts -prof -auto-all -o bin/csolver Examples.hs
+	# build an example executable with profiling
+	ghc -Wall --make -fglasgow-exts -prof -auto-all -o ../bin/csolver ../examples/Examples.hs
 
 example:
 	# build an example executable
-	ghc -Wall --make -fglasgow-exts -o bin/csolver Examples.hs
+	ghc -Wall --make -fglasgow-exts -o ../bin/csolver ../examples/Examples.hs
         
 documentation:
 	# make haddock documentation        
-	haddock -html -o doc \
+	haddock -html -o ../doc \
           Top/*.hs \
 	  Top/*/*.hs \
           
@@ -27,15 +27,18 @@ clean:
 	#remove .hi and .o files and documentation
 	$(RM) `find . -name "*.o" -print`
 	$(RM) `find . -name "*.hi" -print`
-	$(RM) doc/*
-	$(RM) bin/csolver
+	$(RM) ../doc/*.html
+	$(RM) ../doc/*.css
+	$(RM) ../doc/*.gif                
+	$(RM) ../bin/csolver
 
 web:
+	#*** Bastiaan only ***
 	#make a distribution for the web
 	$(RM) /import/sherlock/www/people/bastiaan/top.zip
 	make clean
 	make documentation
-	zip top -r *
+	zip top -r ../*
 	mv top.zip /import/sherlock/www/people/bastiaan
 	chmod 744 /import/sherlock/www/people/bastiaan/top.zip
 	ls -l /import/sherlock/www/people/bastiaan/top.zip
