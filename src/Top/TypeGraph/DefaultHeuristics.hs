@@ -23,7 +23,7 @@ defaultHeuristics =
          
 -----------------------------------------------------------------------------
 
--- compute the smallest 'minimal' sets. This computation is very(!) costly
+-- |Compute the smallest 'minimal' sets. This computation is very(!) costly
 --   (might take a long time for complex inconsistencies)
 inMininalSet :: Heuristic info
 inMininalSet = 
@@ -34,7 +34,7 @@ inMininalSet =
          in Heuristic (edgeFilter "In a smallest minimal set"
                (\e -> return (any (eqInfo3 e) candidates)))))
 
--- although not as precise as the minimal set analysis, this calculates the participation of
+-- |Although not as precise as the minimal set analysis, this calculates the participation of
 -- each edge in all error paths. 
 -- Default ratio = 1.0  (100 percent)
 --   (the ratio determines which scores compared to the best are accepted)
@@ -49,7 +49,7 @@ highParticipation ratio =
              goodCNrs  = [ cnr | (cnr, i) <- participationList, i >= limit ]
   
              -- prints a nice report
-             msg es = unlines (title : replicate 50 '-' : map f es)
+             msg es = unlines ("" : title : replicate 50 '-' : map f es)
              title  = "cnr edge      ratio   info"
              f (edgeID,cnr,info) = 
                 take 4  (show cnr++(if cnr `elem` goodCNrs then "*" else "")++repeat ' ') ++
@@ -61,8 +61,16 @@ highParticipation ratio =
                (\es -> do printMessage (msg es)	                  
                           return (filter (\(_,cnr,_) -> cnr `elem` goodCNrs) es)))))
 
+-- |Select the "latest" constraint
 positionInList :: Heuristic info
 positionInList = 
    Heuristic ( 
       let f (edge@(EdgeID v1 v2), cnr, info) = return cnr
       in maximalEdgeFilter "Constraint number of edge" f)
+
+-- |Select only specific constraint numbers
+selectConstraintNumbers :: [Int] -> Heuristic info
+selectConstraintNumbers is =
+   Heuristic (
+      let f (_, cnr, info) = return (cnr `elem` is)
+      in edgeFilter ("select constraint numbers " ++ show is) f)

@@ -2,10 +2,9 @@
 # Constraint Solver
 #-----------------------------------------------------------------------
 
-# make examp le   - build the Top constraint solver
+# make example   - build the Top constraint solver
 # make doc       - make haddock documentation 
 # make clean	 - remove .hi and .o files and documentation
-# make web       - make a distribution for the web (Bastiaan only)
 
 default: topsolver
 
@@ -31,17 +30,3 @@ clean:
 	$(RM) ../doc/*.css
 	$(RM) ../doc/*.gif                
 	$(RM) ../bin/topsolver
-
-web:
-	#*** Bastiaan only ***
-	#make a distribution for the web
-	$(RM) /import/sherlock/www/people/bastiaan/top.zip
-	make clean
-	make documentation
-	zip top -r ../*
-	mv top.zip /import/sherlock/www/people/bastiaan
-	chmod 744 /import/sherlock/www/people/bastiaan/top.zip
-	ls -l /import/sherlock/www/people/bastiaan/top.zip
-	#*************************************************
-	# top.zip is moved to the Homepage
-	#*************************************************
