@@ -62,16 +62,20 @@ solveResult ::
    , HasQual m qs info
    , Empty ext
    , TypeConstraintInfo info
+   , QualifierList m info qs qsInfo
    ) => 
      m (SolveResult info qs ext)
                   
 solveResult = 
    do uniqueAtEnd <- getUnique
       errs        <- getLabeledErrors
+      qsInfo      <- getToProveUpdated
+      (qs, infos) <- removeAnnotation' qsInfo
+      let dummy = head infos `asTypeOf` fst (head errs) -- help type inference
       sub         <- fixpointSubst
       ts          <- allTypeSchemes     
       messages    <- getMessages     
-      return (SolveResult uniqueAtEnd sub ts errs messages empty)
+      return (SolveResult uniqueAtEnd sub ts qs errs messages empty)
 
 ----------------------------------------------------------------------
 -- Solve type constraints
@@ -83,17 +87,18 @@ data SolveResult info qs ext =
    SolveResult { uniqueFromResult       :: Int
                , substitutionFromResult :: FixpointSubstitution
                , typeschemesFromResult  :: FiniteMap Int (Scheme qs)
+               , qualifiersFromResult   :: qs
                , errorsFromResult       :: [(info, ErrorLabel)]
                , debugFromResult        :: String
                , extensionFromResult    :: ext
                }
 
-instance Empty ext => Empty (SolveResult info qs ext) where 
+instance (Empty qs, Empty ext) => Empty (SolveResult info qs ext) where 
    empty = emptyResult 0
    
-instance Plus ext => Plus (SolveResult info qs ext) where 
-   plus (SolveResult _ s1 ts1 er1 io1 ext1) (SolveResult unique s2 ts2 er2 io2 ext2) = 
-      SolveResult unique (disjointFPS s1 s2) (ts1 `plusFM` ts2) (er1++er2) (io1++io2) (ext1 `plus` ext2)
+instance (Plus qs, Plus ext) => Plus (SolveResult info qs ext) where 
+   plus (SolveResult _ s1 ts1 qs1 er1 io1 ext1) (SolveResult unique s2 ts2 qs2 er2 io2 ext2) = 
+      SolveResult unique (disjointFPS s1 s2) (ts1 `plusFM` ts2) (qs1 `plus` qs2) (er1++er2) (io1++io2) (ext1 `plus` ext2)
 
-emptyResult :: Empty ext => Int -> SolveResult info qs ext
-emptyResult unique = SolveResult unique emptyFPS emptyFM [] [] empty
+emptyResult :: (Empty qs, Empty ext) => Int -> SolveResult info qs ext
+emptyResult unique = SolveResult unique emptyFPS emptyFM empty [] [] empty

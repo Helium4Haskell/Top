@@ -18,7 +18,7 @@ type Chunks constraint = [Chunk constraint]
 type Chunk  constraint = (ChunkID, Tree constraint)
 type ChunkID           = Int
 
-solveChunkConstraints :: (Empty ext, Plus ext) => 
+solveChunkConstraints :: (Empty ext, Plus ext, Empty qs, Plus qs) => 
    (FiniteMap Int (Scheme qs) -> constraint -> constraint) -> -- function to update the type scheme variables
    SolverX constraint info qs ext ->                          -- constraint solver to solve the constraints in a chunk
    (Tree constraint -> [constraint]) ->                       -- function to flatten the constraint tree

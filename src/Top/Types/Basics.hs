@@ -11,8 +11,8 @@
 
 module Top.Types.Basics where
 
-import Data.List (union)
-import Data.Char (isDigit)
+import Data.List (union, isPrefixOf)
+import Data.Char (isDigit, isSpace)
 
 -----------------------------------------------------------------------------
 -- * Data type definition
@@ -159,7 +159,7 @@ isIOType (TApp (TCon "IO") _) = True
 isIOType _                    = False
 
 ----------------------------------------------------------------------
--- Show function
+-- Show and Read instances
 
 instance Show Tp where
    show tp = case leftSpine tp of 
@@ -176,6 +176,42 @@ instance Show Tp where
        where rec p t       = parIf (p (priorityOfType t)) (show t) 
              parIf True  s = "("++s++")"
              parIf False s = s
+
+instance Read Tp where 
+   readsPrec _ = tpParser
+
+tpParser :: String -> [(Tp, String)]
+tpParser = level0 
+ where
+   level0 = foldr1 (.->.) <$> seplist (tok "->") level1
+   level1 = foldl1 TApp <$> list1 level2
+   level2 =  ident 
+         <|> (listType <$> bracks level0) 
+         <|> ((\xs -> if length xs == 1 then head xs else tupleType xs) <$> pars (commaList level0))
+
+   ident xs =
+      case break (\c -> isSpace c || c `elem` "[]()-,") (dropWhile isSpace xs) of
+         ([], _) -> []
+         (s, xs2) | length s > 1 && take 1 s == "v" && all isDigit (drop 1 s)
+                               -> [ (TVar (read $ drop 1 s), xs2) ]
+                  |  otherwise -> [ (TCon s, xs2) ]     
+                
+   (p <*> q) xs = [ (f a, xs2) | (f, xs1) <- p xs, (a, xs2) <- q xs1 ]
+   (f <$> p) xs = [ (f a, xs1) | (a, xs1) <- p xs ]
+   (p <|> q) xs = p xs ++ q xs
+   p <* q = const <$> p <*> q
+   p *> q = flip const <$> p <*> q
+   succeed a xs = [(a, xs)]
+   tok s xs = 
+      case dropWhile isSpace xs of
+         []   -> []
+         ys -> if s `isPrefixOf` ys then [(s, drop (length s) ys)] else []
+   pars   p = tok "(" *> p <* tok ")"
+   bracks p = tok "[" *> p <* tok "]"
+   list p = ((:) <$> p <*> list p) <|> succeed []
+   list1 p = (:) <$> p <*> list p
+   seplist sep p = (:) <$> p <*> list (sep *> p)
+   commaList = seplist (tok ",")
 
 ----------------------------------------------------------------------
 -- The type class HasTypes

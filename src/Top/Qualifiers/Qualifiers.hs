@@ -90,6 +90,7 @@ class ( ShowQualifiers qs
       ftvList           :: qsInfo -> m [Int]
       annotate          :: info -> qs -> m qsInfo
       removeAnnotation  :: qsInfo -> m qs
+      removeAnnotation' :: qsInfo -> m (qs, [info])
    
       getToProveUpdated :: HasSubst m info => m qsInfo
       getGeneralized    :: m qsInfo
@@ -123,33 +124,37 @@ instance ( QualifierList m info as asInfo
             ys <- ftvList bs
             return (xs `union` ys)
       
-      simplifyList  (as, bs)    = distribute (simplifyList as)  (simplifyList bs)
-      ambiguousList (as, bs)    = ambiguousList as >> ambiguousList bs
-      annotate info (as, bs)    = distribute (annotate info as) (annotate info bs)
-      removeAnnotation (as, bs) = distribute (removeAnnotation as) (removeAnnotation bs)
-      getToProveUpdated         = distribute getToProveUpdated getToProveUpdated
-      getGeneralized            = distribute getGeneralized getGeneralized
-      putToProve (as, bs)       = putToProve as  >> putToProve bs
-      addToProve (as, bs)       = addToProve as  >> addToProve bs
-      addToGeneralized (as, bs) = addToGeneralized as  >> addToGeneralized bs
-      addToAssumptions (as, bs) = addToAssumptions as >> addToAssumptions bs
+      simplifyList  (as, bs)     = distribute (simplifyList as)  (simplifyList bs)
+      ambiguousList (as, bs)     = ambiguousList as >> ambiguousList bs
+      annotate info (as, bs)     = distribute (annotate info as) (annotate info bs)
+      removeAnnotation (as, bs)  = distribute (removeAnnotation as) (removeAnnotation bs)
+      removeAnnotation' (as, bs) = do (as', i1) <- removeAnnotation' as
+                                      (bs', i2) <- removeAnnotation' bs 
+                                      return ((as', bs'), i1 ++ i2)
+      getToProveUpdated          = distribute getToProveUpdated getToProveUpdated
+      getGeneralized             = distribute getGeneralized getGeneralized
+      putToProve (as, bs)        = putToProve as  >> putToProve bs
+      addToProve (as, bs)        = addToProve as  >> addToProve bs
+      addToGeneralized (as, bs)  = addToGeneralized as  >> addToGeneralized bs
+      addToAssumptions (as, bs)  = addToAssumptions as >> addToAssumptions bs
 
 instance (Qualifier m info p, HasQual m qs info) => QualifierList m info [p] [(p, info)]
    where
-      improveList         = improveFixpoint
-      simplifyList        = simplify
-      whatToGenList       = whatToGeneneralize
-      ambiguousList       = ambiguous
-      combineList as bs   = return (as ++ bs)
-      ftvList as          = return (ftv (map fst as))
-      annotate info as    = return (zip as (repeat info))
-      removeAnnotation    = return . map fst
-      getToProveUpdated   = getToProveUpdatedHelper
-      getGeneralized      = do n <- currentGroup ; qm <- get ; return (getGeneralizedQsInGroup n qm)
-      putToProve ps       = do n <- currentGroup ; modify (setQualifiersInGroup n ps)
-      addToProve ps       = do n <- currentGroup ; modify (addQualifiersInGroup n ps)
-      addToGeneralized ps = do n <- currentGroup ; modify (addGeneralizedQsInGroup n ps)
-      addToAssumptions ps = do n <- currentGroup ; modify (addAssumptionsInGroup n ps)
+      improveList          = improveFixpoint
+      simplifyList         = simplify
+      whatToGenList        = whatToGeneneralize
+      ambiguousList        = ambiguous
+      combineList as bs    = return (as ++ bs)
+      ftvList as           = return (ftv (map fst as))
+      annotate info as     = return (zip as (repeat info))
+      removeAnnotation     = return . map fst
+      removeAnnotation' qs = return (map fst qs, map snd qs)
+      getToProveUpdated    = getToProveUpdatedHelper
+      getGeneralized       = do n <- currentGroup ; qm <- get ; return (getGeneralizedQsInGroup n qm)
+      putToProve ps        = do n <- currentGroup ; modify (setQualifiersInGroup n ps)
+      addToProve ps        = do n <- currentGroup ; modify (addQualifiersInGroup n ps)
+      addToGeneralized ps  = do n <- currentGroup ; modify (addGeneralizedQsInGroup n ps)
+      addToAssumptions ps  = do n <- currentGroup ; modify (addAssumptionsInGroup n ps)
       
 getToProveUpdatedHelper :: (HasSubst m info, HasQual m qs info, Qualifier m info q) => m [(q, info)]
 getToProveUpdatedHelper =
