@@ -9,3 +9,5 @@ for a language quite similar to Haskell (a restricted implementation can be foun
 Helium compiler). For this reason, Top may also be read as Typing Our Programs. 
 However, the approach that we used can also be deployed for other program analyses for which 
 good feedback is desirable.
+
+The sources can be obtained from <http://cvs.cs.uu.nl/cgi-bin/cvsweb.cgi/Top/>.
