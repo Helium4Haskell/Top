@@ -1,4 +1,4 @@
-{------------------------------------------------------------------------
+{- -----------------------------------------------------------------------
  The Core Assembler.
 
  Modified and adapted by Daan Leijen
@@ -10,9 +10,9 @@
  changed export list
  changed Vertex to Int
  included is some additional code for printing tree structures ...
-------------------------------------------------------------------------}
+----------------------------------------------------------------------- -}
 
-----------------------------------------------------------------
+-- --------------------------------------------------------------
 -- A version of the graph algorithms described in:
 --
 -- ``Lazy Depth-First Search and Linear Graph Algorithms in Haskell''
@@ -20,9 +20,9 @@
 --
 -- Original version as "Ldfs.hs" in the Hugs98 distribution
 --  (by David King and John Launchbury ??)
-----------------------------------------------------------------
+-- --------------------------------------------------------------
 
--- $Id$
+--  $Id$
 
 module Graph( topSort ) where
 
