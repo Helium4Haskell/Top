@@ -44,7 +44,7 @@ instance HasTypeGraph (TypeGraphX info qs ext) info where
    addEdge                 = lift2 Impl.addEdge
    deleteEdge              = lift1 Impl.deleteEdge
    verticesInGroupOf       = lift1 Impl.verticesInGroupOf
-   substituteVariable      = lift1 Impl.substituteVariable
+   substituteTypeSafe      = lift1 Impl.substituteTypeSafe
    edgesFrom               = lift1 Impl.edgesFrom
    allPathsListWithout     = lift3 Impl.allPathsListWithout
    removeInconsistencies   = lift0 Impl.removeInconsistencies

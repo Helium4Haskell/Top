@@ -22,6 +22,7 @@ import Data.FiniteMap
 import Graph (topSort)
 import Top.States.BasicState (printMessage)
 import Top.States.TIState
+import Debug.Trace
 
 applyHeuristics :: HasTypeGraph m info => [Heuristic info] -> m ([EdgeId], [info])
 applyHeuristics heuristics =
@@ -36,14 +37,10 @@ applyHeuristics heuristics =
                    (edgeId2, info2) <- rec restPath
                    return (edgeId1++edgeId2, info1++info2)
    in 
-      do errorPath     <- allErrorPaths
-         -- printMessage ("The error path: "++ show ( mapPath (\(a,_,_) -> a) errorPath))  
-         res <- rec (removeSomeDuplicates info3ToEdgeNr errorPath) 
-         return res
+      do errorPath <- allErrorPaths
+         rec (removeSomeDuplicates info3ToEdgeNr errorPath)
  
-evalHeuristics :: HasTypeGraph m info => 
-                     Path (EdgeId, EdgeNr, info) -> [Heuristic info] -> 
-                     m (m (), [EdgeId], [info])
+evalHeuristics :: HasTypeGraph m info => Path (EdgeId, EdgeNr, info) -> [Heuristic info] -> m (m (), [EdgeId], [info])
 evalHeuristics path heuristics = 
    rec edgesBegin heuristics
    
@@ -95,7 +92,7 @@ evalHeuristics path heuristics =
                          getResults (f path)                    
 		   
                       op best selector = 
-                         do results <- getResults selector                                
+                         do results <- getResults selector
                             case catMaybes results of
                                [] -> return best
                                rs -> do let f (_,i,s,es,_) = "    "++s++" (prio="++show i++") => "++showSet es
@@ -119,7 +116,10 @@ showSet :: Show a => [a] -> String
 showSet as = "{" ++ f (map show as) ++ "}"
    where f [] = ""
          f xs = foldr1 (\x y -> x++","++y)  (map show xs)
-      
+
+maxPathSize :: Integer
+maxPathSize = 1
+
 allErrorPaths :: HasTypeGraph m info => m (Path (EdgeId, EdgeNr, info))
 allErrorPaths = 
    do is      <- getMarkedPossibleErrors     
@@ -127,10 +127,9 @@ allErrorPaths =
       let toCheck = nub $ concat (is : [ [a,b] | ((a,b),_) <- cGraph ])
       paths1  <- constantClashPaths toCheck
       paths2  <- infiniteTypePaths cGraph  
-      -- error (show $ simplifyPath $ altList paths2)
-      let errorPath = simplifyPath (altList (paths1 ++ paths2))                          
-      expandPath errorPath
-                                         
+      let errorPath = reduceNumberOfPaths (simplifyPath (altList (paths1 ++ paths2)))                   
+      expandPath errorPath    
+      
 ----------------------------
 
 -- not simplified: can also contain implied edges
@@ -194,9 +193,7 @@ infiniteTypePaths cGraph =
          (_, childEdges) : rest ->
             let g (x, y) = allSubPathsList (concatMap snd rest) y [x]
             in mapM g childEdges <++> infiniteTypePaths rest 
-               {- do ps <- mapM g childEdges
-                  error (show $ ps) -- error (show $ simplifyPath $ altList ps)
--}
+
 type ChildGraph = [((VertexId, VertexId), [(VertexId, VertexId)])]
       
 childrenGraph :: HasTypeGraph m info => [VertexId] -> m ChildGraph
@@ -267,47 +264,42 @@ allSubPathsList childList vertex targets = rec S.emptySet vertex
                      return (altList extendedPaths)           
 	           
 expandPath :: HasTypeGraph m info => TypeGraphPath info -> m (Path (EdgeId, EdgeNr, info))
+expandPath Fail = return Fail
 expandPath path =
-   let impliedEdges = [ intPair (v1, v2) | (_, Implied _ (VertexId v1) (VertexId v2)) <- steps path ]
-       change table (edge, edgeInfo) =
-          case edgeInfo of
-             Initial cnr info -> Step (edge, cnr, info)
-             Child _ -> Empty 
-             Implied _ (VertexId v1) (VertexId v2) -> lookupPair table (intPair (v1, v2))
+   let impliedEdges = nub [ intPair (v1, v2) | (_, Implied _ (VertexId v1) (VertexId v2)) <- steps path ]
    in do expandTable <- impliedEdgeTable impliedEdges
-         return (simplifyPath (changeStep (change expandTable) path))
+         let 
+             convert history path = 
+                case path of 
+                   Empty -> Empty
+                   Fail  -> Fail
+                   p1 :+: p2 -> convert history p1 :+: convert history p2
+                   p1 :|: p2 -> convert history p1 :|: convert history p2
+                   Step (edge, edgeInfo) -> 
+                      case edgeInfo of
+                         Initial cnr info -> Step (edge, cnr, info)
+                         Child _ -> Empty
+                         Implied _ (VertexId v1) (VertexId v2)
+                            | pair `S.elementOf` history ->
+                                 Empty
+                            | otherwise -> 
+                                 convert (S.addToSet history pair) (lookupPair expandTable pair)
+                          where 
+                           pair = intPair (v1, v2)
+
+         return (convert S.emptySet path)                 
 
 impliedEdgeTable :: HasTypeGraph m info => [IntPair] -> m (PathMap info)
-impliedEdgeTable = foldM (insertEdge S.emptySet) emptyFM
-
+impliedEdgeTable = insertPairs emptyFM
  where
-   insertEdge history fm pair
-      | pair `elemFM` fm = return fm
+   insertPairs fm [] = return fm
+   insertPairs fm (pair:rest)
+      | pair `elemFM` fm = insertPairs fm rest
       | otherwise =
            do path <- let (i1, i2) = tupleFromIntPair pair
                       in allPaths (VertexId i1) (VertexId i2)
-              (expandedPath, fm') <- insertPath (S.addToSet history pair) fm path
-              return (addToFM fm' pair expandedPath)
-	   
-   insertPath history fm path =
-      case path of
-         p1 :|: p2 -> do (p1', fm1) <- insertPath history fm p1
-                         (p2', fm2) <- insertPath history fm1 p2
-                         return (p1' :|: p2', fm2)
-         p1 :+: p2 -> do (p1', fm1) <- insertPath history fm p1
-                         (p2', fm2) <- insertPath history fm1 p2
-                         return (p1' :+: p2', fm2)
-         Fail      -> return (Fail, fm)
-         Empty     -> return (Empty, fm)
-         Step (edge, Initial cnr info) -> return (Step (edge, cnr, info), fm)
-         Step (_, Child _) -> return (Empty, fm)
-         Step (_, Implied _ (VertexId i1) (VertexId i2))
-	        | pair `S.elementOf` history -> return (Empty, fm)
-	        | otherwise -> 
-	             do fm' <- insertEdge history fm pair
-	                return (lookupPair fm' pair, fm')
-		    
-          where pair = intPair (i1, i2) 
+              let new = nub [ intPair (v1, v2) | (_, Implied _ (VertexId v1) (VertexId v2)) <- steps path ]
+              insertPairs (addToFM fm pair path) (rest `union` new)
 	  
 -------------------------------
 -- 
@@ -330,9 +322,9 @@ instance Ord IntPair where
    Hidden_IP pair1 `compare` Hidden_IP pair2 = 
       pair1 `compare` pair2
 
-type PathMap info = FiniteMap IntPair (Path (EdgeId, EdgeNr, info))
+type PathMap info = FiniteMap IntPair (Path (EdgeId, PathStep info))
 
-lookupPair :: PathMap info -> IntPair -> Path (EdgeId, EdgeNr, info)
+lookupPair :: PathMap info -> IntPair -> Path (EdgeId, PathStep info)
 lookupPair fm pair = 
    let err = internalError "Top.TypeGraph.ApplyHeuristics" "lookupPair" "could not find implied edge while expanding"
    in lookupWithDefaultFM fm err pair

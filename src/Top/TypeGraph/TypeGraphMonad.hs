@@ -9,7 +9,7 @@
 module Top.TypeGraph.TypeGraphMonad 
    ( createGroup, removeGroup, updateGroupOf, getGroupOf, getAllGroups
    , TypeGraphState, HasTG(..)
-   , getPossibleInconsistentGroups, addPossibleInconsistentGroup, setPossibleInconsistentGroups, 
+   , getPossibleInconsistentGroups, addPossibleInconsistentGroup, setPossibleInconsistentGroups
    , setHeuristics, getHeuristics, nextConstraintNumber
    )
  where

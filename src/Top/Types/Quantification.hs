@@ -23,6 +23,9 @@ newtype Quantification q a = Quantification ([Int], QuantorMap, a)
 
 type QuantorMap = [(Int, String)]
 
+withoutQuantors :: Quantification q a -> Bool
+withoutQuantors (Quantification (is, _, _)) = null is
+
 showQuantor :: Show q => Quantification q a -> String
 showQuantor = show . f where
    f :: Quantification q a -> q
@@ -63,7 +66,10 @@ bindSkolemConstants scs a =
    let scs'  = scs `union` allSkolems a       
        skMap = [ (i, TVar i) | i <- scs' ] 
    in Quantification (scs', [], changeSkolems skMap a)
-       
+
+getQuantorMap :: Quantification q a -> QuantorMap
+getQuantorMap (Quantification (_, qm, _)) = qm
+
 -----------------------------------------------------------------------------
 -- * Universal quantification
 

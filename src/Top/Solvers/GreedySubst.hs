@@ -41,7 +41,7 @@ greedyState = SubstState
            t2'      <- applySubst t2
            synonyms <- getTypeSynonyms
            case mguWithTypeSynonyms synonyms t1' t2' of        
-              Left _           -> addError info
+              Left _           -> addLabeledError unificationErrorLabel info
               Right (used,sub) -> 
                  let utp = equalUnderTypeSynonyms synonyms (sub |-> t1') (sub |-> t2') 
                      f (FixpointSubstitution fm) =

@@ -21,7 +21,7 @@ data Tree  a = Node (Trees a)
              | Spread Direction [a] (Tree a)
              | Receive Int
              | Phase Int [a]         
-             | Chunk Int (Tree a) [(Int, a)] [(Int, a)] (Tree a)
+             | Chunk Int (Tree a)
    deriving Show             
                                                                     
 emptyTree ::                     Tree a
@@ -68,8 +68,8 @@ flattenTree (TreeWalk treewalk) tree =
               let tuples = map (rec id) trees
               in (treewalk down tuples, id)
            
-           Chunk cnr left as bs right -> 
-              rec down (StrictOrder (map snd bs .>>. left) (map snd as .>>. right))
+           Chunk cnr tree -> 
+              rec down tree
                  
            AddList Up as tree ->
               let (result, up) = rec down tree
@@ -108,10 +108,9 @@ spreadTree spreadFunction = fst . rec emptyFM
              let (trees', sets) = unzip (map (rec fm) trees)
              in (Node trees', S.unionManySets sets)
           
-          -- also spread the constraints that are stored as
-          -- a dependency in this chunk.
-          Chunk cnr left as bs right -> 
-             rec fm (StrictOrder (map snd bs .>>. left) (map snd as .>>. right))
+          Chunk cnr tree -> 
+             let (tree', set) = rec fm tree
+             in (Chunk cnr tree', set)
           
           AddList direction as tree -> 
              let (tree', set) = rec fm tree
@@ -147,78 +146,82 @@ phaseTree a = strictRec
    where
     rec tree = 
        case tree of
+       
           Node trees -> 
              let (trees', phasesList) = unzip (map rec trees)
                  phases = foldr (plusFM_C (.)) emptyFM phasesList
              in (Node trees', phases)
-          Chunk cnr left as bs right ->
-             let (left' , phases1) = rec left
-                 (right', phases2) = rec right
-             in (Chunk cnr left' as bs right', plusFM_C (.) phases1 phases2)
+             
+          Chunk cnr tree ->
+             let (tree', phases) = rec tree
+             in (Chunk cnr tree', phases)
+             
           AddList dir as tree ->
              let (tree', phases) = rec tree
              in (AddList dir as tree', phases)
+             
           StrictOrder left right -> 
              let left'  = strictRec left
                  right' = strictRec right
-             in (StrictOrder left' right', emptyFM)             
+             in (StrictOrder left' right', emptyFM)     
+             
           Spread dir as tree -> 
              let (tree', phases) = rec tree
              in (Spread dir as tree', phases)
-          Receive _  -> (tree, emptyFM)
-          Phase i as -> (emptyTree, unitFM i (as++))
+             
+          Receive _  -> 
+             (tree, emptyFM)
+             
+          Phase i as ->
+             (emptyTree, unitFM i (as++))
           
     strictRec tree = 
        let (tree', phases) = rec tree
            f i list = listTree (list [])
        in foldr1 StrictOrder (intersperse (unitTree a) (eltsFM (addToFM_C binTree (mapFM f phases) 5 tree')))
         
-          
-chunkTree :: Substitution substitution => 
-             (a -> substitution -> Predicates -> a) -> Tree a -> 
-             ([(Int, Tree a)], [(Int, Int, substitution -> Predicates -> a)])
-chunkTree afun tree = 
-   let (ts, chunks, deps) = rec tree 
-   in ( ((-1), ts) : chunks, deps)
+chunkTree :: Tree a -> [(Int, Tree a)]
+chunkTree tree = 
+   let (ts, chunks) = rec tree 
+   in ((-1), ts) : chunks
   
   where   
    rec tree =
      case tree of
    
         Node trees -> 
-           let (ts, chunks, ds) = unzip3 (map rec trees)
-           in (Node ts, concat chunks, concat ds)
-             
-        Chunk cnr left as bs right -> 
-           let (ts1, chunks1, ds1) = rec left
-               (ts2, chunks2, ds2) = rec right
-               dependencies        = [ ((-1), i, afun x) | (i,x) <- bs ] ++
-                                     [ (cnr , i, afun x) | (i,x) <- as ]                                     
-           in (ts2, chunks1 ++ [(cnr, ts1)] ++ chunks2, dependencies ++ ds1 ++ ds2)
-  
+           let (ts, chunks) = unzip (map rec trees)
+           in (Node ts, concat chunks)
+           
+        -- This chunk should be solved later then the inner chunks.
+        -- Therefore, the new chunk is appended
+        Chunk cnr tree ->
+           let (ts, chunks) = rec tree
+           in (emptyTree, chunks ++ [(cnr, ts)]) 
+          
         AddList direction as tree ->
-           let (ts, chunks, ds) = rec tree
-           in (AddList direction as ts, chunks, ds)
+           let (ts, chunks) = rec tree
+           in (AddList direction as ts, chunks)
 
         StrictOrder left right -> 
-           let (ts1, chunks1, ds1) = rec left
-               (ts2, chunks2, ds2) = rec right
-           in (StrictOrder ts1 ts2, chunks1 ++ chunks2, ds1 ++ ds2)
+           let (ts1, chunks1) = rec left
+               (ts2, chunks2) = rec right
+           in (StrictOrder ts1 ts2, chunks1 ++ chunks2)
 
         Spread direction as tree ->
-           let (ts, chunks, ds) = rec tree
-           in (Spread direction as ts, chunks, ds)
+           let (ts, chunks) = rec tree
+           in (Spread direction as ts, chunks)
 
-        _ -> (tree, [], [])
+        _ -> (tree, [])
 
 instance Functor Tree where
    fmap f tree =
       case tree of
-         Node ts             -> Node (map (fmap f) ts)
-         AddList d as t      -> AddList d (map f as) (fmap f t)
-         StrictOrder t1 t2   -> StrictOrder (fmap f t1) (fmap f t2)
-         Spread d as t       -> Spread d (map f as) (fmap f t)
-         Receive i           -> Receive i
-         Phase i as          -> Phase i (map f as)
-         Chunk i t1 xs ys t2 -> let g ts = [ (a, f b) | (a,b) <- ts ]
-                                in Chunk i (fmap f t1) (g xs) (g ys) (fmap f t2)
+         Node ts           -> Node (map (fmap f) ts)
+         AddList d as t    -> AddList d (map f as) (fmap f t)
+         StrictOrder t1 t2 -> StrictOrder (fmap f t1) (fmap f t2)
+         Spread d as t     -> Spread d (map f as) (fmap f t)
+         Receive i         -> Receive i
+         Phase i as        -> Phase i (map f as)
+         Chunk i t         -> let g ts = [ (a, f b) | (a,b) <- ts ]
+                              in Chunk i (fmap f t)

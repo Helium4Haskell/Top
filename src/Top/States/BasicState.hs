@@ -55,16 +55,17 @@ instance Empty (BasicState m info) where
       }
  
 instance Show (BasicState m info) where 
-   show s = 
-      unlines $ 
-         [ "Constraints"
-         , "-----------"
-         ] ++
-         map (("   "++) . show) (constraints s) ++
-         [ "("++show (length (constraints s))++" constraints, "
-         ++ show (length (errors s))++" errors, "
-         ++ show (length (conditions s))++" checks)"
-         ]         
+   show s
+      | null (constraints s) = overview
+      | otherwise = 
+           unlines $ 
+              ["Constraints", "-----------"] ++ 
+              map (("   "++) . show) (constraints s) ++
+              [overview]
+    where
+      overview = "("++show (length (constraints s))++" constraints, "++
+                 show (length (errors s))++" errors, "++
+                 show (length (conditions s))++" checks)"       
 
 instance IsState (BasicState m info)
 
@@ -128,7 +129,7 @@ updateErrorInfo f =
 -- |A datatype to label the errors that are detected.
 data ErrorLabel = ErrorLabel String 
                 | NoErrorLabel 
-   deriving (Eq, Show)
+   deriving (Eq, Ord, Show)
      
 ---------------------------------------------------------------------
 -- * Conditions

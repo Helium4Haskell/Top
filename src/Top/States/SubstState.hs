@@ -11,6 +11,7 @@
 module Top.States.SubstState where
 
 import Top.Types
+import Top.States.BasicState
 
 ---------------------------------------------------------------------
 -- * Substitution state
@@ -54,3 +55,6 @@ applySubst a =
       tps <- mapM findSubstForVar var
       let sub = listToSubstitution (zip var tps)                          
       return (sub |-> a)
+      
+unificationErrorLabel :: ErrorLabel
+unificationErrorLabel = ErrorLabel "unification" 

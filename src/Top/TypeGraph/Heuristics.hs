@@ -74,40 +74,6 @@ doWithoutEdge (edge, cnr, info) computation =
       -- if copy1 /= copy2 then 
       --   error ("SAFETY check failed\n\n" ++ head [ x1++x2 | (x1, x2) <- zip copy1 copy2, x1 /= x2]) else
       return result
-                
--- keep a history to avoid non-termination (for type-graphs that contain an infinite type)
-safeApplySubst :: HasTypeGraph m info => Tp -> m (Maybe Tp)
-safeApplySubst = rec [] where 
-
-  rec history tp = case tp of 
-  
-    TVar i | i `elem` history 
-               -> return Nothing
-           | otherwise 
-               -> do let vid = VertexId i
-                     vs       <- verticesInGroupOf  vid
-                     cs       <- constantsInGroupOf vid
-                     children <- childrenInGroupOf  vid
-                     case cs of 
-                        [s] -> return (Just (TCon s))               
-                        []  -> case children of 
-                                  (pc1:_, pc2:_) -> 
-                                     do mt1 <- rec (i : history) (vertexIdToTp (child pc1))
-                                        mt2 <- rec (i : history) (vertexIdToTp (child pc2))
-                                        return $ 
-                                           do tp1 <- mt1
-                                              tp2 <- mt2
-                                              return (TApp tp1 tp2)
-                                  _ -> let rep = head [ j | (VertexId j, _) <- vs ]
-                                       in return (Just (TVar rep))      
-                        _ -> return Nothing
-    TCon _     -> return (Just tp)
-    
-    TApp t1 t2 -> do mt1 <- rec history t1
-                     mt2 <- rec history t2
-                     case (mt1,mt2) of 
-                       (Just t1', Just t2') -> return (Just $ TApp t1' t2')
-                       _                    -> return Nothing
 
 eqInfo3 :: (EdgeId, EdgeNr, info) -> (EdgeId, EdgeNr, info) -> Bool
 eqInfo3 (_, b1, _) (_, b2, _) = b1 == b2
@@ -123,6 +89,6 @@ class HasTwoTypes a where
 getSubstitutedTypes :: (HasTypeGraph m info, HasTwoTypes info) => info -> m (Maybe Tp, Maybe Tp)
 getSubstitutedTypes info = 
    do let (t1,t2) = getTwoTypes info
-      mt1 <- safeApplySubst t1
-      mt2 <- safeApplySubst t2
+      mt1 <- substituteTypeSafe t1
+      mt2 <- substituteTypeSafe t2
       return (mt1, mt2)

@@ -89,6 +89,11 @@ printState =
       let hline = replicate 50 '-'
       printMessage (unlines $ [hline] ++ showStates x ++ showStates y ++ [hline])
 
+printConstraints :: IsState ext => BasicX info ext ()
+printConstraints = 
+   do x <- basicGet
+      printMessage (unlines $ showStates x)
+   
 -- |Evaluation of an extended basic state is possible if we know the 
 -- empty value of the extension.
 eval :: IsState ext => BasicX info ext result -> result
@@ -101,5 +106,6 @@ pushAndSolveConstraints :: (IsState ext, Solvable constraint (BasicX info ext))
                               => [constraint] -> BasicX info ext ()
 pushAndSolveConstraints cs = 
    do pushConstraints (liftConstraints cs)
-      printState
+      printConstraints
       startSolving
+      printState

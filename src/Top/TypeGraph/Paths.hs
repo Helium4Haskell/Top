@@ -73,13 +73,15 @@ mapPath :: (a -> b) -> Path a -> Path b
 mapPath f = changeStep (Step . f) 
 
 changeStep :: (a -> Path b) -> Path a -> Path b
-changeStep f path = 
-   case path of
-      Step a  -> f a
-      x :|: y -> changeStep f x :|: changeStep f y
-      x :+: y -> changeStep f x :+: changeStep f y
-      Fail    -> Fail
-      Empty   -> Empty  
+changeStep f = rec
+ where
+   rec path = 
+      case path of
+         Step a  -> f a
+         x :|: y -> rec x :|: rec y
+         x :+: y -> rec x :+: rec y
+         Fail    -> Fail
+         Empty   -> Empty  
       
 changeStepM :: Monad m => (a -> m (Path b)) -> Path a -> m (Path b)
 changeStepM f path = 
@@ -250,6 +252,36 @@ participationMap path =
 		   
 pathSize :: Path a -> Int
 pathSize (p1 :|: p2) = pathSize p1 + pathSize p2
-pathSize (p1 :+: p2) = pathSize p1 + pathSize p2
+pathSize (p1 :+: p2) = pathSize p1 * pathSize p2
 pathSize (Step _)    = 1
 pathSize _           = 0
+
+-- |The maximal number of equality paths that is returned by equalPaths 
+-- (although this number can be exceeded...it is more or less used as approximation)
+-- Nothing indicates that there is no limit
+maxNumberOfEqualPaths :: Maybe Int
+maxNumberOfEqualPaths = Just 25
+
+reduceNumberOfPaths :: Path a -> Path a
+reduceNumberOfPaths = maybe id limitNumberOfPaths maxNumberOfEqualPaths
+
+limitNumberOfPaths :: Int -> Path a -> Path a
+limitNumberOfPaths size = fst . rec size
+ where
+   fromInt :: Num a => Int -> a
+   fromInt = fromInteger . toInteger
+   
+   rec size path = 
+      case path of
+         Empty     -> (path, 1)
+         Fail      -> (path, 0)
+         Step a    -> (path, 1)
+         p1 :+: p2 -> let (p1', n1) = rec size p1
+                          newSize   = if n1 == 0 then size else ceiling (fromInt size / fromInt n1)
+                          (p2', n2) = rec newSize p2
+                      in (p1' :+: p2', n1*n2)
+         p1 :|: p2 -> let both@(p1' , n1) = rec size p1
+                          (p2', n2) = rec (size - n1) p2
+                      in if n1 >= size
+                           then both
+                           else (p1' :|: p2', n1 + n2)

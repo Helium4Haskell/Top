@@ -13,12 +13,14 @@
 module Top.States.TIState where
 
 import Top.Types
+import Top.Constraints.TypeConstraintInfo
 import Top.States.States
 import Top.States.BasicState
 import Top.States.SubstState
 import Top.Qualifiers.QualifierMap
 import Data.FiniteMap
 import Data.List
+import Control.Monad
 
 ---------------------------------------------------------------------
 -- * A state for type inferencers
@@ -39,8 +41,8 @@ data TIState info = TIState
    , synonyms            :: OrderedTypeSynonyms         -- ^ All known type synonyms
    , classenv            :: ClassEnvironment            -- ^ All known type classes and instances
    , predicates          :: QualifierMap Predicate info -- ^ Type class assertions
-   , typeclassDirectives :: TypeClassDirectives info   -- ^ Directives for type class assertions
-   , skolems             :: [(Int, info)]               -- ^ List of skolem constants
+   , typeclassDirectives :: TypeClassDirectives info    -- ^ Directives for type class assertions
+   , skolems             :: [([Int], info, Tps)]        -- ^ List of skolem constants
    }
 
 type SchemeMap qs = FiniteMap Int (Scheme qs)
@@ -114,11 +116,11 @@ instance HasTI m info => Has m (QualifierMap Predicate info) where
    get   = tiGets predicates
    put x = tiModify (\s -> s { predicates = x })
 
-getPredicates :: HasTI m info => m Predicates -- only to return all predicates
+getPredicates :: HasTI m info => m Predicates -- ??
 getPredicates = 
    do syns     <- getTypeSynonyms
       classEnv <- getClassEnvironment
-      ps       <- gets (\qms -> getQualifiers qms ++ getGeneralizedQs qms)
+      ps       <- gets (\qms -> getQualifiers qms ++ getGeneralizedQs qms ++ getAssumptions qms)
       return (fst (contextReduction syns classEnv (map fst ps)))
 
 ---------------------------------------------------------------------
@@ -190,44 +192,62 @@ skolemizeTruly fa =
       setUnique newUnique
       return a
 
-skolemizeFaked :: (HasTI m info, Substitutable a) => info -> Forall a -> m a
-skolemizeFaked info fa =
+skolemizeFaked :: (HasTI m info, Substitutable a) => info -> Tps -> Forall a -> m a
+skolemizeFaked info monos fa =
    do unique <- getUnique
       let (newUnique, a) = instantiate unique fa
-          list = zip [ unique .. newUnique-1 ] (repeat info)
-      tiModify (\s -> s { skolems = list ++ skolems s })
+          new = ([ unique .. newUnique-1 ], info, monos)
+      tiModify (\s -> s { skolems = new : skolems s })
       setUnique newUnique
       return a
-      
+
 getSkolemSubstitution :: HasTI m info => m FiniteMapSubstitution
 getSkolemSubstitution =
-   tiGets (listToSubstitution . map (\(i, _) -> (i, makeSkolemConstant i)) . skolems)
-
--- |First, make the substitution consistent. Then check the skolem constants
+   tiGets (\s -> listToSubstitution [ (i, makeSkolemConstant i) | (is, _, _) <- skolems s, i <- is ]) 
+  
+-- |First, make the substitution consistent. Then check the skolem constants(?)
 makeConsistent :: (HasTI m info, HasBasic m info, HasSubst m info) => m ()
-makeConsistent      = makeSubstConsistent >> checkSkolems
+makeConsistent = makeSubstConsistent -- >> checkSkolems
  
-checkSkolems :: (HasTI m info, HasSubst m info, HasBasic m info) => m ()
-checkSkolems =
-   do list <- tiGets skolems
-      tps  <- mapM (findSubstForVar . fst) list
+checkSkolems :: (HasTI m info, HasSubst m info, HasBasic m info, TypeConstraintInfo info) => m ()
+checkSkolems = 
+   do xs    <- tiGets skolems
+      list1 <- let f (is, info, monos) = 
+                      do tps <- mapM findSubstForVar is
+                         return (zip is tps, (info, monos))
+               in mapM f xs
       
       -- skolem constant versus type constant
-      let (ok, errs) = partition (isTVar . snd) (zip list tps)
-      mapM (\((_, info), _) -> addLabeledError skolemVersusConstantLabel info) errs
+      let (list2, errs) = partition (all (isTVar . snd) . fst) list1
+      mapM_ (addLabeledError skolemVersusConstantLabel . fst . snd) errs
       
       -- skolem constant versus a different skolem constant
-      let okList = groupBy (\x y -> snd x == snd y) (sortBy (\x y -> snd x `compare` snd y) ok)
-      xss <- let f [(pair, _)] = return [pair]
-                 f pairs = 
-                    do addLabeledError skolemVersusSkolemLabel (snd . fst . head $ pairs)
-                       return []
-             in mapM f okList
-      
-      tiModify (\s -> s { skolems = concat xss })
+      let problems = filter ((>1) . length)
+                   . groupBy (\x y -> fst x == fst y)
+                   . sortBy  (\x y -> fst x `compare` fst y)
+                   $ [ (i, info) | (pairs, (info, _)) <- list2, (_, TVar i) <- pairs ]
+          list3 = let is = concatMap (map fst) problems
+                      p (pairs, _) = null (ftv (map snd pairs) `intersect` is)
+                  in filter p list2
+      mapM_  (addLabeledError skolemVersusSkolemLabel . snd . head) problems
+
+      -- escaping skolem constants
+      list4 <- let op rest this@(pairs, (info, monos)) =
+                      do monos' <- applySubst monos
+                         case ftv monos' `intersect` ftv (map snd pairs) of
+                            []  -> return (this:rest)
+                            esc -> do addLabeledError escapingSkolemLabel (escapedSkolems esc info)
+                                      return rest
+               in foldM op [] list3
+
+      let new = [ (map fst pairs, info, monos) | (pairs, (info, monos)) <- list4 ]
+      tiModify (\s -> s { skolems = new })
      
 skolemVersusConstantLabel :: ErrorLabel
 skolemVersusConstantLabel = ErrorLabel "skolem versus constant" 
 
 skolemVersusSkolemLabel :: ErrorLabel
 skolemVersusSkolemLabel = ErrorLabel "skolem versus skolem" 
+
+escapingSkolemLabel :: ErrorLabel
+escapingSkolemLabel = ErrorLabel "escaping skolem"

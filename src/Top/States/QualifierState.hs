@@ -37,6 +37,10 @@ instance Empty (QualifierState qs info) where
 
 instance (Substitutable qs, ShowQualifiers qs, Show info) => IsState (QualifierState qs info)
 
+allTypeSchemes :: HasQual m qs info => m (FiniteMap Int (Scheme qs))
+allTypeSchemes = 
+   qualGets schemeMap
+
 getTypeScheme :: HasQual m qs info => Int -> m (Scheme qs)
 getTypeScheme i =  
    let err = error "sigma var not found in map"

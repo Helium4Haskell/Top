@@ -178,6 +178,8 @@ standardClasses = listToFM $
        ]
      )
    ) :
+   ( "Enum", ([], [ (Predicate "Enum" tp, []) | tp <- [voidType, charType, intType, floatType, boolType]])
+   ) :
    -- Eq, Ord and Show all have the same instances
    [ ("Eq" ,  ([]    , makeInstances "Eq"  ))
    , ("Ord",  (["Eq"], makeInstances "Ord" ))

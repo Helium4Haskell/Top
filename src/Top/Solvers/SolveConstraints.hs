@@ -19,6 +19,7 @@ import Top.States.TIState
 import Top.States.QualifierState
 import Top.Solvers.BasicMonad
 import Data.List
+import Data.FiniteMap
 
 type SolveX info qs sub ext = BasicX info (TIState info, (QualifierState qs info, (sub, ext)))
 type Solve  info qs sub     = SolveX info qs sub ()
@@ -47,6 +48,7 @@ solveConstraints doFirst doAtEnd cs =
    do doFirst
       pushAndSolveConstraints cs
       makeConsistent
+      checkSkolems
       doAmbiguityCheck :: ( HasSubst (SolveX info qs sub ext) info
                           , QualifierList (SolveX info qs sub ext) info qs qsInfo
                           ) => 
@@ -57,6 +59,7 @@ solveResult ::
    ( HasBasic m info
    , HasTI m info
    , HasSubst m info
+   , HasQual m qs info
    , Empty ext
    , TypeConstraintInfo info
    ) => 
@@ -66,9 +69,9 @@ solveResult =
    do uniqueAtEnd <- getUnique
       errs        <- getLabeledErrors
       sub         <- fixpointSubst
-      ps          <- getPredicates     
+      ts          <- allTypeSchemes     
       messages    <- getMessages     
-      return (SolveResult uniqueAtEnd sub ps errs messages empty)
+      return (SolveResult uniqueAtEnd sub ts errs messages empty)
 
 ----------------------------------------------------------------------
 -- Solve type constraints
@@ -79,7 +82,7 @@ type Solver  constraint info qs     = SolverX constraint info qs ()
 data SolveResult info qs ext =  
    SolveResult { uniqueFromResult       :: Int
                , substitutionFromResult :: FixpointSubstitution
-               , predictesFromResult    :: Predicates
+               , typeschemesFromResult  :: FiniteMap Int (Scheme qs)
                , errorsFromResult       :: [(info, ErrorLabel)]
                , debugFromResult        :: String
                , extensionFromResult    :: ext
@@ -89,8 +92,8 @@ instance Empty ext => Empty (SolveResult info qs ext) where
    empty = emptyResult 0
    
 instance Plus ext => Plus (SolveResult info qs ext) where 
-   plus (SolveResult _ s1 ps1 er1 io1 ext1) (SolveResult unique s2 ps2 er2 io2 ext2) = 
-      SolveResult unique (disjointFPS s1 s2) (ps1++ps2) (er1++er2) (io1++io2) (ext1 `plus` ext2)
+   plus (SolveResult _ s1 ts1 er1 io1 ext1) (SolveResult unique s2 ts2 er2 io2 ext2) = 
+      SolveResult unique (disjointFPS s1 s2) (ts1 `plusFM` ts2) (er1++er2) (io1++io2) (ext1 `plus` ext2)
 
 emptyResult :: Empty ext => Int -> SolveResult info qs ext
-emptyResult unique = SolveResult unique emptyFPS [] [] [] empty
+emptyResult unique = SolveResult unique emptyFPS emptyFM [] [] empty

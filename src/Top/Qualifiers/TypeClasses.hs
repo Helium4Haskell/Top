@@ -9,7 +9,7 @@ import Top.Constraints.TypeConstraintInfo
 import Top.Constraints.Constraints (solveConstraint)
 import Top.Constraints.Equality ( (.==.) )
 import Data.Maybe (isJust)
-import Data.List (partition)
+import Data.List
 import Control.Monad (foldM)
 
 instance ( TypeConstraintInfo info
@@ -75,11 +75,44 @@ instance ( TypeConstraintInfo info
             hnf <- loopInList psNew
             testDisjoints (loopSc [] hnf)
       
-      -- try to use a defaulting directive before reporting an error message
-      ambiguous (t@(Predicate _ (TVar i), _) : ts) =
-         let test (Predicate _ tp', _) = TVar i == tp'
-             (ts1, ts2) = partition test ts
-         in do defaults   <- tiGets (defaultDirectives . typeclassDirectives)
+      ambiguous list =
+         do list1 <- missingInSignature
+         
+            let (hnf, nothnf) = 
+                   let op x@(Predicate _ (TVar i), _) (xs1, xs2) = ((i, x):xs1, xs2)
+                       op x                           (xs1, xs2) = (xs1, x:xs2)
+                   in foldr op ([], []) list1
+                grouped = map (\((i, x):xs) -> (i, x : map snd xs))
+                        $ groupBy (\x y -> fst x == fst y)
+                        $ sortBy  (\x y -> fst x `compare` fst y) hnf
+            list2 <- mapM tryToDefault grouped
+            
+            let f (p, info) = addLabeledError ambiguousLabel (ambiguousPredicate p info)
+            mapM_ f (concat (nothnf : list2))
+                  
+       where
+         -- a class predicate about a skolemized type variable cannot be proven
+         missingInSignature =
+            do sk    <- tiGets skolems
+               skols <- let f (is, info, _) = 
+                               do tps <- mapM findSubstForVar is
+                                  return (ftv tps, info)
+                        in mapM f sk
+               let f xs x = 
+                      case x of 
+                         (p@(Predicate _ (TVar i)), info) -> 
+                            case [ info2 | (is, info2) <- skols, i `elem` is ] of
+                               info2:_ -> 
+                                  let newinfo = predicateArisingFrom (p, info) info2
+                                  in do addLabeledError missingInSignatureLabel newinfo
+                                        return xs
+                               _ -> return (x:xs)
+                         _ -> return (x:xs)
+               foldM f [] list
+               
+         -- try to use a defaulting directive before reporting an error message
+         tryToDefault (i, ts) =
+            do defaults   <- tiGets (defaultDirectives . typeclassDirectives)
                candidates <- 
                   let f (Predicate cn _) = 
                          case lookup cn defaults of 
@@ -87,31 +120,24 @@ instance ( TypeConstraintInfo info
                             Just (tps, info) ->
                                let op result tp = 
                                       do let sub = singleSubstitution i tp
-                                         b <- entailsList [] [ sub |-> x | (x, _) <- t:ts1 ]
+                                         b <- entailsList [] [ sub |-> x | (x, _) <- ts ]
                                          return $ if b then (tp, info) : result else result
                                in foldM op [] (reverse tps)
-                  in mapM (f . fst) (t:ts1)
-               
+                   in mapM (f . fst) ts
+                    
                case [ x | x:_ <- candidates ] of
                   (tp, info) : rest | all (tp ==) (map fst rest) -> 
                      do solveConstraint ( TVar i .==. tp $ info )
-                        makeConsistent -- ??                     
+                        makeConsistent -- ??
+                        return []
                   
-                  _ ->
-                     let f (p, info) = addLabeledError ambiguousLabel (ambiguousPredicate p info)
-                     in mapM_ f (t:ts1)
-                  
-               ambiguous ts2
-                   
-      ambiguous ((p, info) : ts) =
-         do addLabeledError ambiguousLabel (ambiguousPredicate p info)
-            ambiguous ts
-            
-      ambiguous [] = 
-         return ()
-            
+                  _ -> return ts
+      
 ambiguousLabel :: ErrorLabel
 ambiguousLabel = ErrorLabel "ambiguous predicate" 
+
+missingInSignatureLabel :: ErrorLabel
+missingInSignatureLabel = ErrorLabel "predicate missing in signature" 
 
 unresolvedLabel :: ErrorLabel
 unresolvedLabel = ErrorLabel "unresolved predicate"

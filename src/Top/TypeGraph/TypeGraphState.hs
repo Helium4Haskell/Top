@@ -45,7 +45,9 @@ class (HasBasic m info, HasTI m info, HasSubst m info)
    removeInconsistencies :: m ()
    
    -- substitution and term graph
-   substituteVariable :: VertexId -> m Tp
+   substituteVariable :: Int -> m Tp
+   substituteType     :: Tp  -> m Tp
+   substituteTypeSafe :: Tp  -> m (Maybe Tp)
    makeSubstitution   :: m [(VertexId, Tp)]
    typeFromTermGraph  :: VertexId -> m Tp
    
@@ -81,3 +83,12 @@ class (HasBasic m info, HasTI m info, HasSubst m info)
          case vs of 
             (vid, _):_ -> return vid
             _ -> internalError "Top.TypeGraph.TypeGraphState" "representativeInGroupOf" "unexpected empty equivalence group"
+            
+   substituteVariable =
+      substituteType . TVar
+      
+   substituteType tp =
+      do mtp <- substituteTypeSafe tp
+         case mtp of
+            Just stp -> return stp
+            Nothing  -> internalError "Top.TypeGraph.TypeGraphState" "substituteType" "inconsistent state"

@@ -46,63 +46,11 @@ instance IsTpScheme Tp where
 
 ----------------------------------------------------------------------
 -- * Basic functionality for types and type schemes
-{-
-generalize :: [Int] -> Predicates -> Tp -> TpScheme
-generalize monos preds tp = 
-   let ftvTP             = ftv tp 
-       p (Predicate _ t) = any (`elem` ftvTP) (ftv t)
-   in TpScheme (ftv tp \\ monos) [] (filter p preds :=> tp)
-                        
-generalizeAll :: Tp -> TpScheme
-generalizeAll = generalize [] []
 
-instantiate :: Int -> TpScheme -> (Int, Predicates, Tp)
-instantiate unique (TpScheme qs _ (ps :=> tp)) = 
-   let sub = listToSubstitution (zip qs (map TVar [unique..]))
-   in (unique + length qs, sub |-> ps, sub |-> tp)  
-   
-instantiateWithNameMap :: Int -> TpScheme -> (Int, Predicates, Tp) -- get rid of this function.
-instantiateWithNameMap unique (TpScheme qs nm qtp) = 
-   let sub = listToSubstitution [ (i,TCon s) | (i,s) <- nm, i `elem` qs ]
-   in instantiate unique (TpScheme (qs \\ (map fst nm)) [] (sub |-> qtp))
-
--- |Use a magic number to instantiate a type scheme. (dangerous!)
-unsafeInstantiate :: TpScheme -> Tp
-unsafeInstantiate scheme = tp
-   where magicNumber = 123456789
-         (_, _, tp)  = instantiate magicNumber scheme
--}
 -- |Determine the arity of a type scheme.    
 arityOfTpScheme :: TpScheme -> Int
 arityOfTpScheme = arityOfTp . unqualify . unquantify
-{-
--- |Is the type scheme overloaded (does it contain predicates)?
-isOverloaded :: TpScheme -> Bool
-isOverloaded (TpScheme _ _ (xs :=> _)) = not (null xs)
 
-freezeFreeTypeVariables :: TpScheme -> TpScheme
-freezeFreeTypeVariables scheme = 
-   let sub = listToSubstitution (map f (ftv scheme))
-       f i = (i, TCon ('_' : show i))
-   in sub |-> scheme
-
--- |Still to be defined......
-isInstanceOf :: Tp -> TpScheme -> Bool
-isInstanceOf _ _ = True -- !!!!!!!!!!!! undefined
-
-genericInstanceOf :: OrderedTypeSynonyms -> ClassEnvironment -> TpScheme -> TpScheme -> Bool
-genericInstanceOf synonyms classes scheme1 scheme2 =
-   let -- monomorphic type variables are treated as constants
-       s1 = freezeFreeTypeVariables scheme1
-       s2 = freezeFreeTypeVariables scheme2
-       -- substitution to fix the type variables in the first type scheme
-       sub         = listToSubstitution (zip (getQuantifiers s1) [ TCon ('+':show i) | i <- [0 :: Int ..]])
-       ps1 :=> tp1 = sub |-> getQualifiedType s1
-       (_,ps2,tp2) = instantiate 123456789 s2
-   in case mguWithTypeSynonyms synonyms tp1 tp2 of
-         Left _         -> False
-         Right (_,sub2) -> entailList synonyms classes ps1 (sub2 |-> ps2)
--}
 genericInstanceOf :: OrderedTypeSynonyms -> ClassEnvironment -> TpScheme ->  TpScheme -> Bool
 genericInstanceOf synonyms classes scheme1 scheme2 = 
    let -- monomorphic type variables are treated as constants
@@ -115,6 +63,10 @@ genericInstanceOf synonyms classes scheme1 scheme2 =
    in case mguWithTypeSynonyms synonyms tp1 tp2 of
          Left _         -> False
          Right (_,sub2) -> entailList synonyms classes ps1 (sub2 |-> ps2)
+
+-- |Is the type scheme overloaded (does it contain predicates)?
+isOverloaded :: TpScheme -> Bool
+isOverloaded = not . null . qualifiers . unquantify
 
 makeScheme :: [Int] -> Predicates -> Tp -> TpScheme
 makeScheme monos preds tp = 
@@ -148,20 +100,6 @@ instance Substitutable qs => Substitutable (Sigma qs) where
    
    ftv (SigmaVar i)    = []
    ftv (SigmaScheme s) = ftv s 
-   {-
--- |A type class to convert something into a "sigma" 
-
-class IsSigma a qs where
-   toSigma :: a -> Sigma qs
-   
-instance IsSigma (Sigma qs) qs where
-   toSigma = id
-
-instance IsSigma (Scheme qs) qs where
-   toSigma = SigmaScheme
-
-instance IsSigma (Qualification qs Tp) qs where
-   toSigma = SigmaScheme . noQuantifiers -}
 
 -- |A substitution for type scheme variables
 type TpSchemeMap = FiniteMap SigmaVar TpScheme

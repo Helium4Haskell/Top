@@ -129,11 +129,11 @@ consistent eqgroup =
       
 equalPaths  :: S.Set VertexId -> VertexId -> [VertexId] -> EquivalenceGroup info -> TypeGraphPath info
 equalPaths without v1 targets eqgroup =
-   --(if debugTypeGraph then trace msg else id)  
-   tailSharingBy compare $
-      rec v1 (edgeList, cliqueList)  
-
-    where   
+   --(if debugTypeGraph then trace msg else id)
+   reduceNumberOfPaths $
+      tailSharingBy compare $
+      rec v1 (edgeList, cliqueList)
+ where   
       msg        = "Path from "++show v1++" to "++show targets++" without "++show (S.setToList without)
       edgeList   = let p (EdgeId v1 v2,_,_) = 
                           not (v1 `S.elementOf` without) && not (v2 `S.elementOf` without)
@@ -190,29 +190,27 @@ equalPaths without v1 targets eqgroup =
              f pcs = filter ((/=vid) . child) pcs
          in filter p . map f
 
-typeOfGroup :: OrderedTypeSynonyms -> EquivalenceGroup info -> Tp
-typeOfGroup synonyms eqgroup = 
-   let vertexList     = vertices eqgroup
-       constantsList  = constants eqgroup
-       childrenList   = [(v, (l,r)) |  (v, (VApp l r, _)) <- vertexList ]
-       elseReturn tp  = maybe tp id originalType
-       representative = fst (head vertexList)
-       originalType   =
-          case [ tp | (_, (_, Just tp)) <- vertexList ]  of
-             [] -> Nothing
-             xs -> let op (Just t1) (Just t2) = 
-                          case mguWithTypeSynonyms synonyms t1 t2 of
-                             Left _       -> Nothing
-                             Right (_, s) -> Just $ equalUnderTypeSynonyms synonyms (s |-> t1) (s |-> t2)
-                       op _ _ = Nothing                             
-                   in foldr1 op (map Just xs)
-   in        
-      case (constantsList, childrenList) of 
-         ([], [])          -> elseReturn (vertexIdToTp representative)
-         ([s], [])         -> elseReturn (TCon s)
-         ([], (_,(l,r)):_) -> elseReturn (TApp (vertexIdToTp l) (vertexIdToTp r))
-         _ -> internalError "Top.TypeGraph.EquivalenceGroup" "typeOfGroup" "inconsistent equivalence group"
-         
+typeOfGroup :: OrderedTypeSynonyms -> EquivalenceGroup info -> Maybe Tp
+typeOfGroup synonyms eqgroup
+
+   | length constants > 1                        =  Nothing
+   | not (null constants) && not (null applies)  =  Nothing
+   
+   | not (null originals)  =  Just (theBestType synonyms originals)
+   | not (null constants)  =  Just (TCon (head constants))
+   | not (null applies)    =  Just $  let (VertexId  l, VertexId r) = head applies
+                                      in (TApp (TVar l) (TVar r)) 
+   | otherwise             =  Just (TVar (head variables))
+   
+  where
+    variables  =       [ i       |  (VertexId i, _)     <- vertices eqgroup  ]
+    constants  =  nub  [ s       |  (_, (VCon s, _))    <- vertices eqgroup  ]
+    applies    =       [ (l, r)  |  (_, (VApp l r, _))  <- vertices eqgroup  ]       
+    originals  =       [ tp      |  (_, (_, Just tp))   <- vertices eqgroup  ]
+
+theBestType :: OrderedTypeSynonyms -> Tps -> Tp 
+theBestType = foldr1 . equalUnderTypeSynonyms
+        
 -- Check for some invariants: identity if everything is okay, otherwise an internal error
 checkGroup :: EquivalenceGroup info -> EquivalenceGroup info
 checkGroup = test c2 . test c1 where 

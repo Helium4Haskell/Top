@@ -1,11 +1,3 @@
-{- font: SMS-shadow
-
-__ __|        
-   |  _ \  _ \
-  _|\___/ .__/
-         _|   
--}
-
 module Main where
 
 import Parsec
@@ -42,6 +34,16 @@ import Data.FiniteMap
 import Utils
 
 ---------------------------------------------------------------------
+-- * Top logo
+
+logo :: [String]
+logo = [ "__ __|"        
+       , "  |  _ \\  _ \\"
+       , " _|\\___/ .__/"
+       , "        _|"
+       ]
+
+---------------------------------------------------------------------
 -- * Top constraint information
 
 newtype TopInfo = TopInfo [(String, String)]
@@ -59,12 +61,14 @@ instance TypeConstraintInfo TopInfo where
    unresolvedPredicate p   = addTopInfo "unresolved predicate" (show p)
    equalityTypePair pair   = addTopInfo "type pair"            (show pair)
    parentPredicate p       = addTopInfo "parent predicate"     (show p)
+   escapedSkolems is       = addTopInfo "escaped skolems"      (show is)
    neverDirective tuple    = addTopInfo "never directive"      (show tuple)
    closeDirective tuple    = addTopInfo "close directive"      (show tuple)
    disjointDirective t1 t2 = addTopInfo "disjoint directive"   (show (t1, t2))
    
 instance PolyTypeConstraintInfo TopQualifiers TopInfo where
-   originalTypeScheme s  = addTopInfo "type scheme" (show s)
+   instantiatedTypeScheme s = addTopInfo "instantiated type scheme" (show s)
+   skolemizedTypeScheme s   = addTopInfo "skolemized type scheme" (show s)
    
 ---------------------------------------------------------------------
 -- * Top qualifiers
@@ -164,18 +168,25 @@ run p input =
             print err
       Right (cset, unique) -> 
          let result :: SolveResult TopInfo TopQualifiers TopExtraState
-             result  = runTypeGraph defaultHeuristics standardClasses noOrderedTypeSynonyms unique cset
-         in do putStrLn (debugFromResult result)
-               putStrLn (replicate 50 '-')
+             result  = runTypeGraphPlusDoAtEnd defaultHeuristics doAtEnd standardClasses noOrderedTypeSynonyms unique cset
+             -- doAtEnd :: TypeGraphX TopInfo TopQualifiers TopExtraState ()
+             doAtEnd = return () -- makeConsistent >> checkSkolems -- >> doAmbiguityCheck
+         in do putStrLn (unlines logo)
+               putStrLn (debugFromResult result)
+               
+               putStrLn . concat $ 
+                  "Substitution: " : intersperse ", " (
+                     [ show (i, lookupInt i (substitutionFromResult result)) 
+                     | i <- dom (substitutionFromResult result) 
+                     ])
+               
                case errorsFromResult result of
-                  [] -> putStrLn "(No errors)" 
+                  [] -> putStrLn "(No errors)"
                   es -> let nice (info, lab) =
                                let TopInfo xs = addTopInfo "label" (show lab) info
                                in "{" ++ concat (intersperse ", " [ a++"="++b | (a, b) <- xs]) ++ "}"
                         in do putStr (unlines (map nice es))
                               putStrLn ("(Failed with "++show (length es)++" errors)")
-               putStrLn "Substitution"
-               putStrLn $ show (substitutionFromResult result)
     
 pStatements :: Parser (Constraints TopSolve, Int)
 pStatements = 
@@ -233,7 +244,7 @@ pConstraint =
          s2 <- pSigma
          return $ \info -> 
             ( either toList allTypeConstants s1 ++ either toList allTypeConstants s2
-            , \varMap -> Subsumption (makeSigma varMap s1) (makeSigma varMap s2) info
+            , \varMap -> Subsumption (makeSigma varMap s1) ([], makeSigma varMap s2) info
             )  
             
    pGeneralize = 
@@ -277,7 +288,7 @@ pConstraint =
          sigma <- P.parens lexer pSigma
          return $ \info ->
             ( allTypeConstants tp ++ either toList allTypeConstants sigma
-            , \varMap -> Skolemize (applyVarMap varMap tp) (makeSigma varMap sigma) info
+            , \varMap -> Skolemize (applyVarMap varMap tp) ([], makeSigma varMap sigma) info
             ) 
             
    pProve = 

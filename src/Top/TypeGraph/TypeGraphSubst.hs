@@ -32,7 +32,7 @@ typegraphImpl = SubstState
            
    , findSubstForVar_impl = \i ->      
         debugTrace ("findSubstForVar " ++ show i) >>
-        substituteVariable (VertexId i)
+        substituteVariable i
             
    , fixpointSubst_impl =         
         debugTrace ("fixpointSubstitution") >>

@@ -45,7 +45,7 @@ simpleState = SubstState
            case mguWithTypeSynonyms synonyms t1' t2' of
               Right (used,sub) -> 
                  simpleModify (sub @@)
-              Left _ -> addError info
+              Left _ -> addLabeledError unificationErrorLabel info
           
    , findSubstForVar_impl = \i ->      
        simpleGets (lookupInt i)

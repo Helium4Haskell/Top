@@ -1,7 +1,8 @@
 module Top.TypeGraph.Implementation where
 
 import Top.States.TIState (HasTI(..), getTypeSynonyms, nextUnique)
-import Top.States.BasicState (HasBasic(..), addError)
+import Top.States.BasicState (HasBasic(..), addLabeledError)
+import Top.States.SubstState
 import Top.TypeGraph.TypeGraphMonad
 import Top.TypeGraph.TypeGraphState (HasTypeGraph)
 import Top.TypeGraph.EquivalenceGroup
@@ -19,7 +20,7 @@ import Data.Set (Set)
 newtype TypeGraph info a = TypeGraph_ (forall m . (HasTypeGraph m info, HasBasic m info, HasTI m info, HasTG m info) => m a)
 
 toTypeGraph :: (forall m . (HasTypeGraph m info, HasBasic m info, HasTI m info, HasTG m info) => m a) -> TypeGraph info a
-toTypeGraph = TypeGraph_
+toTypeGraph f = TypeGraph_ f
 
 fromTypeGraph :: (HasTypeGraph m info, HasTG m info) => TypeGraph info a -> m a
 fromTypeGraph (TypeGraph_ x) = x
@@ -112,7 +113,7 @@ removeInconsistencies =
    rec = do hs         <- getHeuristics
             (es, errs) <- applyHeuristics hs
             mapM_ (fromTypeGraph . deleteEdge) es
-            mapM_ addError errs 
+            mapM_ (addLabeledError unificationErrorLabel) errs 
             if null errs && null es
 	          then -- everything is okay: no errors were found.
 	           fromTypeGraph unmarkPossibleErrors
@@ -120,28 +121,38 @@ removeInconsistencies =
 	               -- safety first: check whether *everything* is really removed. 
 	           rec
 
--- substitution and term graph
-substituteVariable :: VertexId -> TypeGraph info Tp
-substituteVariable vid =
-   do syns    <- getTypeSynonyms
-      eqgroup <- getGroupOf vid
-      case typeOfGroup syns eqgroup of 
-         tp@(TVar _) -> return tp
-         tp -> 
-            let rec (TVar j)   = substituteVariable (VertexId j)
-                rec t@(TCon _) = return t
-                rec (TApp l r) = 
-                   do l' <- rec l
-                      r' <- rec r
-                      return (TApp l' r')
-            in rec tp
-            
+substituteTypeSafe :: Tp -> TypeGraph info (Maybe Tp) 
+substituteTypeSafe = rec [] 
+  where
+    rec history (TVar i)
+      |  i `elem` history  =  return Nothing
+      |  otherwise         =
+            do  synonyms  <-  getTypeSynonyms
+                eqgroup   <-  getGroupOf (VertexId i)
+                case typeOfGroup synonyms eqgroup of
+                   Just (TVar j)  ->  return (Just (TVar j))
+                   Just newtp     ->  rec (i:history) newtp
+                   Nothing        ->  return Nothing
+
+    rec _ tp@(TCon _) = 
+       return (Just tp)
+
+    rec history (TApp l r) = 
+       do  ml  <-  rec history l
+           mr  <-  rec history r
+           case (ml, mr) of
+              (Just l', Just r')   ->  return (Just (TApp l' r'))
+              _                    ->  return Nothing
+              
 makeSubstitution :: TypeGraph info [(VertexId, Tp)]
 makeSubstitution =
    debugTrace ("makeSubstitution") >>
    do syns     <- getTypeSynonyms
       eqgroups <- getAllGroups
-      let f eqc = return [ (vid, tp) | let tp = typeOfGroup syns eqc, (vid@(VertexId i), _) <- vertices eqc, notId i tp ]
+      let f eqgroup =
+             case typeOfGroup syns eqgroup of 
+                Just tp -> return [ (vid, tp) | (vid@(VertexId i), _) <- vertices eqgroup, notId i tp ]
+                Nothing -> internalError "Top.TypeGraph.Implementation" "makeSubstitution" "inconsistent equivalence group"
           notId i (TVar j) = i /= j
           notId _ _        = True
       res <- mapM f eqgroups
