@@ -121,12 +121,13 @@ splitGroup eqc = let (vs,es,cs) = (vertices eqc,edges eqc,cliques eqc)
 removeEdge edge (EQGroup (vs1,ss1,es1,cs1)) = EQGroup (vs1,ss1,filter p es1,cs1)
    where p (e,_,_) = edge /= e
 
+{- Bug fix March 5, 2004: there should be an 'all' in the predicate 'p' -}
 removeClique (i,lists) (EQGroup (vs,ss,es,cs)) = 
    (if debugTypeGraph then trace msg else id) 
    (EQGroup (vs,ss,es,new))
    
       where new = zip (repeat i) (filter ((>1) . length) lists) ++ filter p cs
-            p (j,list) = (i /= j || any (`notElem` concat lists) list) && length list > 1  
+            p (j,list) = (i /= j || all (`notElem` concat lists) list) && length list > 1  
             
             msg = unlines ["------------------remove clique -------------------------"
                           ,"status: "++ show (null [ x | (i,list) <- cs, (x,_) <- list, x `notElem` map fst vs ])
