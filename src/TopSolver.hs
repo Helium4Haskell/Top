@@ -213,11 +213,10 @@ pConstraint =
    do f <- tryList $
               change pEquality :
               map change
-                 [ pSubsumption, pGeneralize
+                 [ pGeneralize, pInstantiate, pExplicit, pSkolemize
                  ] ++
               map change 
-                 [ pInstantiate, pExplicit, pSkolemize
-                 , pProve, pAssume, pImplicit
+                 [ pProve, pAssume, pImplicit
                  ]
       info <- pInfo
       return (f info)
@@ -236,16 +235,7 @@ pConstraint =
          return $ \info -> 
             ( allTypeConstants t1 ++ allTypeConstants t2
             , \varMap -> Equality (applyVarMap varMap t1) (applyVarMap varMap t2) info
-            ) 
-
-   pSubsumption = 
-      do s1 <- pSigma
-         P.reservedOp lexer "<="
-         s2 <- pSigma
-         return $ \info -> 
-            ( either toList allTypeConstants s1 ++ either toList allTypeConstants s2
-            , \varMap -> Subsumption (makeSigma varMap s1) ([], makeSigma varMap s2) info
-            )  
+            )
             
    pGeneralize = 
       do sv <- pSigmaVar   
