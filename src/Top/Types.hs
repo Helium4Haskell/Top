@@ -10,7 +10,6 @@
 
 module Top.Types 
    ( module Top.Types.Basics
-   , module Top.Types.Qualified
    , module Top.Types.Substitution
    , module Top.Types.Quantification
    , module Top.Types.Qualification
@@ -22,7 +21,6 @@ module Top.Types
    ) where
 
 import Top.Types.Basics
-import Top.Types.Qualified
 import Top.Types.Substitution
 import Top.Types.Quantification
 import Top.Types.Qualification

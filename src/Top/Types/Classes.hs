@@ -12,7 +12,6 @@
 module Top.Types.Classes where
 
 import Top.Types.Basics
-import Top.Types.Qualified
 import Top.Types.Substitution
 import Top.Types.Unification
 import Top.Types.Synonyms
@@ -20,7 +19,22 @@ import Control.Monad
 import Data.FiniteMap
 
 ----------------------------------------------------------------------  
--- * Type classes
+-- * Class predicates
+
+type Predicates = [Predicate]
+data Predicate  = Predicate String Tp deriving Eq
+
+instance Show Predicate where
+   show (Predicate s tp) = if priorityOfType tp == 2 
+                             then s ++ " " ++ show tp
+                             else s ++ " (" ++ show tp ++ ")"                       
+
+instance Substitutable Predicate where
+   sub |-> (Predicate s tp) = Predicate s (sub |-> tp)
+   ftv     (Predicate _ tp) = ftv tp
+   
+----------------------------------------------------------------------  
+-- * Class environments and instances
 
 type ClassEnvironment = FiniteMap String Class
 type Class            = ([String], Instances)

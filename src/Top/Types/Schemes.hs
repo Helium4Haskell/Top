@@ -15,7 +15,6 @@ module Top.Types.Schemes where
 import Top.Types.Basics
 import Top.Types.Quantification
 import Top.Types.Qualification
-import Top.Types.Qualified
 import Top.Types.Substitution
 import Top.Types.Synonyms
 import Top.Types.Unification
@@ -29,6 +28,7 @@ import Data.List
 -- that partially maps these type variables to their original identifier, and a
 -- qualified type.
 type TpScheme = Forall QType
+type QType    = Qualification Predicate Tp
 
 ----------------------------------------------------------------------
 -- * Basic functionality for types and type schemes
@@ -116,3 +116,4 @@ instantiateWithNameMap unique (Quantification (qs,nm,qtp)) =
    in (u, ps, tp)
 
 instance (Show q, Show a) => ShowQuantors (Qualification q a)
+--instance ShowQuantors Predicate
