@@ -30,8 +30,8 @@ import qualified Data.Set as S
 -- * Representation of an equivalence group
 
 data EquivalenceGroup info = 
-   EQGroup { vertices :: [(VertexID, VertexInfo)]  -- ^ vertices in this equivalence group
-           , edges    :: [(EdgeID, EdgeNr, info)]  -- ^ (initial) edges in this equivalence group
+   EQGroup { vertices :: [(VertexId, VertexInfo)]  -- ^ vertices in this equivalence group
+           , edges    :: [(EdgeId, EdgeNr, info)]  -- ^ (initial) edges in this equivalence group
            , cliques  :: [Clique]                  -- ^ (implied) cliques in this equivalence group
            }
 
@@ -54,12 +54,12 @@ emptyGroup :: EquivalenceGroup info
 emptyGroup = 
    EQGroup { vertices = [], edges = [], cliques = [] }
 	   
-insertVertex :: VertexID -> VertexInfo -> EquivalenceGroup info -> EquivalenceGroup info
+insertVertex :: VertexId -> VertexInfo -> EquivalenceGroup info -> EquivalenceGroup info
 insertVertex i info eqgroup = 
    eqgroup { vertices = (i, info) : vertices eqgroup }  
 
-insertEdge :: EdgeID -> EdgeNr -> info -> EquivalenceGroup info -> EquivalenceGroup info
-insertEdge i cnr info eqgroup = 
+insertEdge :: EdgeId -> EdgeInfo info -> EquivalenceGroup info -> EquivalenceGroup info
+insertEdge i (cnr, info) eqgroup = 
    eqgroup { edges = (i, cnr, info) : edges eqgroup }  
    
 insertClique :: Clique -> EquivalenceGroup info -> EquivalenceGroup info 
@@ -87,7 +87,7 @@ combineGroups eqgroup1 eqgroup2 =
 ----------------------------------------------------------------------
 -- * Removing parts from an equivalence group
 
-removeEdge :: EdgeID -> EquivalenceGroup info -> EquivalenceGroup info
+removeEdge :: EdgeId -> EquivalenceGroup info -> EquivalenceGroup info
 removeEdge edge eqgroup =
    let p (e, _, _) = edge /= e
    in eqgroup { edges = filter p (edges eqgroup) }
@@ -106,10 +106,10 @@ splitGroup eqgroup =
               (cs1, cs2) = partition (any ((`elem` is) . fst) . vertices) cs    
           in insertClique clique (foldr combineGroups emptyGroup cs1) : cs2
 
-       addEdge (EdgeID v1 v2,cnr,info) cs =
+       addEdge (EdgeId v1 v2,cnr,info) cs =
           let is         = [v1, v2] 
               (cs1, cs2) = partition (any ((`elem` is) . fst) . vertices) cs
-          in insertEdge (EdgeID v1 v2) cnr info (foldr combineGroups emptyGroup cs1) : cs2
+          in insertEdge (EdgeId v1 v2) (cnr, info) (foldr combineGroups emptyGroup cs1) : cs2
 
    in foldr addEdge (foldr addClique eqcs cs) es
 
@@ -127,7 +127,7 @@ consistent eqgroup =
       [_] -> null [ () | (_, (VApp _ _, _)) <- vertices eqgroup ]
       _   -> False
       
-equalPaths  :: S.Set VertexID -> VertexID -> [VertexID] -> EquivalenceGroup info -> TypeGraphPath info
+equalPaths  :: S.Set VertexId -> VertexId -> [VertexId] -> EquivalenceGroup info -> TypeGraphPath info
 equalPaths without v1 targets eqgroup =
    --(if debugTypeGraph then trace msg else id)  
    tailSharingBy compare $
@@ -135,7 +135,7 @@ equalPaths without v1 targets eqgroup =
 
     where   
       msg        = "Path from "++show v1++" to "++show targets++" without "++show (S.setToList without)
-      edgeList   = let p (EdgeID v1 v2,_,_) = 
+      edgeList   = let p (EdgeId v1 v2,_,_) = 
                           not (v1 `S.elementOf` without) && not (v2 `S.elementOf` without)
                    in filter p (edges eqgroup)
       cliqueList = let f = filter (not . (`S.elementOf` without) . child) . triplesInClique
@@ -145,12 +145,12 @@ equalPaths without v1 targets eqgroup =
       -- Allow a second visit of a clique in a path?
       secondCliqueVisit = False
       
-      rec :: Int -> ([(EdgeID, EdgeNr, info)], [[ParentChild]]) -> TypeGraphPath info
+      rec :: VertexId -> ([(EdgeId, EdgeNr, info)], [[ParentChild]]) -> TypeGraphPath info
       rec v1 (es, cliques)
         | v1 `S.elementOf` targetSet  = Empty
         | otherwise =
-             let (edges1,es' ) = partition (\(EdgeID a _,_,_) -> v1 == a) es
-                 (edges2,es'') = partition (\(EdgeID _ a,_,_) -> v1 == a) es'
+             let (edges1,es' ) = partition (\(EdgeId a _,_,_) -> v1 == a) es
+                 (edges2,es'') = partition (\(EdgeId _ a,_,_) -> v1 == a) es'
                  (neighbourCliques, otherCliques) = 
                     partition ((v1 `elem`) . map child) cliques 
                  rest@(_, restCliques)
@@ -158,11 +158,11 @@ equalPaths without v1 targets eqgroup =
                     | otherwise         = (es'', otherCliques)
              in 
                 altList $ 
-                map (\(EdgeID _ neighbour, cnr, info) -> 
-                      Step (EdgeID v1 neighbour, Initial cnr info) 
+                map (\(EdgeId _ neighbour, cnr, info) -> 
+                      Step (EdgeId v1 neighbour, Initial cnr info) 
                       :+: rec neighbour rest) edges1
-             ++ map (\(EdgeID neighbour _, cnr, info) -> 
-                      Step (EdgeID v1 neighbour, Initial cnr info) 
+             ++ map (\(EdgeId neighbour _, cnr, info) -> 
+                      Step (EdgeId v1 neighbour, Initial cnr info) 
                       :+: rec neighbour rest) edges2
              ++ concatMap (\list ->
                            let (sources, others) = partition ((v1==) . child) list
@@ -176,7 +176,7 @@ equalPaths without v1 targets eqgroup =
                                            | secondCliqueVisit = rec neighbour (es'', map (filter (/= pc)) restCliques)
                                            | otherwise         = rec neighbour rest
                                         steps = altList1 (map g sourceParents)
-                                        g sp = Step ( EdgeID v1 neighbour
+                                        g sp = Step ( EdgeId v1 neighbour
                                                     , Implied (childSide pc) sp (parent pc)
                                                     )
                                   ]
@@ -184,18 +184,18 @@ equalPaths without v1 targets eqgroup =
                                 then []
                                 else map f neighbours) neighbourCliques
 				
-      removeFromClique :: VertexID -> [[ParentChild]] -> [[ParentChild]]
+      removeFromClique :: VertexId -> [[ParentChild]] -> [[ParentChild]]
       removeFromClique vid =
          let p pcs = length pcs > 1
              f pcs = filter ((/=vid) . child) pcs
          in filter p . map f
 
-typeOfGroup :: OrderedTypeSynonyms -> EquivalenceGroup info -> Maybe Tp
+typeOfGroup :: OrderedTypeSynonyms -> EquivalenceGroup info -> Tp
 typeOfGroup synonyms eqgroup = 
    let vertexList     = vertices eqgroup
        constantsList  = constants eqgroup
        childrenList   = [(v, (l,r)) |  (v, (VApp l r, _)) <- vertexList ]
-       elseReturn tp  = Just (maybe tp id originalType)
+       elseReturn tp  = maybe tp id originalType
        representative = fst (head vertexList)
        originalType   =
           case [ tp | (_, (_, Just tp)) <- vertexList ]  of
@@ -208,10 +208,10 @@ typeOfGroup synonyms eqgroup =
                    in foldr1 op (map Just xs)
    in        
       case (constantsList, childrenList) of 
-         ([], [])          -> elseReturn (TVar representative)
+         ([], [])          -> elseReturn (vertexIdToTp representative)
          ([s], [])         -> elseReturn (TCon s)
-         ([], (_,(l,r)):_) -> elseReturn (TApp (TVar l) (TVar r))
-         _ -> Nothing
+         ([], (_,(l,r)):_) -> elseReturn (TApp (vertexIdToTp l) (vertexIdToTp r))
+         _ -> internalError "Top.TypeGraph.EquivalenceGroup" "typeOfGroup" "inconsistent equivalence group"
          
 -- Check for some invariants: identity if everything is okay, otherwise an internal error
 checkGroup :: EquivalenceGroup info -> EquivalenceGroup info

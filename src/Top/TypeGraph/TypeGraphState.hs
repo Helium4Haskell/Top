@@ -22,37 +22,36 @@ class (HasBasic m info, HasTI m info, HasSubst m info)
          => HasTypeGraph m info | m -> info where          
    
    -- construct a type graph
-   addTermGraph :: Tp -> m VertexID
-   addVertex    :: VertexID -> VertexInfo -> m ()
-   addEdge      :: EdgeID -> EdgeInfo info ->  m ()
+   addTermGraph :: Tp -> m VertexId
+   addVertex    :: VertexId -> VertexInfo -> m ()
+   addEdge      :: EdgeId -> EdgeInfo info ->  m ()
    
    -- deconstruct a type graph
-   deleteEdge :: EdgeID -> m () 
+   deleteEdge :: EdgeId -> m ()
    
    -- inspect an equivalence group in a type graph
-   verticesInGroupOf       :: VertexID -> m [(VertexID, VertexInfo)]
-   childrenInGroupOf       :: VertexID -> m ([ParentChild], [ParentChild])
-   constantsInGroupOf      :: VertexID -> m [String]
-   representativeInGroupOf :: VertexID -> m VertexID
-   edgesFrom               :: VertexID -> m [(EdgeID, EdgeNr, info)]
+   verticesInGroupOf       :: VertexId -> m [(VertexId, VertexInfo)]
+   childrenInGroupOf       :: VertexId -> m ([ParentChild], [ParentChild])
+   constantsInGroupOf      :: VertexId -> m [String]
+   representativeInGroupOf :: VertexId -> m VertexId
+   edgesFrom               :: VertexId -> m [(EdgeId, EdgeNr, info)]
    
    -- query a path in an equivalence group
-   allPaths            :: VertexID -> VertexID -> m (TypeGraphPath info)
-   allPathsList        :: VertexID -> [VertexID] -> m (TypeGraphPath info)
-   allPathsListWithout :: S.Set VertexID -> VertexID -> [VertexID] -> m (TypeGraphPath info)  
+   allPaths            :: VertexId -> VertexId -> m (TypeGraphPath info)
+   allPathsList        :: VertexId -> [VertexId] -> m (TypeGraphPath info)
+   allPathsListWithout :: S.Set VertexId -> VertexId -> [VertexId] -> m (TypeGraphPath info)  
    
    -- make the type graph consistent
    removeInconsistencies :: m ()
    
    -- substitution and term graph
-   substituteVariable :: VertexID -> m Tp
-   makeSubstitution   :: m [(VertexID, Tp)]
-   typeFromTermGraph  :: VertexID -> m Tp
+   substituteVariable :: VertexId -> m Tp
+   makeSubstitution   :: m [(VertexId, Tp)]
+   typeFromTermGraph  :: VertexId -> m Tp
    
    -- Extra administration
-   nextConstraintNumber    :: m EdgeNr
-   markAsPossibleError     :: VertexID -> m ()
-   getMarkedPossibleErrors :: m [VertexID]
+   markAsPossibleError     :: VertexId -> m ()
+   getMarkedPossibleErrors :: m [VertexId]
    unmarkPossibleErrors    :: m ()
    
    -------------------------------------------
@@ -60,6 +59,7 @@ class (HasBasic m info, HasTI m info, HasSubst m info)
    
    allPaths i1 i2 = 
       allPathsList i1 [i2]
+
    allPathsList = 
       allPathsListWithout S.emptySet
       

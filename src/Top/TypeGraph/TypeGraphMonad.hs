@@ -6,12 +6,17 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.TypeGraph.TypeGraphMonad where
+module Top.TypeGraph.TypeGraphMonad 
+   ( createGroup, removeGroup, updateGroupOf, getGroupOf, getAllGroups
+   , TypeGraphState, HasTG(..)
+   , getPossibleInconsistentGroups, addPossibleInconsistentGroup, setPossibleInconsistentGroups, 
+   , setHeuristics, getHeuristics, nextConstraintNumber
+   )
+ where
 
 import Top.TypeGraph.EquivalenceGroup
 import Top.TypeGraph.Basics
 import Top.States.States
-import Top.States.SubstState
 import Top.TypeGraph.Heuristics (Heuristic)
 import Top.TypeGraph.DefaultHeuristics (defaultHeuristics)
 import Data.Maybe
@@ -21,10 +26,10 @@ import Control.Monad
 import Utils (internalError)
 
 data TypeGraphState info = TG
-   { referenceMap            :: FiniteMap VertexID Int{- group number -}
+   { referenceMap            :: FiniteMap VertexId Int{- group number -}
    , equivalenceGroupMap     :: FiniteMap Int (EquivalenceGroup info)
    , equivalenceGroupCounter :: Int
-   , possibleErrors          :: [VertexID]
+   , possibleErrors          :: [VertexId]
    , typegraphHeuristics     :: [Heuristic info]
    , constraintNumber        :: Int
    } 
@@ -44,7 +49,7 @@ instance Show (TypeGraphState info) where
 
 instance Show info => IsState (TypeGraphState info)
 
-class HasSubst m info => HasTG m info | m -> info where
+class Monad m => HasTG m info | m -> info where
    tgGet :: m (TypeGraphState info)
    tgPut :: TypeGraphState info -> m ()  
    
@@ -56,58 +61,59 @@ tgGets f = do a <- tgGet ; return (f a)
 
 -----------------------------------------------------------------
 
-createNewGroup :: HasTG m info => EquivalenceGroup info -> m Int
-createNewGroup eqgroup =
+createGroup :: HasTG m info => EquivalenceGroup info -> m ()
+createGroup eqgroup =
    case vertices eqgroup of
       [] -> internalError "Top.TypeGraph.TypeGraphMonad" "createNewGroup" "cannot create an empty equivalence group"
-      vs@((vid, _) : _) ->                      
-         do tgModify
+      vs -> tgModify
                (\groups -> let newGroupNumber = equivalenceGroupCounter groups
                                list = [(i, newGroupNumber) | (i, _) <- vs ]
                            in groups { referenceMap            = addListToFM (referenceMap groups) list
                                      , equivalenceGroupMap     = addToFM (equivalenceGroupMap groups) newGroupNumber eqgroup
                                      , equivalenceGroupCounter = newGroupNumber + 1
                                      })
-            return vid
 
 removeGroup :: HasTG m info => EquivalenceGroup info -> m ()                            
 removeGroup eqgroup = 
    tgModify
-      (\groups -> let vertexIDs  = map fst (vertices eqgroup)
-                      oldGroupNr = maybe [] (:[]) (lookupFM (referenceMap groups) (head vertexIDs))
-                  in groups { referenceMap        = delListFromFM (referenceMap groups) vertexIDs -- is not necessary
+      (\groups -> let vertexIds  = map fst (vertices eqgroup)
+                      oldGroupNr = maybe [] (:[]) (lookupFM (referenceMap groups) (head vertexIds))
+                  in groups { referenceMap        = delListFromFM (referenceMap groups) vertexIds -- is not necessary
                             , equivalenceGroupMap = delListFromFM (equivalenceGroupMap groups) oldGroupNr
                             })
 
-updateEquivalenceGroupOf :: HasTG m info => Int -> (EquivalenceGroup info -> EquivalenceGroup info) -> m ()
-updateEquivalenceGroupOf i f = 
-   do eqgrp <- equivalenceGroupOf i 
+updateGroupOf :: HasTG m info => VertexId -> (EquivalenceGroup info -> EquivalenceGroup info) -> m ()
+updateGroupOf vid f = 
+   do eqgrp <- getGroupOf vid
       tgModify 
-         (\groups -> let err  = internalError "Top.TypeGraph.TypeGraphMonad" "updateEquivalenceGroupOf" ("error in lookup map: v"++show i)
-                         eqnr = lookupWithDefaultFM (referenceMap groups) err i
+         (\groups -> let err  = internalError "Top.TypeGraph.TypeGraphMonad" "updateEquivalenceGroupOf" ("error in lookup map: "++show vid)
+                         eqnr = lookupWithDefaultFM (referenceMap groups) err vid
                      in groups { equivalenceGroupMap = addToFM (equivalenceGroupMap groups) eqnr (f eqgrp) })
 
-equivalenceGroupOf :: HasTG m info => Int -> m (EquivalenceGroup info)                   
-equivalenceGroupOf i =
-   do maybeNr <- tgGets (flip lookupFM i . referenceMap)
+getGroupOf :: HasTG m info => VertexId -> m (EquivalenceGroup info)                   
+getGroupOf vid =
+   do maybeNr <- tgGets (flip lookupFM vid . referenceMap)
       case maybeNr of 
          Nothing ->
-            do let eqgroup = insertVertex i (VVar,Nothing) emptyGroup
-               createNewGroup eqgroup
+            do let eqgroup = insertVertex vid (VVar,Nothing) emptyGroup
+               createGroup eqgroup
                return eqgroup
          Just eqnr -> 
             let err = internalError "Top.TypeGraph.TypeGraphMonad" "equivalenceGroupOf" "error in lookup map"
             in tgGets (\x -> lookupWithDefaultFM (equivalenceGroupMap x) err eqnr)     
 
+getAllGroups :: HasTG m info => m [EquivalenceGroup info]
+getAllGroups = tgGets (eltsFM . equivalenceGroupMap) 
+
 -----------------------------------------------------------------------------------
 
-getPossibleInconsistentGroups :: HasTG m info => m [VertexID]
+getPossibleInconsistentGroups :: HasTG m info => m [VertexId]
 getPossibleInconsistentGroups = tgGets possibleErrors
 
-setPossibleInconsistentGroups :: HasTG m info => [VertexID] -> m ()
+setPossibleInconsistentGroups :: HasTG m info => [VertexId] -> m ()
 setPossibleInconsistentGroups vids = tgModify (\x -> x { possibleErrors = vids })
       
-addPossibleInconsistentGroup :: HasTG m info => VertexID -> m ()
+addPossibleInconsistentGroup :: HasTG m info => VertexId -> m ()
 addPossibleInconsistentGroup vid = tgModify (\x -> x { possibleErrors = vid : possibleErrors x })
          
 --------------------------------------------------------------------------------
@@ -115,3 +121,14 @@ addPossibleInconsistentGroup vid = tgModify (\x -> x { possibleErrors = vid : po
 setHeuristics :: HasTG m info => [Heuristic info] -> m ()
 setHeuristics hs = 
    tgModify (\x -> x {typegraphHeuristics = hs})
+
+getHeuristics :: HasTG m info => m [Heuristic info]
+getHeuristics = tgGets typegraphHeuristics
+
+--------------------------------------------------------------------------------
+
+nextConstraintNumber :: HasTG m info => m EdgeNr
+nextConstraintNumber =
+   do i <- tgGets constraintNumber
+      tgModify (\x -> x { constraintNumber = constraintNumber x + 1})
+      return (makeEdgeNr i)

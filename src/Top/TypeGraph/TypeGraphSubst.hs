@@ -10,12 +10,13 @@ module Top.TypeGraph.TypeGraphSubst where
 
 import Top.States.SubstState
 import Top.TypeGraph.TypeGraphState
+import Top.TypeGraph.TypeGraphMonad
 import Top.TypeGraph.Basics
 import Top.Types
 import Control.Monad
 import Data.FiniteMap
        
-typegraphImpl :: HasTypeGraph m info => SubstState m info
+typegraphImpl :: (HasTG m info, HasTypeGraph m info) => SubstState m info
 typegraphImpl = SubstState
    { 
      makeConsistent_impl = 
@@ -27,14 +28,15 @@ typegraphImpl = SubstState
         do v1  <- addTermGraph t1
            v2  <- addTermGraph t2
            cnr <- nextConstraintNumber           
-           addEdge (EdgeID v1 v2) (cnr, info)
+           addEdge (EdgeId v1 v2) (cnr, info)
            
    , findSubstForVar_impl = \i ->      
         debugTrace ("findSubstForVar " ++ show i) >>
-        substituteVariable i
+        substituteVariable (VertexId i)
             
    , fixpointSubst_impl =         
         debugTrace ("fixpointSubstitution") >>
         do xs <- makeSubstitution
-           return (FixpointSubstitution (listToFM xs))
+           let list = [ (i, tp) | (VertexId i, tp) <- xs ]
+           return (FixpointSubstitution (listToFM list))
    }

@@ -27,12 +27,18 @@ debugTrace message
 
 -----------------------------------------------------------------------------------------
 
-type VertexID   = Int
-type VertexInfo = (VertexKind, Maybe Tp)                      
-data VertexKind = VVar | VCon String | VApp VertexID VertexID
+newtype VertexId = VertexId Int deriving (Eq, Ord)
+type VertexInfo  = (VertexKind, Maybe Tp)                      
+data VertexKind  = VVar | VCon String | VApp VertexId VertexId
    deriving (Show, Eq, Ord)     
-                     
-data EdgeID        = EdgeID VertexID VertexID
+
+instance Show VertexId where
+   show (VertexId i) = "<" ++ show i ++ ">"
+            
+vertexIdToTp :: VertexId -> Tp     
+vertexIdToTp (VertexId i) = TVar i
+    
+data EdgeId        = EdgeId VertexId VertexId
 type EdgeInfo info = (EdgeNr, info)
 newtype EdgeNr     = EdgeNrX Int deriving (Eq, Ord)
 data ChildSide     = LeftChild | RightChild
@@ -48,7 +54,7 @@ instance Show ChildSide where
    show LeftChild  = "(l)"
    show RightChild = "(r)"
 
-data ParentChild = ParentChild { parent :: VertexID, child :: VertexID, childSide :: ChildSide }
+data ParentChild = ParentChild { parent :: VertexId, child :: VertexId, childSide :: ChildSide }
    deriving Eq
 
 instance Show ParentChild where
@@ -57,10 +63,10 @@ instance Show ParentChild where
 instance Ord ParentChild where
    compare pc1 pc2 = compare (child pc1, parent pc1) (child pc2, parent pc2)
 
-type TypeGraphPath info = Path (EdgeID, PathStep info)
+type TypeGraphPath info = Path (EdgeId, PathStep info)
 data PathStep info 
    = Initial  EdgeNr info
-   | Implied  ChildSide VertexID VertexID
+   | Implied  ChildSide VertexId VertexId
    | Child    ChildSide
    
 instance Show (PathStep info) where
@@ -103,7 +109,7 @@ isDisjointClique (CliqueX xs) (CliqueX ys) = rec xs ys
       | x > y     = rec a ys
       | otherwise = rec xs b
       
-cliqueRepresentative :: Clique -> VertexID
+cliqueRepresentative :: Clique -> VertexId
 cliqueRepresentative (CliqueX xs) =
    case xs of
       []  -> internalError "Top.TypeGraph.Basics" "cliqueRepresentative" "A clique cannot be empty"
@@ -112,7 +118,7 @@ cliqueRepresentative (CliqueX xs) =
 triplesInClique :: Clique -> [ParentChild]
 triplesInClique (CliqueX xs) = xs
 
-childrenInClique :: Clique -> [VertexID]
+childrenInClique :: Clique -> [VertexId]
 childrenInClique = map child . triplesInClique
 
 mergeCliques :: CliqueList -> Clique
@@ -138,15 +144,15 @@ combineCliqueList (x:xs) ys =
    let (ys1, ys2) = partition (isDisjointClique x) ys
    in mergeCliques (x:ys2) : combineCliqueList xs ys1
    
-instance Show EdgeID where
-   show (EdgeID a b) = "("++show a'++"-"++show b'++")"
+instance Show EdgeId where
+   show (EdgeId a b) = "("++show a'++"-"++show b'++")"
       where (a',b') = if a <= b then (a,b) else (b,a)
      
-instance Eq EdgeID where
-   EdgeID a b == EdgeID c d = (a == c && b == d) || (a == d && b == c)
+instance Eq EdgeId where
+   EdgeId a b == EdgeId c d = (a == c && b == d) || (a == d && b == c)
    
-instance Ord EdgeID where
-   EdgeID a b <= EdgeID c d = order (a,b) <= order (c,d)
+instance Ord EdgeId where
+   EdgeId a b <= EdgeId c d = order (a,b) <= order (c,d)
       where order (i,j) = if i <= j then (i,j) else (j,i)
 
 -- don't consider the stored information for equality
