@@ -59,7 +59,13 @@ matchPredicates synonyms (Predicate s1 t1) (Predicate s2 t2)
         Right (_, s) -> let f _ = unfreezeVariablesInType
                         in Just (mapFM f s)
    | otherwise = Nothing
-                
+
+insertInstance :: String -> Instance -> ClassEnvironment -> ClassEnvironment 
+insertInstance className inst env = 
+    case lookupFM env className of
+        Nothing -> addToFM env className ([], [inst])
+        Just (parents, insts) -> addToFM env className (parents, inst:insts)
+
 ---------------------------------------------------------------------- 
 -- * Class environment
 
