@@ -9,10 +9,8 @@
 module Top.TypeGraph.Heuristics where
 
 import Top.TypeGraph.TypeGraphState
-import Top.TypeGraph.EquivalenceGroup
 import Top.TypeGraph.Basics
 import Top.TypeGraph.Paths
-import Top.States.BasicState
 import Top.Types
 import Control.Monad
 import Utils (internalError)
@@ -21,9 +19,10 @@ import Utils (internalError)
 
 newtype Heuristic  info = Heuristic (forall m . HasTypeGraph m info => HComponent m info)
 data HasTypeGraph m info => Selector m info 
-   = Selector     (String, (EdgeID, Int, info) -> m (Maybe (Int, String, [EdgeID], [info])))
-   | SelectorList (String, [(EdgeID, Int, info)] -> m (Maybe (Int, String, [EdgeID], [info])))
-   | SelectorPath (Path (EdgeID, Int, info) -> Selector m info)
+   = Selector       (String, (EdgeID, Int, info) -> m (Maybe (Int, String, [EdgeID], [info])))
+   | SelectorList   (String, [(EdgeID, Int, info)] -> m (Maybe (Int, String, [EdgeID], [info])))
+   | SelectorAction (String, (EdgeID, Int, info) -> m (Maybe (m (), Int, String, [EdgeID], [info])))
+   | SelectorPath   (Path (EdgeID, Int, info) -> Selector m info)
 
 data HComponent m info 
      = Filter    String ([(EdgeID, Int, info)] -> m [(EdgeID, Int, info)])
@@ -32,11 +31,11 @@ data HComponent m info
           
 resultsEdgeFilter :: (Eq a, Monad m) => ([a] -> a) -> String -> ((EdgeID,Int,info) -> m a) -> HComponent m info
 resultsEdgeFilter selector description function =
-   Filter description $ \edges -> 
+   Filter description $ \es -> 
    do tupledList <- let f tuple = 
                            do result <- function tuple
                               return (result, tuple)
-                    in mapM f edges
+                    in mapM f es
       let maximumResult 
             | null tupledList = internalError "Top.TypeGraph.Heuristics" "resultsEdgeFilter" "unexpected empty list" 
             | otherwise       = selector (map fst tupledList)
@@ -50,25 +49,25 @@ minimalEdgeFilter = resultsEdgeFilter minimum
 
 edgeFilter :: Monad m => String -> ((EdgeID, Int, info) -> m Bool) -> HComponent m info
 edgeFilter description function = 
-   Filter description $ \edges -> 
-      do xs <- filterM function edges
-         return (if (null xs) then edges else xs)
+   Filter description $ \es -> 
+      do xs <- filterM function es
+         return (if (null xs) then es else xs)
 
 
 -----------------------------------------------------------------------------
 
-doWithoutEdges :: HasTypeGraph m info => [(EdgeID, info)] -> m result -> m result
+doWithoutEdges :: HasTypeGraph m info => [(EdgeID, Int, info)] -> m result -> m result
 doWithoutEdges xs computation = 
    case xs of 
       []   -> computation
       [e]  -> doWithoutEdge e computation
       e:es -> doWithoutEdge e (doWithoutEdges es computation)
 
-doWithoutEdge :: HasTypeGraph m info => (EdgeID, info) -> m result -> m result
-doWithoutEdge (edge@(EdgeID v1 v2),info) computation =
+doWithoutEdge :: HasTypeGraph m info => (EdgeID, Int, info) -> m result -> m result
+doWithoutEdge (edge, cnr, info) computation =
    do deleteEdge edge       
       result <- computation           
-      addEdge edge info
+      addEdge edge (cnr, info)
       return result
                    
 -- keep a history to avoid non-termination (for type-graphs that contain an infinite type)
@@ -80,13 +79,13 @@ safeApplySubst = rec [] where
     TVar i | i `elem` history 
                -> return Nothing
            | otherwise 
-               -> do vertices  <- verticesInGroupOf  i
-                     constants <- constantsInGroupOf i
-                     children  <- childrenInGroupOf  i                     
-                     case constants of 
+               -> do vs       <- verticesInGroupOf  i
+                     cs       <- constantsInGroupOf i
+                     children <- childrenInGroupOf  i                     
+                     case cs of 
                         [s] -> return (Just (TCon s))               
                         []  -> case children of 
-                                  []        -> let rep = fst (head vertices)
+                                  []        -> let rep = fst (head vs)
                                                in return (Just (TVar rep))
                                   (_, (c1, c2)):_ -> 
                                      do mt1 <- rec (i : history) (TVar c1)
@@ -96,7 +95,7 @@ safeApplySubst = rec [] where
                                               tp2 <- mt2
                                               return (TApp tp1 tp2)
                         _ -> return Nothing
-    TCon s     -> return (Just tp)
+    TCon _     -> return (Just tp)
     
     TApp t1 t2 -> do mt1 <- rec history t1
                      mt2 <- rec history t2
@@ -105,7 +104,10 @@ safeApplySubst = rec [] where
                        _                    -> return Nothing
 
 eqInfo3 :: (EdgeID, Int, info) -> (EdgeID, Int, info) -> Bool
-eqInfo3 (a1,b1,_) (a2,b2,_) = b1 == b2
+eqInfo3 (_, b1, _) (_, b2, _) = b1 == b2
+
+info3ToInt :: (EdgeID, Int, info) -> Int
+info3ToInt (_, i, _) = i
 
 -----------------------------------------------------------------------------
 

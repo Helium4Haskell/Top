@@ -6,33 +6,51 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.Solvers.SimpleSolver (Simple, SimpleX, evalSimple, SimpleState, solveSimple) where
+module Top.Solvers.SimpleSolver (Simple, SimpleX, SimpleState, solveSimple, runSimplePlusDoAtEnd, runSimple) where
 
-import Top.States.BasicMonad
 import Top.States.TIState
 import Top.States.SubstState
+import Top.States.States
+import Top.Solvers.BasicMonad
 import Top.Solvers.SolveConstraints
 import Top.Solvers.SimpleSubst
 import Top.Types
 import Top.Constraints.Constraints
+import Top.Constraints.TypeConstraintInfo
+import Top.Qualifiers.Qualifiers
 
-evalSimple :: Simple info a -> a
-evalSimple = eval
+type SimpleX info qs ext = SolveX info qs SimpleState ext
+type Simple  info qs     = SimpleX info qs ()
 
-type SimpleX info ext = SolveX info SimpleState ext
-type Simple  info     = SimpleX info ()
+solveSimple :: 
+   ( IsState ext
+   , Solvable constraint (SimpleX info qs ext)
+   , QualifierList (SimpleX info qs ext) info qs qsInfo
+   ) => 
+     SimpleX info qs ext () ->
+     ClassEnvironment -> OrderedTypeSynonyms -> Int -> [constraint] ->
+     SimpleX info qs ext (SolveResult info qs ext)
 
-solveSimple :: Solvable constraint (Simple info) 
-                  => Solver constraint info
-solveSimple synonyms unique = 
-   evalSimple . solveConstraints skip solveResult synonyms unique
+solveSimple todo classEnv syns unique = 
+   solveConstraints doFirst doAtEnd
+      where
+         doFirst = 
+            do setUnique unique
+               setTypeSynonyms syns
+               setClassEnvironment classEnv
+         doAtEnd =
+            do todo
+               solveResult
+   
+runSimplePlusDoAtEnd todo classEnv syns unique = 
+   eval . solveSimple todo classEnv syns unique
 
-instance IsState SimpleState where
-   empty     = emptySimple
-  
-instance HasSubst (SimpleX info ext) info where
+runSimple x = 
+   runSimplePlusDoAtEnd (return ()) x
+   
+instance HasSubst (SimpleX info qs ext) info where
    substState = simpleState
 
-instance HasSimple (SimpleX info ext) info where
-   simpleGet   = do (_,(y,_)) <- getX; return y
-   simplePut y = do (x,(_,z)) <- getX; putX (x,(y,z))
+instance HasSimple (SimpleX info qs ext) info where
+   simpleGet   = do (_,(_,(z,_))) <- getX; return z
+   simplePut z = do (x,(y,(_,w))) <- getX; putX (x,(y,(z,w)))

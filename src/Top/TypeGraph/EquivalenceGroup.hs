@@ -4,190 +4,207 @@
 -- Stability   :  experimental
 -- Portability :  unknown
 --
+-- An equivalence group is a graph-like structure containing type variables and 
+-- type constants that should all be equivalent. The edges explain why they should
+-- be equal.
+--
 -----------------------------------------------------------------------------
 
-module Top.TypeGraph.EquivalenceGroup where
+module Top.TypeGraph.EquivalenceGroup 
+   ( EquivalenceGroup 
+   , emptyGroup, insertVertex, insertEdge, combineGroups
+   , vertices, constants, edges, equalPaths
+   , removeEdge, removeClique, splitGroup
+   , typeOfGroup, combineCliques, consistent
+   ) where
 
 import Top.TypeGraph.Paths
 import Top.TypeGraph.Basics
 import Top.Types
-import Data.List
 import Utils (internalError)
 import Debug.Trace (trace)
+import Data.List
+import qualified Data.Set as S
 
-emptyGroup        ::                                                    EquivalenceGroup info
-insertVertex      :: VertexID -> VertexInfo -> EquivalenceGroup info -> EquivalenceGroup info 
-insertEdge        :: EdgeID -> Int -> info ->  EquivalenceGroup info -> EquivalenceGroup info 
-combineCliques    :: Cliques ->                EquivalenceGroup info -> EquivalenceGroup info 
-combineGroups     :: EquivalenceGroup info ->  EquivalenceGroup info -> EquivalenceGroup info
-splitGroup        :: EquivalenceGroup info ->                         [ EquivalenceGroup info ]
+-----------------------------------------------------------------------
+-- * Representation of an equivalence group
 
-removeEdge        :: EdgeID  -> EquivalenceGroup info -> EquivalenceGroup info
-removeClique      :: Cliques -> EquivalenceGroup info -> EquivalenceGroup info
+data EquivalenceGroup info = 
+   EQGroup { vertices :: [(VertexID,VertexInfo)]        -- ^ vertices in this equivalence group
+           , edges    :: [(EdgeID,Int,info)]            -- ^ (initial) edges in this equivalence group
+           , cliques  :: [(Int,[(VertexID,VertexID)])]  -- ^ (implied) cliques in this equivalence group
+           }
 
-vertices          :: EquivalenceGroup info -> [(VertexID,VertexInfo)]
-edges             :: EquivalenceGroup info -> [(EdgeID,Int,info)]
-cliques           :: EquivalenceGroup info -> [Clique]
-constants         :: EquivalenceGroup info -> [String]
-consistent        :: EquivalenceGroup info -> Bool
-
-pathsFrom         :: VertexID -> [VertexID] -> EquivalenceGroup info -> Path (EdgeID, EdgeInfo info)
-pathsFromWithout  :: [VertexID] ->  VertexID -> [VertexID] -> EquivalenceGroup info -> Path (EdgeID, EdgeInfo info)
-
------------------------------------------------------------------------------------------
-
-
-----------------------------------------------------------------------
--- Representation of an equivalence group
-
-newtype EquivalenceGroup info = 
-   EQGroup ( [(VertexID,VertexInfo)]        -- variables
-           , [String]                       -- constants
-           , [(EdgeID,Int,info)]            -- (initial) edges
-           , [(Int,[(VertexID,VertexID)])]  -- (implied) cliques
-           )
-
--- first sort the items of an equivalence group for the Eq instance
+-- first sort the items of an equivalence group
 instance Show (EquivalenceGroup info) where
-   show (EQGroup (vs1,ss1,es1,cs1)) = 
-      unlines [ "[Vertices ]: "++show (sort vs1)
-              , "[Constants]: "++show (sort ss1)
-              , "[Edges    ]: "++show (sort (map (\(a,_,_) -> a) es1))
-              , "[Cliques  ]: "++show (sort (map f cs1))
+   show eqgroup = 
+      unlines [ "[Vertices ]: "++show (sort (vertices eqgroup))
+              , "[Edges    ]: "++show (sort [ a | (a, _, _) <- edges eqgroup ])
+              , "[Cliques  ]: "++show (sort [ (i, sort xs) | (i,xs) <- cliques eqgroup ])
               ]
-         where f (i,xs) = (i,sort xs) 
-         
-instance Eq (EquivalenceGroup info) where
-   a == x = show a == show x         
-     
 
-----------------------------------------------------------------------
--- Functions to construct an equivalence group
+-----------------------------------------------------------------------
+-- * Constructing an equivalence group
 
-emptyGroup = EQGroup ([],[],[],[])
+emptyGroup :: EquivalenceGroup info
+emptyGroup = 
+   EQGroup { vertices = [] 
+           , edges    = [] 
+           , cliques  = []
+           }
+	   
+insertVertex :: VertexID -> VertexInfo -> EquivalenceGroup info -> EquivalenceGroup info
+insertVertex i info eqgroup = 
+   eqgroup { vertices = (i, info) : vertices eqgroup }  
 
-insertVertex i info (EQGroup (vs,ss,es,cs)) = (EQGroup ((i,info):vs,ss',es,cs))
-   where ss' = case info of 
-                  (VCon s,_) -> [s] `union` ss
-                  _          -> ss
-   
-insertEdge i cnr info (EQGroup (vs,ss,es,cs)) = (EQGroup (vs,ss,(i,cnr,info):es,cs))  
+insertEdge :: EdgeID -> Int -> info -> EquivalenceGroup info -> EquivalenceGroup info
+insertEdge i cnr info eqgroup = 
+   eqgroup { edges = (i,cnr,info) : edges eqgroup }  
  
- {- updated 3 december 2002: improvement in combining cliques -}
-combineCliques (i,lists) (EQGroup (vs,ss,es,cs)) = 
+{- updated 3 december 2002: improvement in combining cliques -}
+combineCliques :: Cliques -> EquivalenceGroup info -> EquivalenceGroup info 
+combineCliques (i,lists) eqgroup = 
    (if debugTypeGraph then trace msg else id) 
-   (EQGroup (vs,ss,es,new))
+   eqgroup { cliques = newCliques }
 
-      where new = filter ((>1) . length . snd) (newclass : cs1)
-            (cs1,cs2) = let p (j,list) = i /= j || all (`notElem` concat lists) list
-                        in partition p cs
-            newclass  = (i,(nub . concat) (lists++map snd cs2))
-            
-            msg = unlines ["------------------combine clique -------------------------"
-                          ,"status: "++ show (null [ x | (i,list) <- cs, (x,_) <- list, x `notElem` map fst vs ])
-                          ,"vertices: "++show (map fst vs)                                    
-                          ,"first: "++show cs
-                          ,"clique: "++show (i,lists) 
-                          ,"result: "++show new
+      where newCliques = filter ((>1) . length . snd) (new : cs1)
+            p (j,list) = i /= j || all (`notElem` concat lists) list
+            (cs1,cs2)  = partition p (cliques eqgroup)
+            new        = (i,(nub . concat) (lists++map snd cs2))
+	    
+            msg = unlines [ "------------------combine clique -------------------------"
+                          , show eqgroup
+                          , "---- new cliques ----"
+                          , show newCliques
                           ]
 
-combineGroups (EQGroup (vs1,ss1,es1,cs1)) (EQGroup (vs2,ss2,es2,cs2)) = 
-   EQGroup (vs1++vs2,ss1 `union` ss2,es1++es2,cs1++cs2)
-
-splitGroup eqc = let (vs,es,cs) = (vertices eqc,edges eqc,cliques eqc)
-                     eqcs = map (\(a,b) -> insertVertex a b emptyGroup) vs
-
-                     addClique (cnr,list) cs 
-                        | length list < 2 = cs
-                        | null cs1        = internalError "Top.TypeGraph.EquivalenceGroup" "splitGroup" ("empty list (1) \n"++show eqc)
-                        | otherwise       = combineCliques (cnr,[list]) (foldr combineGroups emptyGroup cs1) : cs2
-                      
-                       where (cs1,cs2) = partition p cs 
-                             p c       = any ((`elem` is) . fst) (vertices c)
-                             is        = map fst list
- 
-                     addEdge (EdgeID v1 v2,cnr,info) cs 
-                        | null cs1  = internalError "Top.TypeGraph.EquivalenceGroup" "splitGroup" "empty list (2)"
-                        | otherwise = insertEdge (EdgeID v1 v2) cnr info (foldr combineGroups emptyGroup cs1) : cs2
-                        
-                       where (cs1,cs2) = partition p cs
-                             p c       = any ((`elem` [v1,v2]) . fst) (vertices c)
-
-                 in foldr addEdge (foldr addClique eqcs cs) es
-
+combineGroups :: EquivalenceGroup info -> EquivalenceGroup info -> EquivalenceGroup info
+combineGroups eqgroup1 eqgroup2 = 
+   EQGroup { vertices = vertices eqgroup1 ++ vertices eqgroup2
+           , edges    = edges    eqgroup1 ++ edges    eqgroup2
+           , cliques  = cliques  eqgroup1 ++ cliques  eqgroup2
+           }
+	   
 ----------------------------------------------------------------------
--- Functions to remove parts of an equivalence group
+-- * Removing parts from an equivalence group
 
-removeEdge edge (EQGroup (vs1,ss1,es1,cs1)) = EQGroup (vs1,ss1,filter p es1,cs1)
-   where p (e,_,_) = edge /= e
+removeEdge :: EdgeID -> EquivalenceGroup info -> EquivalenceGroup info
+removeEdge edge eqgroup =
+   let p (e, _, _) = edge /= e
+   in eqgroup { edges = filter p (edges eqgroup) }
 
 {- Bug fix March 5, 2004: there should be an 'all' in the predicate 'p' -}
-removeClique (i,lists) (EQGroup (vs,ss,es,cs)) = 
+removeClique :: Cliques -> EquivalenceGroup info -> EquivalenceGroup info
+removeClique (i,lists) eqgroup =
    (if debugTypeGraph then trace msg else id) 
-   (EQGroup (vs,ss,es,new))
-   
-      where new = zip (repeat i) (filter ((>1) . length) lists) ++ filter p cs
+   eqgroup { cliques = newCliques }
+
+      where newCliques = zip (repeat i) (filter ((>1) . length) lists) ++ filter p (cliques eqgroup)
             p (j,list) = (i /= j || all (`notElem` concat lists) list) && length list > 1  
             
-            msg = unlines ["------------------remove clique -------------------------"
-                          ,"status: "++ show (null [ x | (i,list) <- cs, (x,_) <- list, x `notElem` map fst vs ])
-                          ,"vertices: "++show (map fst vs)                  
-                          ,"first: "++show cs
-                          ,"clique: "++show (i,lists) 
-                          ,"result: "++show new
+            msg = unlines [ "------------------remove clique -------------------------"
+                          , show eqgroup
+                          , "---- new cliques ----"
+                          , show newCliques
                           ] 
-                      
+			  
+splitGroup :: EquivalenceGroup info -> [EquivalenceGroup info]
+splitGroup eqc = 
+   let (vs,es,cs) = (vertices eqc,edges eqc,cliques eqc)
+       eqcs = map (\(a,b) -> insertVertex a b emptyGroup) vs
+
+       addClique (cnr,list) cs 
+          | length list < 2 = cs
+          | null cs1        = internalError "Top.TypeGraph.EquivalenceGroup" "splitGroup" ("unexpected empty list (1)")
+          | otherwise       = combineCliques (cnr,[list]) (foldr combineGroups emptyGroup cs1) : cs2
+        
+         where (cs1,cs2) = partition p cs 
+               p c       = any ((`elem` is) . fst) (vertices c)
+               is        = map fst list
+
+       addEdge (EdgeID v1 v2,cnr,info) cs 
+          | null cs1  = internalError "Top.TypeGraph.EquivalenceGroup" "splitGroup" "unexpected empty list (2)"
+          | otherwise = insertEdge (EdgeID v1 v2) cnr info (foldr combineGroups emptyGroup cs1) : cs2
+          
+         where (cs1,cs2) = partition p cs
+               p c       = any ((`elem` [v1,v2]) . fst) (vertices c)
+
+   in foldr addEdge (foldr addClique eqcs cs) es			  
+
 ----------------------------------------------------------------------
--- Functions to get the contents of an equivalence group
+-- * Interrogating an equivalence group
 
-vertices   (EQGroup (vs1,ss1,es1,cs1)) = vs1
-edges      (EQGroup (vs1,ss1,es1,cs1)) = es1
-cliques    (EQGroup (vs1,ss1,es1,cs1)) = cs1
-constants  (EQGroup (vs1,ss1,es1,cs1)) = ss1
-
+constants :: EquivalenceGroup info -> [String]
+constants eqgroup = 
+   nub [ s | (_, (VCon s, _)) <- vertices eqgroup ]
+   
+consistent :: EquivalenceGroup info -> Bool
 consistent eqgroup = 
-   case length (constants eqgroup) of
-      0 -> True
-      1 -> null [ () | (_, (VApp _ _, _)) <- vertices eqgroup ]
-      _ -> False
-    
-----------------------------------------------------------------------
--- All paths between two vertices in a group 
-
-pathsFrom = pathsFromWithout []
-
-pathsFromWithout without v1 targets eqgroup
- | otherwise = 
-   let edgeList   = [ edge   | edge@(EdgeID v1 v2,_,_) <- edges eqgroup, v1 `notElem` without, v2 `notElem` without ]
-       cliqueList = [ (childNr, filter ((`notElem` without) . fst) members) | (childNr, members) <- cliques eqgroup ]
-   in tailSharingBy compare
-    $ rec v1 (edgeList, cliqueList) 
+   case constants eqgroup of
+      []  -> True
+      [_] -> null [ () | (_, (VApp _ _, _)) <- vertices eqgroup ]
+      _   -> False
+      
+equalPaths  :: S.Set VertexID -> VertexID -> [VertexID] -> EquivalenceGroup info -> Path (EdgeID, EdgeInfo info)
+equalPaths without v1 targets eqgroup =
+   (if debugTypeGraph then trace msg else id)  
+   tailSharingBy compare $
+      rec v1 (edgeList, cliqueList)  
 
     where   
+      msg        = "Path from "++show v1++" to "++show targets++" without "++show (S.setToList without)
+      edgeList   = [ edge   | edge@(EdgeID v1 v2,_,_) <- edges eqgroup, not (v1 `S.elementOf` without), not (v2 `S.elementOf` without) ]
+      cliqueList = [ (childNr, filter (\(i, _) -> not (i `S.elementOf` without)) members) | (childNr, members) <- cliques eqgroup ]
+      targetSet  = S.mkSet targets
+      
+      -- Allow a second visit of a clique in a path?
+      secondCliqueVisit = False
+      
       rec :: Int -> ([(EdgeID, Int, info)],[Clique]) -> Path (EdgeID, EdgeInfo info)
-      rec v1 (es,cs)
-        | v1 `elem` targets  = Empty
-        | otherwise = let (edges1,es' ) = partition (\(EdgeID a _,_,_) -> v1 == a) es
-                          (edges2,es'') = partition (\(EdgeID _ a,_,_) -> v1 == a) es'
-                          (cliques,cs') = partition (elem v1 . map fst . snd) cs
-                          rest = (es'',cs')
-                      in altList $ 
-                         map (\(EdgeID _ neighbour,cnr,info) -> 
-                               Step (EdgeID v1 neighbour,Initial cnr info) 
-                               :+: rec neighbour rest) edges1
-                      ++ map (\(EdgeID neighbour _,cnr,info) -> 
-                               Step (EdgeID v1 neighbour,Initial cnr info) 
-                               :+: rec neighbour rest) edges2
-                      ++ concatMap (\(cnr,list) -> 
-                                      let (list1, list2) = partition ((==v1) . fst) list 
-                                      in [ Step (EdgeID v1 neighbour, Implied cnr v1parent parent)
-                                             :+: recPath
-                                         | (neighbour,parent) <- list2
-                                         , let recPath = rec neighbour rest
-                                         , (_, v1parent) <- list1
-                                         ]) cliques                                                                                                              
+      rec v1 (es, cliques)
+        | v1 `S.elementOf` targetSet  = Empty
+        | otherwise =
+             let (edges1,es' ) = partition (\(EdgeID a _,_,_) -> v1 == a) es
+                 (edges2,es'') = partition (\(EdgeID _ a,_,_) -> v1 == a) es'
+                 (neighbourCliques, otherCliques) = partition (\(_, cl) -> any ((==v1) . fst) cl) cliques 
+                 rest@(_, restCliques)
+                    | secondCliqueVisit = (es'', removeFromClique v1 neighbourCliques ++ otherCliques)
+                    | otherwise         = (es'', otherCliques)
+             in 
+                altList $ 
+                map (\(EdgeID _ neighbour,cnr,info) -> 
+                      Step (EdgeID v1 neighbour,Initial cnr info) 
+                      :+: rec neighbour rest) edges1
+             ++ map (\(EdgeID neighbour _,cnr,info) -> 
+                      Step (EdgeID v1 neighbour,Initial cnr info) 
+                      :+: rec neighbour rest) edges2
+             ++ concatMap (\(cnr, cliqueList) ->
+                           let (sources, others) = partition ((v1==) . fst) cliqueList
+                               sourceParents     = map snd sources
+                               neighbours        = nub (map fst others)
+                               f neighbour       = altList 
+                                  [ steps :+: restPath
+                                  | pair@(n, neighbourParent) <- others
+                                  , n == neighbour
+                                  , let restPath   
+                                           | secondCliqueVisit = rec neighbour (es'', map f restCliques)
+                                           | otherwise         = rec neighbour rest
+                                        f (cnr,cl) = (cnr, filter (/= pair) cl)
+                                        steps      = altList1 (map g sourceParents)
+                                        g sp       = Step (EdgeID v1 neighbour, Implied cnr sp neighbourParent)
+                                  ]
+                           in if null sources 
+                                then []
+                                else map f neighbours) neighbourCliques
+				
+      removeFromClique :: VertexID -> [Clique] -> [Clique]
+      removeFromClique vid cs = 
+         [ (cnr, list')
+         | (cnr, list) <- cs
+         , let list' = filter ((/=vid) . fst) list
+         , length list' > 1
+         ]
 
--- a non-recursive function to find the type of an equivalence group
 typeOfGroup :: OrderedTypeSynonyms -> EquivalenceGroup info -> Maybe Tp
 typeOfGroup synonyms eqgroup = 
    let vertexList     = vertices eqgroup
@@ -200,13 +217,13 @@ typeOfGroup synonyms eqgroup =
              [] -> Nothing
              xs -> let op (Just t1) (Just t2) = 
                           case mguWithTypeSynonyms synonyms t1 t2 of
-                             Left _      -> Nothing
-                             Right (b,s) -> Just $ equalUnderTypeSynonyms synonyms (s |-> t1) (s |-> t2)
+                             Left _       -> Nothing
+                             Right (_, s) -> Just $ equalUnderTypeSynonyms synonyms (s |-> t1) (s |-> t2)
                        op _ _ = Nothing                             
                    in foldr1 op (map Just xs)
    in        
-           case (constantsList, childrenList) of 
-              ([], [])          -> elseReturn (TVar representative)
-              ([s], [])         -> elseReturn (TCon s)
-              ([], (_,(l,r)):_) -> elseReturn (TApp (TVar l) (TVar r))
-              _ -> Nothing
+      case (constantsList, childrenList) of 
+         ([], [])          -> elseReturn (TVar representative)
+         ([s], [])         -> elseReturn (TCon s)
+         ([], (_,(l,r)):_) -> elseReturn (TApp (TVar l) (TVar r))
+         _ -> Nothing

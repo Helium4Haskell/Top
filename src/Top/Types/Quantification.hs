@@ -39,7 +39,11 @@ unquantify (Quantification (_, _, a)) = a
 
 instance Substitutable a => Substitutable (Quantification q a) where
    sub |-> (Quantification (is, qmap, a)) = Quantification (is, qmap, removeDom is sub |-> a)
-   ftv     (Quantification (is, qmap, a)) = ftv a \\ is
+   ftv     (Quantification (is, _   , a)) = ftv a \\ is
+
+instance HasTypes a => HasTypes (Quantification q a) where
+   getTypes      (Quantification (_, _, a))     = getTypes a
+   changeTypes f (Quantification (is, qmap, a)) = Quantification (is, qmap, changeTypes f a)
 
 introduceTypeVariables :: Substitutable a => Int -> Quantification q a -> (Int, a)
 introduceTypeVariables i (Quantification (qs, _, a)) = 
@@ -130,7 +134,7 @@ class HasSkolems a where
    changeSkolems :: [(Int, Tp)] -> a -> a
    
 instance HasSkolems Tp where
-   allSkolems (TVar i)   = []
+   allSkolems (TVar _)   = []
    allSkolems (TCon s)   = case fromSkolemString s of
                               Just i  -> [i]
                               Nothing -> []
@@ -190,7 +194,11 @@ instance (Substitutable a, ShowQuantors a, Show q) => ShowQuantors (Quantificati
           qmap1       | not (useTheNameMap options) || showAllTheSame options = []
                       | otherwise = 
                            let op (rest, donts) (i,n)
-                                  | i `elem` qs = let s = head [ n ++ extra | extra <- "" : map show [1..], n ++ extra `notElem` donts ]
+                                  | i `elem` qs = let ints = [1..] :: [Int]
+                                                      s = head [ n ++ extra 
+                                                               | extra <- "" : map show ints
+                                                               , n ++ extra `notElem` donts 
+                                                               ]
                                                   in ((i,s):rest, s:donts)
                                   | otherwise   = (rest, donts)
                            in fst (foldl op ([], dontUse) qmap)

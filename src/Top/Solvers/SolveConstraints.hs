@@ -10,85 +10,87 @@ module Top.Solvers.SolveConstraints where
 
 import Top.Types
 import Top.Constraints.Constraints
+import Top.Qualifiers.Qualifiers
+import Top.Constraints.TypeConstraintInfo
+import Top.States.States
 import Top.States.SubstState
 import Top.States.BasicState
 import Top.States.TIState
-import Top.States.BasicMonad
+import Top.States.QualifierState
+import Top.Solvers.BasicMonad
+import Data.List
 
-type SolveX info sub ext = BasicX info (TIState info, (sub, ext))
-type Solve  info sub     = SolveX info sub ()
+type SolveX info qs sub ext = BasicX info (TIState info, (QualifierState qs info, (sub, ext)))
+type Solve  info qs sub     = SolveX info qs sub ()
 
-instance HasTI (SolveX info sub ext) info where
-   tiGet   = do (x,_) <- getX; return x
-   tiPut x = do (_,y) <- getX; putX (x,y)
+instance HasTI (SolveX info qs sub ext) info where
+   tiGet   = do (x, _) <- getX; return x
+   tiPut x = do (_, y) <- getX; putX (x, y)
 
-instance IsState (TIState info) where
-   empty = emptyTI
+instance HasQual (SolveX info qs sub ext) qs info where
+   qualGet   = do (_, (y, _)) <- getX; return y
+   qualPut y = do (x, (_, z)) <- getX; putX (x, (y, z))
 
-solveConstraints :: ( IsState sub
-                    , IsState ext
-                    , HasSubst (SolveX info sub ext) info
-                    , Solvable constraint (SolveX info sub ext)
-                    ) 
-                 => SolveX info sub ext ()              -- doFirst
-                 -> SolveX info sub ext result          -- doAtEnd
-                 -> OrderedTypeSynonyms                 -- synonyms
-                 -> Int                                 -- unique
-                 -> [constraint]                        -- constraints
-                 -> SolveX info sub ext result          -- result
-solveConstraints doFirst doAtEnd synonyms unique constraints = 
-   do setUnique unique
-      setTypeSynonyms synonyms 
-      doFirst   
-      pushConstraints (liftConstraints constraints)
-      printState
-      startSolving
+solveConstraints :: 
+   ( IsState ext
+   , IsState sub
+   , HasSubst (SolveX info qs sub ext) info
+   , QualifierList (SolveX info qs sub ext) info qs qsInfo
+   , Solvable constraint (SolveX info qs sub ext)
+   ) => 
+     SolveX info qs sub ext () ->           -- doFirst
+     SolveX info qs sub ext result ->       -- doAtEnd
+     [constraint] ->                        -- constraints
+     SolveX info qs sub ext result          -- result
+     
+solveConstraints doFirst doAtEnd cs = 
+   do doFirst
+      pushAndSolveConstraints cs
       makeConsistent
+      doAmbiguityCheck :: ( HasSubst (SolveX info qs sub ext) info
+                          , QualifierList (SolveX info qs sub ext) info qs qsInfo
+                          ) => 
+                            SolveX info qs sub ext qsInfo
       doAtEnd
 
-skip :: Monad m => m ()
-skip = return ()
-
-solveResult :: (HasBasic m info, HasTI m info, HasSubst m info) => m (SolveResult info)
+solveResult :: 
+   ( HasBasic m info
+   , HasTI m info
+   , HasSubst m info
+   , Empty ext
+   , TypeConstraintInfo info
+   ) => 
+     m (SolveResult info qs ext)
+                  
 solveResult = 
    do uniqueAtEnd <- getUnique
-      errors      <- getErrors
+      errs        <- getLabeledErrors
       sub         <- fixpointSubst
-      predicates  <- getPredicates     
+      ps          <- getPredicates     
       messages    <- getMessages
-      return (SolveResult uniqueAtEnd sub (map fst predicates) errors messages)
+      return (SolveResult uniqueAtEnd sub (map fst ps) errs messages empty)
 
------------------------------------------------------------------------
+----------------------------------------------------------------------
 -- Solve type constraints
 
-type Solver constraint info = OrderedTypeSynonyms -> Int -> [constraint] -> SolveResult info
+type SolverX constraint info qs ext = ClassEnvironment -> OrderedTypeSynonyms -> Int -> [constraint] -> SolveResult info qs ext
+type Solver  constraint info qs     = SolverX constraint info qs ()
 
-data SolveResult info = 
+data SolveResult info qs ext =  
    SolveResult { uniqueFromResult       :: Int
                , substitutionFromResult :: FixpointSubstitution
                , predictesFromResult    :: Predicates
-               , errorsFromResult       :: [info]
+               , errorsFromResult       :: [(info, ErrorLabel)]
                , debugFromResult        :: String
+               , extensionFromResult    :: ext
                }
 
-emptyResult :: Int -> SolveResult info
-emptyResult i = SolveResult i emptyFPS [] [] []
-
-combineResults :: SolveResult info -> SolveResult info -> SolveResult info
-combineResults (SolveResult _ s1 ps1 er1 io1) (SolveResult unique s2 ps2 er2 io2) = 
-   SolveResult unique (disjointFPS s1 s2) (ps1++ps2) (er1++er2) (io1++io2) 
+instance Empty ext => Empty (SolveResult info qs ext) where 
+   empty = emptyResult 0
    
----------------------------------------------------------------------
--- reduction of predicates
+instance Plus ext => Plus (SolveResult info qs ext) where 
+   plus (SolveResult _ s1 ps1 er1 io1 ext1) (SolveResult unique s2 ps2 er2 io2 ext2) = 
+      SolveResult unique (disjointFPS s1 s2) (ps1++ps2) (er1++er2) (io1++io2) (ext1 `plus` ext2)
 
-reducePredicates :: (HasSubst m info, HasBasic m info, HasTI m info) => m ()
-reducePredicates = 
-   do synonyms    <- getTypeSynonyms
-      predicates  <- getPredicates
-      substituted <- let f (predicate, info) = 
-                              do predicate' <- applySubst predicate
-                                 return (predicate', info)
-                     in mapM f predicates
-      let (reduced, errors) = associatedContextReduction synonyms standardClasses substituted
-      mapM_ addError [ info | ReductionError (p, info) <- errors ]
-      setPredicates reduced
+emptyResult :: Empty ext => Int -> SolveResult info qs ext
+emptyResult unique = SolveResult unique emptyFPS [] [] [] empty

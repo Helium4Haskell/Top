@@ -6,33 +6,53 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.Solvers.GreedySolver (Greedy, GreedyX, evalGreedy, GreedyState, solveGreedy) where
+module Top.Solvers.GreedySolver (Greedy, GreedyX, GreedyState, solveGreedy, runGreedyPlusDoAtEnd, runGreedy) where
 
 import Top.Solvers.SolveConstraints
 import Top.Solvers.GreedySubst
-import Top.States.BasicMonad
+import Top.Solvers.BasicMonad
 import Top.States.TIState
 import Top.States.SubstState
+import Top.States.States
 import Top.Types
 import Top.Constraints.Constraints
+import Top.Constraints.TypeConstraintInfo
+import Top.Qualifiers.Qualifiers
 
-type GreedyX info ext = SolveX info GreedyState ext
-type Greedy  info     = GreedyX info ()
+import Data.FiniteMap
 
-evalGreedy :: Greedy info a -> a
-evalGreedy = eval
+type GreedyX info qs ext = SolveX info qs GreedyState ext
+type Greedy  info qs     = GreedyX info qs ()
 
-solveGreedy :: Solvable constraint (Greedy info) 
-                  => Solver constraint info
-solveGreedy synonyms unique = 
-   evalGreedy . solveConstraints skip solveResult synonyms unique
-   
-instance IsState GreedyState where
-   empty = emptyGreedy
+solveGreedy :: 
+   ( IsState ext
+   , Solvable constraint (GreedyX info qs ext)
+   , QualifierList (GreedyX info qs ext) info qs qsInfo
+   ) => 
+     GreedyX info qs ext () ->
+     ClassEnvironment -> OrderedTypeSynonyms -> Int -> [constraint] ->
+     GreedyX info qs ext (SolveResult info qs ext)
 
-instance HasSubst (GreedyX info ext) info where
+solveGreedy todo classEnv syns unique = 
+   solveConstraints doFirst doAtEnd
+      where
+         doFirst = 
+            do setUnique unique
+               setTypeSynonyms syns
+               setClassEnvironment classEnv
+         doAtEnd =
+            do todo
+               solveResult
+
+runGreedyPlusDoAtEnd todo classEnv syns unique = 
+   eval . solveGreedy todo classEnv syns unique
+
+runGreedy x = 
+   runGreedyPlusDoAtEnd (return ()) x
+
+instance HasSubst (GreedyX info qs ext) info where
    substState = greedyState
 
-instance HasGreedy (GreedyX info ext) info where
-   greedyGet   = do (_,(y,_)) <- getX; return y
-   greedyPut y = do (x,(_,z)) <- getX; putX (x,(y,z))
+instance HasGreedy (GreedyX info qs ext) info where
+   greedyGet   = do (_,(_,(z,_))) <- getX; return z
+   greedyPut z = do (x,(y,(_,w))) <- getX; putX (x,(y,(z,w)))

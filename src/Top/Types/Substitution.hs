@@ -12,8 +12,7 @@
 module Top.Types.Substitution where
 
 import Top.Types.Basics
-import Data.Array
-import Data.List (union, (\\))
+import Data.List (union, (\\), nub)
 import Data.FiniteMap
 import Utils (internalError)
 
@@ -29,12 +28,9 @@ class Substitution s where
    dom         :: s -> [Int]             -- domain of substitution
    cod         :: s -> Tps               -- co-domain of substitution
    
-class Substitutable a where 
-   (|->) :: Substitution s => s -> a -> a    -- apply substitution
-   ftv    :: a -> [Int]                      -- free type variables   
-   
-   _ |-> a   = a        -- default definition (do nothing)
-   ftv _     = []       -- default definition (do nothing)
+class Substitutable a where
+   (|->)       :: Substitution s => s -> a -> a   -- apply substitution
+   ftv         :: a -> [Int]                      -- free type variables
 
 -- |The next type variable that is not free (default is zero)
 nextFTV :: Substitutable a => a -> Int
@@ -138,28 +134,40 @@ instance Substitution WrappedSubstitution where
 ----------------------------------------------------------------------
 -- * Substitutables instances
    
-instance Substitutable Tp where   
-   sub |-> tp = case tp of 
-                   TVar i     -> lookupInt i sub
-                   TCon _     -> tp
-                   TApp t1 t2 -> TApp (sub |-> t1) (sub |-> t2) 
-   ftv tp = case tp of
-               TVar i     -> [i]
-               TCon _     -> []
-               TApp t1 t2 -> ftv t1 `union` ftv t2   
+instance Substitutable Tp where
+   sub |-> tp = 
+      case tp of 
+         TVar i     -> lookupInt i sub
+         TCon _     -> tp
+         TApp t1 t2 -> TApp (sub |-> t1) (sub |-> t2) 
+   ftv tp = 
+      case tp of
+         TVar i     -> [i]
+         TCon _     -> []
+         TApp t1 t2 -> ftv t1 `union` ftv t2
 
 instance Substitutable a => Substitutable [a] where
-   sub |-> as  = map (sub |->) as
-   ftv         = foldr union [] . map ftv   
+   sub |-> as = map (sub |->) as
+   ftv as     = foldr union [] (map ftv as)
+
+instance (Substitutable a, Substitutable b) => Substitutable (a, b) where
+   sub |-> (a, b) = (sub |-> a, sub |-> b)
+   ftv (a, b)     = ftv a `union` ftv b
 
 instance Substitutable a => Substitutable (Maybe a) where
-   sub |-> ma = maybe Nothing (Just . (sub |->)) ma
-   ftv     ma = maybe [] ftv ma
+   sub |-> ma  = maybe Nothing (Just . (sub |->)) ma
+   ftv         = maybe [] ftv
 
 instance (Substitutable a, Substitutable b) => Substitutable (Either a b) where
-   (|->) sub = either (Left . (sub |->)) (Right . (sub |->))
+   sub |-> x = either (Left . (sub |->)) (Right . (sub |->)) x
    ftv       = either ftv ftv
 
-instance (Substitutable a, Substitutable b) => Substitutable (a,b) where
-   sub |-> (a,b) = (sub |-> a, sub |-> b)
-   ftv     (a,b) = ftv a `union` ftv b
+allTypeVariables :: HasTypes a => a -> [Int]
+allTypeVariables = ftv . getTypes
+
+allTypeConstants :: HasTypes a => a -> [String]
+allTypeConstants = 
+   let f (TVar _)   = []
+       f (TCon s)   = [s]
+       f (TApp l r) = f l ++ f r
+   in nub . concatMap f . getTypes

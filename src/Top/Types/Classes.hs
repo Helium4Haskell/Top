@@ -15,6 +15,7 @@ import Top.Types.Basics
 import Top.Types.Substitution
 import Top.Types.Unification
 import Top.Types.Synonyms
+import Top.Types.Qualification
 import Control.Monad
 import Data.FiniteMap
 
@@ -31,8 +32,14 @@ instance Show Predicate where
 
 instance Substitutable Predicate where
    sub |-> (Predicate s tp) = Predicate s (sub |-> tp)
-   ftv     (Predicate _ tp) = ftv tp
-   
+   ftv     (Predicate s tp) = ftv tp
+
+instance HasTypes Predicate where
+   getTypes      (Predicate s tp) = [tp] 
+   changeTypes f (Predicate s tp) = Predicate s (f tp)
+
+instance ShowQualifiers Predicate
+ 
 ----------------------------------------------------------------------  
 -- * Class environments and instances
 
@@ -40,6 +47,10 @@ type ClassEnvironment = FiniteMap String Class
 type Class            = ([String], Instances)
 type Instances        = [Instance]
 type Instance         = (Predicate, Predicates)
+
+-- |The empty class environment
+emptyClassEnvironment :: ClassEnvironment
+emptyClassEnvironment = emptyFM
 
 matchPredicates :: OrderedTypeSynonyms -> Predicate -> Predicate -> Maybe FiniteMapSubstitution
 matchPredicates synonyms (Predicate s1 t1) (Predicate s2 t2)
@@ -152,6 +163,10 @@ associatedContextReduction synonyms classes ps =
 ---------------------------------------------------------------------- 
 -- * Standard class environment
 
+-- This environment is only used at three places:
+--   o  MiscErrors.ag
+--   o  Warnings.ag
+--   o  Collect.ag  (initialization in import environment)
 standardClasses :: ClassEnvironment
 standardClasses = listToFM $ 
 

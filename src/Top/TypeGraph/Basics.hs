@@ -8,11 +8,9 @@
 
 module Top.TypeGraph.Basics where
 
-import Top.Types
 import Debug.Trace (trace)
 import Data.Maybe
 import Data.List
-import Data.FiniteMap
 
 ---------------------------------------------------------------------------------
 
@@ -43,9 +41,9 @@ type Clique        = (Int, [(VertexID,VertexID)] )
 type Cliques       = (Int,[[(VertexID,VertexID)]])
 
 instance Show (EdgeInfo info) where
-   show (Initial cnr info) = "#" ++ show cnr
-   show (Implied i p1 p2)  = "(" ++ show i ++ " : " ++ show (p1,p2) ++ ")"
-   show (Child i)          = "(" ++ show i ++ ")"
+   show (Initial cnr _)   = "#" ++ show cnr
+   show (Implied i p1 p2) = "(" ++ show i ++ " : " ++ show (p1,p2) ++ ")"
+   show (Child i)         = "(" ++ show i ++ ")"
 
 instance Show EdgeID where
    show (EdgeID a b) = "("++show a++"-"++show b++")"
@@ -62,22 +60,19 @@ instance Ord EdgeID where
 instance Eq (EdgeInfo info) where
    e1 == e2 = 
       case (e1, e2) of
-         (Initial cnr1 _, Initial cnr2 _) -> cnr1 == cnr2
-         (Initial cnr1 _, _)              -> False
-         (_, Initial cnr2 _)              -> False
+         (Initial cnr1 _, Initial cnr2 _)     -> cnr1 == cnr2
          (Implied i1 a1 b1, Implied i2 a2 b2) -> (i1,a1,b1) == (i2,a2,b2)
-         (Implied i1 a1 b1, _)                -> False
-         (_, Implied i2 a2 b2)                -> False
-         (Child i1, Child i2) -> i1 == i2
-
+         (Child i1, Child i2)                 -> i1 == i2
+         _                                    -> False
+         
 -- order edge information without looking at the information that is stored
 instance Ord (EdgeInfo info) where
    compare e1 e2 = 
       case (e1, e2) of
-         (Initial cnr1 _, Initial cnr2 _) -> compare cnr1 cnr2
-         (Initial cnr1 _, _)              -> LT
-         (_, Initial cnr2 _)              -> GT
+         (Initial cnr1 _, Initial cnr2 _)     -> compare cnr1 cnr2
+         (Initial _ _, _)                     -> LT
+         (_, Initial _ _)                     -> GT
          (Implied i1 a1 b1, Implied i2 a2 b2) -> compare (i1,a1,b1) (i2,a2,b2)
-         (Implied i1 a1 b1, _)                -> LT
-         (_, Implied i2 a2 b2)                -> GT
-         (Child i1, Child i2) -> compare i1 i2
+         (Implied _ _ _, _)                   -> LT
+         (_, Implied _ _ _)                   -> GT
+         (Child i1, Child i2)                 -> compare i1 i2

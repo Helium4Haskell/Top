@@ -6,22 +6,24 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.Solvers.SimpleSubst (SimpleState, emptySimple, simpleState, HasSimple(..) ) where
+module Top.Solvers.SimpleSubst (SimpleState, simpleState, HasSimple(..) ) where
 
 import Top.Types
 import Data.FiniteMap
+import Top.States.States
 import Top.States.SubstState
 import Top.States.BasicState
 import Top.States.TIState
-import Top.Solvers.SolveConstraints (reducePredicates)
 
 type SimpleState = FiniteMapSubstitution
 
 instance Show SimpleState where
    show _ = "<Simple Substitution>"
 
-emptySimple :: SimpleState
-emptySimple = emptySubst
+instance Empty SimpleState where
+   empty = emptySubst
+
+instance IsState SimpleState
 
 class HasSubst m info => HasSimple m info | m -> info where
    simpleGet :: m SimpleState
@@ -34,7 +36,7 @@ simpleState :: (HasBasic m info, HasTI m info, HasSimple m info) => SubstState m
 simpleState = SubstState 
    { 
      makeConsistent_impl = 
-        reducePredicates
+        return ()
        
    , unifyTerms_impl = \info t1 t2 ->
         do synonyms <- getTypeSynonyms

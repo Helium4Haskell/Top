@@ -176,3 +176,30 @@ instance Show Tp where
        where rec p t       = parIf (p (priorityOfType t)) (show t) 
              parIf True  s = "("++s++")"
              parIf False s = s
+
+----------------------------------------------------------------------
+-- The type class HasTypes
+
+class HasTypes a where
+   getTypes    :: a -> Tps
+   changeTypes :: (Tp -> Tp) -> a -> a
+
+instance HasTypes Tp where 
+   getTypes tp = [tp]
+   changeTypes = ($)
+
+instance HasTypes a => HasTypes [a] where
+   getTypes      = concatMap getTypes
+   changeTypes f = map (changeTypes f)  
+
+instance (HasTypes a, HasTypes b) => HasTypes (a, b) where
+   getTypes      (a, b) = getTypes a ++ getTypes b
+   changeTypes f (a, b) = (changeTypes f a, changeTypes f b)
+   
+instance HasTypes a => HasTypes (Maybe a) where
+   getTypes      = maybe [] getTypes
+   changeTypes f = maybe Nothing (Just . changeTypes f)
+
+instance (HasTypes a, HasTypes b) => HasTypes (Either a b) where
+   getTypes      = either getTypes getTypes
+   changeTypes f = either (Left . changeTypes f) (Right . changeTypes f)

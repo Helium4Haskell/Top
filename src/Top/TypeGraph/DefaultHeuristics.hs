@@ -8,12 +8,12 @@
 
 module Top.TypeGraph.DefaultHeuristics where
 
-import Top.TypeGraph.Basics
 import Top.TypeGraph.Heuristics 
 import Top.TypeGraph.Paths 
 import Data.List
 import Data.FiniteMap
 import Top.States.BasicState
+import Top.TypeGraph.ApplyHeuristics
 
 -----------------------------------------------------------------------------
 
@@ -42,26 +42,8 @@ highParticipation :: Show info => Double -> Heuristic info
 highParticipation ratio = 
    Heuristic (
       PathComponent (\path -> 
-         let (nrOfPaths, fm) = participationMap (mapPath (\(_,cnr,_) -> cnr) path)
-             participationList = fmToList fm
-             maxInList = maximum (map snd participationList)
-             limit     = round (fromIntegral maxInList * ratio) `max` 1
-             goodCNrs  = [ cnr | (cnr, i) <- participationList, i >= limit ]
-  
-             -- prints a nice report
-             msg es = unlines ("" : title : replicate 50 '-' : map f es)
-             title  = "cnr edge      ratio   info"
-             f (edgeID,cnr,info) = 
-                take 4  (show cnr++(if cnr `elem` goodCNrs then "*" else "")++repeat ' ') ++
-                take 10 (show edgeID++repeat ' ') ++
-                take 8  (show (lookupWithDefaultFM fm 0 cnr * 100 `div` nrOfPaths)++"%"++repeat ' ') ++
-                "{"++show info++"}"
-                
-         in Heuristic (Filter ("Participation ratio [ratio="++show ratio++"]")
-               (selectTheBest path))))
-               {-
-               (\es -> do printMessage (msg es)	                  
-                          return (filter (\(_,cnr,_) -> cnr `elem` goodCNrs) es))))) -}
+         Heuristic (Filter ("Participation ratio [ratio="++show ratio++"]")
+                   (selectTheBest path))))
  where
    selectTheBest path es = 
       let (nrOfPaths, fm)   = participationMap (mapPath (\(_,cnr,_) -> cnr) path)
@@ -90,12 +72,26 @@ highParticipation ratio =
 positionInList :: Heuristic info
 positionInList = 
    Heuristic ( 
-      let f (edge@(EdgeID v1 v2), cnr, info) = return cnr
+      let f (_, cnr, _) = return cnr
       in maximalEdgeFilter "Constraint number of edge" f)
 
 -- |Select only specific constraint numbers
 selectConstraintNumbers :: [Int] -> Heuristic info
 selectConstraintNumbers is =
    Heuristic (
-      let f (_, cnr, info) = return (cnr `elem` is)
+      let f (_, cnr, _) = return (cnr `elem` is)
       in edgeFilter ("select constraint numbers " ++ show is) f)
+
+-- |Select only the constraints for which there is evidence in the predicates
+-- of the current state that the constraint at hand is incorrect.
+inPredicatePath :: Heuristic info
+inPredicatePath = 
+   Heuristic (Filter "in a predicate path" f) where
+
+    f xs = 
+       do pp  <- predicatePath
+          path <- expandPath (simplifyPath pp) 
+          let cnrs = nub [ c | (_, c, _) <- steps path ]
+              p (_, cnr, _) = cnr `elem` cnrs
+              ys = filter p xs
+          return (if null ys then xs else ys)

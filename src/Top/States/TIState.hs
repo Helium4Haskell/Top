@@ -13,6 +13,8 @@
 module Top.States.TIState where
 
 import Top.Types
+import Top.States.States
+import Top.Qualifiers.QualifierMap
 import Data.FiniteMap
 
 ---------------------------------------------------------------------
@@ -27,28 +29,36 @@ tiModify :: HasTI m info => (TIState info -> TIState info) -> m ()
 tiModify f = do a <- tiGet ; tiPut (f a)
 
 tiGets :: HasTI m info => (TIState info -> a) -> m a
-tiGets   f = do a <- tiGet ; return (f a)
+tiGets f = do a <- tiGet ; return (f a)
 
 data TIState info = TIState
-   { counter       :: Int                    -- ^ A counter for fresh type variables
-   , synonyms      :: OrderedTypeSynonyms    -- ^ All known type synonyms
-   , predicates    :: [(Predicate, info)]    -- ^ A list of predicates
+   { counter      :: Int                         -- ^ A counter for fresh type variables
+   , synonyms     :: OrderedTypeSynonyms         -- ^ All known type synonyms
+   , classenv     :: ClassEnvironment            -- ^ All known type classes and instances
+   , predicates   :: QualifierMap Predicate info -- ^ Type class assertions
    }
+
+type SchemeMap qs = FiniteMap Int (Scheme qs)
 
 -- |An empty type inference state.
-emptyTI :: TIState info
-emptyTI = TIState
-   { counter      = 0
-   , synonyms     = noOrderedTypeSynonyms
-   , predicates   = [] 
-   }
+instance Show info => Empty (TIState info) where
+   empty = TIState
+      { counter      = 0
+      , synonyms     = noOrderedTypeSynonyms
+      , classenv     = emptyClassEnvironment
+      , predicates   = makeQualifierMap globalQM
+      }
 
-instance Show (TIState info) where
+instance Show info => Show (TIState info) where
    show s = unlines [ "counter    = " ++ show (counter s)
                     , "synonyms   = " ++ concat [ t++"; " | t <- keysFM (fst (synonyms s)) ]
-                    , "predicates = " ++ concat [ show p++"; " | (p,_) <- predicates s ]
+                    , "classenv   = " ++ concat [ t++"; " | t <- keysFM (classenv s) ]
+                    , "type class assertions:"
+                    , show (predicates s)
                     ]  
-   
+
+instance Show info => IsState (TIState info)
+
 ---------------------------------------------------------------------
 -- * Unique counter
 
@@ -78,14 +88,22 @@ getTypeSynonyms :: HasTI m info => m OrderedTypeSynonyms
 
 setTypeSynonyms xs = tiModify (\x -> x { synonyms = xs })
 getTypeSynonyms    = tiGets synonyms
-   
+ 
 ---------------------------------------------------------------------
--- * Predicates
-   
-getPredicates :: HasTI m info => m [(Predicate, info)]
-addPredicate  :: HasTI m info => (Predicate, info) -> m ()
-setPredicates :: HasTI m info => [(Predicate, info)] -> m ()
+-- * Class environment
 
-getPredicates    = tiGets predicates
-addPredicate  p  = tiModify (\x -> x { predicates = p : predicates x })
-setPredicates ps = tiModify (\x -> x { predicates = ps })
+setClassEnvironment :: HasTI m info => ClassEnvironment -> m ()
+getClassEnvironment :: HasTI m info => m ClassEnvironment
+
+setClassEnvironment xs = tiModify (\x -> x { classenv = xs })
+getClassEnvironment    = tiGets classenv
+
+---------------------------------------------------------------------
+-- * Type class assertions
+
+instance HasTI m info => Has m (QualifierMap Predicate info) where
+   get   = tiGets predicates
+   put x = tiModify (\s -> s { predicates = x })
+
+getPredicates :: HasTI m info => m [(Predicate, info)] -- only to return all predicates
+getPredicates = gets (\qms -> getQualifiers qms ++ getGeneralizedQs qms ++ getAssumptions qms)

@@ -10,10 +10,10 @@ module Top.TypeGraph.TypeGraphMonad where
 
 import Top.TypeGraph.EquivalenceGroup
 import Top.TypeGraph.Basics
+import Top.States.States
 import Top.States.SubstState
 import Top.TypeGraph.Heuristics (Heuristic)
 import Top.TypeGraph.DefaultHeuristics (defaultHeuristics)
-import Top.Types
 import Data.Maybe
 import Data.FiniteMap
 import Control.Monad
@@ -28,25 +28,30 @@ data TypeGraphState info = TG
    , constraintNumber        :: Int
    } 
 
-emptyTypeGraph :: Show info => TypeGraphState info
-emptyTypeGraph = TG
-   { referenceMap            = emptyFM
-   , equivalenceGroupMap     = emptyFM
-   , equivalenceGroupCounter = 0
-   , possibleErrors          = []
-   , typegraphHeuristics     = defaultHeuristics
-   , constraintNumber        = 0
-   }
+instance Show info => Empty (TypeGraphState info) where
+   empty = TG
+      { referenceMap            = emptyFM
+      , equivalenceGroupMap     = emptyFM
+      , equivalenceGroupCounter = 0
+      , possibleErrors          = []
+      , typegraphHeuristics     = defaultHeuristics
+      , constraintNumber        = 0
+      }
 
 instance Show (TypeGraphState info) where
-   show _ = "<TypeGraphState>\n"
+   show _ = "<TypeGraphState>"
+
+instance Show info => IsState (TypeGraphState info)
 
 class HasSubst m info => HasTG m info | m -> info where
    tgGet :: m (TypeGraphState info)
    tgPut :: TypeGraphState info -> m ()  
-  
+   
+tgModify :: HasTG m info => (TypeGraphState info -> TypeGraphState info) -> m ()
 tgModify f = do a <- tgGet ; tgPut (f a)
-tgGets   f = do a <- tgGet ; return (f a)
+
+tgGets :: HasTG m info => (TypeGraphState info -> a) -> m a
+tgGets f = do a <- tgGet ; return (f a)
 
 -----------------------------------------------------------------
 

@@ -9,28 +9,24 @@
 module Top.TypeGraph.TypeGraphSubst where
 
 import Top.States.SubstState
-import Top.States.TIState
 import Top.TypeGraph.TypeGraphState
 import Top.TypeGraph.Basics
-import Top.Solvers.SolveConstraints
 import Top.Types
 import Control.Monad
 import Data.FiniteMap
-import Data.Maybe
        
 typegraphImpl :: HasTypeGraph m info => SubstState m info
 typegraphImpl = SubstState
    { 
      makeConsistent_impl = 
         debugTrace "makeConsistent" >>
-        do removeInconsistencies
-           reducePredicates
+        do removeInconsistencies   
        
    , unifyTerms_impl = \info t1 t2 ->
         debugTrace ("unifyTerms "++show t1++" "++show t2) >>
         do v1 <- makeTermGraph t1
            v2 <- makeTermGraph t2     
-           addEdge (EdgeID v1 v2) info
+           addNewEdge (EdgeID v1 v2) info
            
    , findSubstForVar_impl = \i ->      
         debugTrace ("findSubstForVar " ++ show i) >>

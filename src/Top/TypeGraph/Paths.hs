@@ -11,6 +11,7 @@ module Top.TypeGraph.Paths where
 import Data.List
 import Data.Maybe
 import Data.FiniteMap
+import Utils (internalError)
 
 ----------------------
    
@@ -38,39 +39,54 @@ instance Show a => Show (Path a) where
          Empty   -> "Empty"
 
     where pathPrio :: Path a -> Int
-          pathPrio (x :|: y) = 0
-          pathPrio (x :+: y) = 1
+          pathPrio (_ :|: _) = 0
+          pathPrio (_ :+: _) = 1
           pathPrio _         = 2
           
           parIf b s = if b then "("++s++")" else s
-      
-steps :: Path a -> [a]
-steps path = 
-   case path of 
-      x :|: y -> steps x ++ steps y
-      x :+: y -> steps x ++ steps y
-      Step a  -> [a]
-      Fail    -> []
-      Empty   -> []
 
+-- |Combine two monadic computations
+mCombine :: Monad m => (a -> b -> c) -> m a -> m b -> m c
+mCombine op mp1 mp2 = 
+   do p1 <- mp1
+      p2 <- mp2
+      return (p1 `op` p2)
+
+(<+>), (<|>) :: Monad m => m (Path a) -> m (Path a) -> m (Path a)
+(<+>) = mCombine (:+:)
+(<|>) = mCombine (:|:)
+
+(<++>) :: Monad m => m [Path a] -> m [Path a] -> m [Path a]
+(<++>) = mCombine (++)
+
+steps :: Path a -> [a]
+steps = ($ []) . rec where
+   rec path = 
+      case path of 
+         x :|: y -> rec x . rec y
+         x :+: y -> rec x . rec y
+	 Step a  -> (a:)
+	 Fail  -> id
+	 Empty -> id
+      
 mapPath :: (a -> b) -> Path a -> Path b
 mapPath f = changeStep (Step . f) 
 
 changeStep :: (a -> Path b) -> Path a -> Path b
 changeStep f path = 
    case path of
+      Step a  -> f a
       x :|: y -> changeStep f x :|: changeStep f y
       x :+: y -> changeStep f x :+: changeStep f y
-      Step a  -> f a
       Fail    -> Fail
       Empty   -> Empty  
       
 changeStepM :: Monad m => (a -> m (Path b)) -> Path a -> m (Path b)
 changeStepM f path = 
    case path of
+      Step a  -> f a
       x :|: y -> do x' <- changeStepM f x; y' <- changeStepM f y; return (x' :|: y')
       x :+: y -> do x' <- changeStepM f x; y' <- changeStepM f y; return (x' :+: y')
-      Step a  -> f a
       Fail    -> return Fail
       Empty   -> return Empty          
              
@@ -88,21 +104,21 @@ minCompleteInPath f = rec . simplifyPath
 simplifyPath :: Path a -> Path a      
 simplifyPath path =
    case path of  
-      x :|: y -> case (simplifyPath x, simplifyPath y) of
-                    (Empty, _) -> Empty
-                    (_, Empty) -> Empty
-                    (Fail, p2) -> p2
-                    (p1, Fail) -> p1
-                    (p1, p2)   -> p1 :|: p2
-      x :+: y -> case (simplifyPath x, simplifyPath y) of
-                    (Fail, _)   -> Fail
-                    (_, Fail)   -> Fail    
-                    (Empty, p1) -> p1
-                    (p2, Empty) -> p2
-                    (p1, p2)    -> p1 :+: p2
-      Step a  -> Step a
-      Fail    -> Fail
-      Empty   -> Empty
+      x :|: y -> 
+         case (simplifyPath x, simplifyPath y) of
+            (Empty, _    ) -> Empty
+            (_    , Empty) -> Empty
+            (Fail , p2   ) -> p2
+            (p1   , Fail ) -> p1
+            (p1   , p2   ) -> p1 :|: p2
+      x :+: y -> 
+         case (simplifyPath x, simplifyPath y) of
+            (Fail , _    ) -> Fail
+            (_    , Fail ) -> Fail    
+            (Empty, p1   ) -> p1
+            (p2   , Empty) -> p2
+            (p1   , p2   ) -> p1 :+: p2
+      _ -> path
 
 tailSharingBy :: (a -> a -> Ordering) -> Path a -> Path a
 tailSharingBy compf path =
@@ -112,7 +128,7 @@ tailSharingBy compf path =
       p     -> rec p
       
  where
-  eqf x y = compf x y == EQ
+  eqf x y  = compf  x y == EQ
   eqfM x y = compfM x y == EQ
   compfM Nothing  Nothing  = EQ
   compfM (Just x) (Just y) = compf x y
@@ -141,17 +157,20 @@ tailSharingBy compf path =
   altPath path        = [path]
   
   lastStep (Step a)    = Just a
-  lastStep (p1 :+: p2) = lastStep p2
+  lastStep (_  :+: p2) = lastStep p2
   lastStep (p1 :|: p2) = do a <- lastStep p1
                             b <- lastStep p2
                             if a `eqf` b 
                               then Just a
                               else Nothing
+  lastStep _ = internalError "Top.TypeGraph.Paths" "lastStep" "unexpected path"
 
-  removeTail (Step a)    = Empty
+
+  removeTail (Step _)    = Empty
   removeTail (p1 :+: p2) = p1 :+: removeTail p2
   removeTail (p1 :|: p2) = removeTail p1 :|: removeTail p2
-
+  removeTail _           = internalError "Top.TypeGraph.Paths" "removeTail" "unexpected path"
+  
 flattenPath :: Path a -> [[a]]
 flattenPath path = 
    case path of 
@@ -184,18 +203,36 @@ minimalSets eqF = rec where
                         GT -> sol2
                   _ -> sol1 ++ sol2
 
-removeSomeDuplicates :: (a -> a -> Bool) -> Path a -> Path a
-removeSomeDuplicates eqF = simplifyPath . rec where
-   rec path = 
+removeSomeDuplicates :: (a -> Int) -> Path a -> Path a
+removeSomeDuplicates toInt = simplifyPath . rec emptyFM where
+   rec fm path = 
       case path of
-         Step a :+: p -> Step a :+: rec (changeStep (\a' -> if a `eqF` a' then Empty else Step a') p)
-         Step a :|: p -> Step a :|: rec (changeStep (\a' -> if a `eqF` a' then Fail  else Step a') p)
-         (p1 :+: p2) :+: p3 -> rec (p1 :+: (p2 :+: p3))
-         (p1 :|: p2) :|: p3 -> rec (p1 :|: (p2 :|: p3))
-         p1 :+: p2 -> rec p1 :+: rec p2
-         p1 :|: p2 -> rec p1 :|: rec p2
-         _ -> path
-         
+      
+         left :+: right ->
+	    case left of 
+	       Step a    -> let int = toInt a
+	                        fm' = addToFM fm int Empty
+	                    in case lookupFM fm int of 
+			          Just left' -> left' :+: rec fm  right 
+				  Nothing    -> left  :+: rec fm' right
+	       p1 :+: p2 -> rec fm (p1 :+: (p2 :+: right))
+	       _         -> rec fm left :+: rec fm right
+	       
+	 left :|: right -> 
+	    case left of
+               Step a    -> let int = toInt a
+	                        fm' = addToFM fm int Fail
+                            in case lookupFM fm int of 
+			          Just left' -> left' :|: rec fm  right
+				  Nothing    -> left  :|: rec fm' right
+	       p1 :|: p2 -> rec fm (p1 :|: (p2 :|: right))
+               _         -> rec fm left :|: rec fm right
+	 
+	 Step a -> 
+	    lookupWithDefaultFM fm path (toInt a)
+	 
+	 _ -> path
+ 
 participationMap :: Ord a => Path a -> (Integer, FiniteMap a Integer)
 participationMap path = 
    case path of
@@ -210,3 +247,9 @@ participationMap path =
       p1 :|: p2 -> let (i1, fm1) = participationMap p1 
                        (i2, fm2) = participationMap p2
                    in (i1 + i2, plusFM_C (+) fm1 fm2)
+		   
+pathSize :: Path a -> Int
+pathSize (p1 :|: p2) = pathSize p1 + pathSize p2
+pathSize (p1 :+: p2) = pathSize p1 + pathSize p2
+pathSize (Step _)    = 1
+pathSize _           = 0

@@ -13,15 +13,16 @@
 module Top.States.BasicState where
 
 import Top.Constraints.Constraints
+import Top.States.States
 import Control.Monad
 import Utils (internalError)
-  
+
 ---------------------------------------------------------------------
 -- * A basic state
 
 -- |The type class HasBasic has two parameters: a monad m that contains a 
 -- BasicState, and the information that is additionally stored with each 
--- constraint. Two operations should be provided for the monad m: how two
+-- constraint. Two operations should be provided for the monad m: how to
 -- get and how to put a BasicState in the monad.
 class Monad m => HasBasic m info | m -> info where 
    basicGet :: m (BasicState m info)
@@ -40,41 +41,47 @@ basicGets f = do a <- basicGet ; return (f a)
 data BasicState m info = BasicState 
    { constraints :: Constraints m          -- ^ A stack of constraints that is to be solved
    , debug       :: ShowS                  -- ^ All the debug information
-   , errors      :: [info]                 -- ^ The reported errors
+   , errors      :: [(info, ErrorLabel)]   -- ^ The detected errors
    , conditions  :: [(m Bool, String)]     -- ^ Conditions to check (for the solved constraints) 
    }
 
 -- |An empty BasicState.
-emptyBasic :: BasicState m info
-emptyBasic = BasicState 
-   { constraints = []
-   , debug       = id
-   , errors      = []
-   , conditions  = []
-   }
-       
+instance Empty (BasicState m info) where
+   empty = BasicState 
+      { constraints = []
+      , debug       = id
+      , errors      = []
+      , conditions  = []
+      }
+ 
 instance Show (BasicState m info) where 
-   show s = unlines $ [ "Constraints"
-                      , "-----------"
-                      ] ++
-                      map (("  - "++) . show) (constraints s) ++
-                      [ "("++show (length (constraints s))++" constraints, "
-                        ++ show (length (errors s))++" errors, "
-                        ++ show (length (conditions s))++" checks)"
-                      ]         
-   
+   show s = 
+      unlines $ 
+         [ "Constraints"
+         , "-----------"
+         ] ++
+         map (("   "++) . show) (constraints s) ++
+         [ "("++show (length (constraints s))++" constraints, "
+         ++ show (length (errors s))++" errors, "
+         ++ show (length (conditions s))++" checks)"
+         ]         
+
+instance IsState (BasicState m info)
+
 ---------------------------------------------------------------------
 -- * Pushing and popping constraints
 
-pushConstraint  :: HasBasic m info => Constraint m -> m ()
-pushConstraints :: HasBasic m info => Constraints m -> m ()
-pushOperation   :: HasBasic m info => m () -> m ()
-popConstraint   :: HasBasic m info => m (Maybe (Constraint m))
-allConstraints  :: HasBasic m info => m (Constraints m)
+pushConstraint     :: HasBasic m info => Constraint m -> m ()
+pushConstraints    :: HasBasic m info => Constraints m -> m ()
+pushOperation      :: HasBasic m info => m () -> m ()
+pushNamedOperation :: HasBasic m info => String -> m () -> m ()
+popConstraint      :: HasBasic m info => m (Maybe (Constraint m))
+allConstraints     :: HasBasic m info => m (Constraints m)
 
 pushConstraint x   = basicModify (\s -> s { constraints = x : constraints s })
 pushConstraints xs = basicModify (\s -> s { constraints = xs ++ constraints s })
-pushOperation m    = pushConstraint (Constraint (m, return True, "<operation>"))
+pushOperation      = pushNamedOperation "operation"
+pushNamedOperation s m = pushConstraint (Constraint (m, return True, "<"++s++">"))
 popConstraint      = do cs <- allConstraints 
                         case cs of 
                           []     -> return Nothing
@@ -97,17 +104,32 @@ getMessages    = basicGets (($ []) . debug)
  
 -- |With each constraint, additional information is associated. This extra
 -- information can be reported if the constraint could not be satisfied.
-addError     :: HasBasic m info => info -> m ()
-getErrors    :: HasBasic m info => m [info]   
-updateErrors :: HasBasic m info => (info -> m info) -> m ()
+addError         :: HasBasic m info => info -> m ()
+addLabeledError  :: HasBasic m info => ErrorLabel -> info -> m ()
+getErrors        :: HasBasic m info => m [info]   
+getLabeledErrors :: HasBasic m info => m [(info, ErrorLabel)]
+updateErrorInfo  :: HasBasic m info => (info -> m info) -> m ()
 
-addError x = basicModify (\s -> s { errors = x : errors s })
-getErrors  = basicGets errors
-updateErrors f =  
-   do errors    <- getErrors
-      newErrors <- mapM f errors
-      basicModify (\s -> s { errors = newErrors })
-      
+addError = addLabeledError NoErrorLabel
+addLabeledError label info = 
+   basicModify (\s -> s { errors = (info, label) : errors s })
+   
+getErrors = getLabeledErrors >>= (return . map fst)
+getLabeledErrors = basicGets errors
+
+updateErrorInfo f =
+   do errs    <- getLabeledErrors
+      newErrs <- let g (info, label) = 
+                        do newInfo <- f info
+                           return (newInfo, label)
+                 in mapM g errs
+      basicModify (\s -> s { errors = newErrs })
+
+-- |A datatype to label the errors that are detected.
+data ErrorLabel = ErrorLabel String 
+                | NoErrorLabel 
+   deriving (Eq, Show)
+     
 ---------------------------------------------------------------------
 -- * Conditions
 
@@ -151,5 +173,5 @@ startSolving =
                startSolving
                        
 solveAndCheck = 
-   do startSolving
+   do startSolving 
       doChecks

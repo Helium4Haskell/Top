@@ -6,20 +6,22 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.Solvers.GreedySubst (GreedyState, emptyGreedy, greedyState, HasGreedy(..) ) where
+module Top.Solvers.GreedySubst (GreedyState, greedyState, HasGreedy(..) ) where
 
+import Top.States.States
 import Top.States.SubstState
 import Top.States.BasicState
 import Top.States.TIState
-import Top.Solvers.SolveConstraints (reducePredicates)
 import Top.Types
 import Data.FiniteMap
 import Utils (internalError)
 
 type GreedyState = FixpointSubstitution
 
-emptyGreedy :: GreedyState
-emptyGreedy = FixpointSubstitution emptyFM
+instance Empty GreedyState where
+   empty = FixpointSubstitution emptyFM
+   
+instance IsState GreedyState
 
 class HasSubst m info => HasGreedy m info | m -> info where
    greedyGet :: m FixpointSubstitution
@@ -32,14 +34,14 @@ greedyState :: (HasBasic m info, HasTI m info, HasGreedy m info) => SubstState m
 greedyState = SubstState 
    { 
      makeConsistent_impl = 
-        reducePredicates
+        return ()
    
    , unifyTerms_impl = \info t1 t2 ->
         do t1'      <- applySubst t1
            t2'      <- applySubst t2
            synonyms <- getTypeSynonyms
            case mguWithTypeSynonyms synonyms t1' t2' of        
-              Left _           -> addError info        
+              Left _           -> addError info
               Right (used,sub) -> 
                  let utp = equalUnderTypeSynonyms synonyms (sub |-> t1') (sub |-> t2') 
                      f (FixpointSubstitution fm) =

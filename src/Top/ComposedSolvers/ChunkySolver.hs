@@ -1,7 +1,7 @@
 -----------------------------------------------------------------------------
--- |
+-- |                                   
 -- Maintainer  :  bastiaan@cs.uu.nl
--- Stability   :  experimental
+-- Stability   :  experimental      
 -- Portability :  unknown
 --
 -----------------------------------------------------------------------------
@@ -9,6 +9,7 @@
 module Top.ComposedSolvers.ChunkySolver where
 
 import Top.Types
+import Top.States.States
 import Top.Solvers.SolveConstraints
 import Top.ComposedSolvers.Tree
 import Data.List (partition)
@@ -20,9 +21,10 @@ type Dependency       constraint = (ChunkID, ChunkID, FixpointSubstitution -> Pr
 type Dependencies     constraint = [Dependency constraint]
 type ChunkID                     = Int
 
-solveChunkConstraints :: Solver constraint info -> (Tree constraint -> [constraint]) -> OrderedTypeSynonyms -> Int -> 
-                            ChunkConstraints constraint -> SolveResult info
-solveChunkConstraints solver flattening synonyms unique =  
+solveChunkConstraints :: (Empty ext, Plus ext) => SolverX constraint info qs ext -> (Tree constraint -> [constraint]) 
+                            -> ClassEnvironment -> OrderedTypeSynonyms -> Int 
+                            -> ChunkConstraints constraint -> SolveResult info qs ext
+solveChunkConstraints solver flattening classEnv synonyms unique =  
    rec unique . insertDependencies (< 0) emptyFPS []
 
    where 
@@ -31,12 +33,12 @@ solveChunkConstraints solver flattening synonyms unique =
             [] -> emptyResult unique
             (chunkID, constraintTree) : otherChunks -> 
                let constraintList = flattening constraintTree
-                   result@(SolveResult unique' sub preds _ _)
+                   result@(SolveResult unique' sub preds _ _ _)
                       | null constraintList = emptyResult unique
-                      | otherwise           = solver synonyms unique constraintList
+                      | otherwise           = solver classEnv synonyms unique constraintList
                    nextChunkConstraints     = insertDependencies (==chunkID) sub preds (otherChunks, dependencies)
-               in combineResults result (rec unique' nextChunkConstraints)
-    
+               in result `plus` (rec unique' nextChunkConstraints)
+
       insertDependencies :: (ChunkID -> Bool) -> FixpointSubstitution -> Predicates -> ChunkConstraints constraint -> ChunkConstraints constraint
       insertDependencies condition substitution predicates (chunks, dependencies) = 
          let (toInsert, otherDependencies) = partition (\(x,_,_) -> condition x) dependencies

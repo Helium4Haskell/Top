@@ -17,39 +17,54 @@ import Data.List
 -----------------------------------------------------------------------------
 -- * Qualification
 
-newtype Qualification q a = Qualification ([q], a)
+newtype Qualification q a = Qualification (q, a)
 
-split :: Qualification q a -> ([q], a)
+split :: Qualification q a -> (q, a)
 split (Qualification t) = t
 
 infixr 2 .=>.
 
-(.=>.) :: [q] -> a -> Qualification q a 
+(.=>.) :: q -> a -> Qualification q a 
 (.=>.) = curry Qualification
 
-qualifiers :: Qualification q a -> [q]
+qualifiers :: Qualification q a -> q
 qualifiers = fst . split
 
 unqualify :: Qualification q a -> a
 unqualify = snd . split
 
-qualify :: (Substitutable context, Substitutable q, Substitutable a) => context -> [q] -> a -> Qualification q a
+qualify :: (Substitutable context, Substitutable q, Substitutable a) => context -> [q] -> a -> Qualification [q] a
 qualify context preds tp = 
    let is  = ftv tp \\ ftv context
        p   = any (`elem` is) . ftv
    in (filter p preds .=>. tp)
 
-showQualifiers :: Show a => [a] -> String
-showQualifiers []  = ""
-showQualifiers [a] = show a
-showQualifiers as  = "(" ++ concat (intersperse ", " (sort (map show as))) ++ ")"
-
 instance (Substitutable q, Substitutable a) => Substitutable (Qualification q a) where
    sub |-> (Qualification t) = Qualification (sub |-> t)
    ftv     (Qualification t) = ftv t
 
-instance (Show q, Show a) => Show (Qualification q a) where
-   show (Qualification (ps, a)) = 
-      case ps of   
-         []  -> show a
-         ps  -> showQualifiers ps ++ " => " ++ show a
+instance (HasTypes q, HasTypes a) => HasTypes (Qualification q a) where
+   getTypes      (Qualification t) = getTypes t
+   changeTypes f (Qualification t) = Qualification (changeTypes f t)
+
+instance (ShowQualifiers q, Show a) => Show (Qualification q a) where
+   show (Qualification (q, a)) = 
+      showContext q ++ show a
+      
+class Show a => ShowQualifiers a where
+   showQualifiers :: a -> [String]
+   -- default definition
+   showQualifiers = (:[]) . show
+
+showContext :: ShowQualifiers a => a -> String
+showContext a =
+   case showQualifiers a of
+      []  -> ""
+      [x] -> x ++ " => "
+      xs  -> "(" ++ concat (intersperse ", " xs) ++ ") => "
+
+instance (ShowQualifiers a, ShowQualifiers b) => ShowQualifiers (a, b) where
+   showQualifiers (a, b) = showQualifiers a ++ showQualifiers b
+
+instance ShowQualifiers a => ShowQualifiers [a] where
+   showQualifiers = concatMap showQualifiers

@@ -20,6 +20,7 @@ import Top.Types.Synonyms
 import Top.Types.Unification
 import Top.Types.Classes
 import Data.List
+import Data.FiniteMap
 
 ----------------------------------------------------------------------
 -- * Type schemes
@@ -28,7 +29,7 @@ import Data.List
 -- that partially maps these type variables to their original identifier, and a
 -- qualified type.
 type TpScheme = Forall QType
-type QType    = Qualification Predicate Tp
+type QType    = Qualification Predicates Tp
 
 -- |A type class to convert something into a type scheme
 class IsTpScheme a where
@@ -128,4 +129,39 @@ instantiateWithNameMap unique (Quantification (qs,nm,qtp)) =
        (ps, tp) = split qtp'
    in (u, ps, tp)
 
-instance (Show q, Show a) => ShowQuantors (Qualification q a)
+instance (ShowQualifiers q, Show a) => ShowQuantors (Qualification q a)
+
+-- |A sigma is a type scheme or a type scheme variable
+type Scheme qs = Forall (Qualification qs Tp)
+
+data Sigma qs  = SigmaVar    SigmaVar 
+               | SigmaScheme (Scheme qs)
+type SigmaVar  = Int
+
+instance (ShowQualifiers qs, Substitutable qs) => Show (Sigma qs) where
+   show (SigmaVar i)    = "s" ++ show i
+   show (SigmaScheme s) = show s
+
+instance Substitutable qs => Substitutable (Sigma qs) where   
+   sub |-> sv@(SigmaVar _) = sv 
+   sub |-> (SigmaScheme s) = SigmaScheme (sub |-> s)   
+   
+   ftv (SigmaVar i)    = []
+   ftv (SigmaScheme s) = ftv s 
+   {-
+-- |A type class to convert something into a "sigma" 
+
+class IsSigma a qs where
+   toSigma :: a -> Sigma qs
+   
+instance IsSigma (Sigma qs) qs where
+   toSigma = id
+
+instance IsSigma (Scheme qs) qs where
+   toSigma = SigmaScheme
+
+instance IsSigma (Qualification qs Tp) qs where
+   toSigma = SigmaScheme . noQuantifiers -}
+
+-- |A substitution for type scheme variables
+type TpSchemeMap = FiniteMap SigmaVar TpScheme
