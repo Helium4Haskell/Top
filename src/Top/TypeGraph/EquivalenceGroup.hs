@@ -24,6 +24,7 @@ import Top.Types
 import Debug.Trace (trace)
 import Data.List
 import qualified Data.Set as S
+import Utils (internalError)
 
 -----------------------------------------------------------------------
 -- * Representation of an equivalence group
@@ -207,9 +208,16 @@ typeOfGroup synonyms eqgroup
     allApplies    =       [ (l, r)  |  (_, (VApp l r, _))  <- vertices eqgroup  ]       
     allOriginals  =       [ tp      |  (_, (_, Just tp))   <- vertices eqgroup  ]
 
+-- If I cannot select a best type at this point, an arbitary type is returned.
+-- This is because I cannot see "inside" the types 
+-- Todo: improve
 theBestType :: OrderedTypeSynonyms -> Tps -> Tp 
-theBestType = foldr1 . equalUnderTypeSynonyms
-        
+theBestType synonyms tps = 
+   let f t1 t2 = case equalUnderTypeSynonyms synonyms t1 t2 of
+                    Just best -> best
+                    Nothing -> t1
+   in foldr1 f tps
+   
 -- Check for some invariants: identity if everything is okay, otherwise an internal error
 checkGroup :: EquivalenceGroup info -> EquivalenceGroup info
 checkGroup = test c2 . test c1 where 

@@ -178,7 +178,8 @@ doContextReduction =
       (new, b) <- improveList old
       putToProve new
       if b then doContextReduction else simplifyList new
-      
+
+-- Todo: improve this function.
 doGeneralization :: QualifierList m info qs qsInfo => [Int] -> [Int] -> qsInfo -> m ([Int], qsInfo, qsInfo)
 doGeneralization monos alphas qs =
    do (psGen, psNew) <- whatToGenList alphas qs
@@ -189,7 +190,8 @@ doGeneralization monos alphas qs =
          then 
             -- In the end, add the predicates that have already been generalized
             do qs2   <- getGeneralized
-               allQs <- combineList psGen qs2
+               (yes, no) <- whatToGenList alphas qs2
+               allQs <- combineList psGen yes
                return (allAlphas, allQs, psNew)
          else
             do (is, qs2, rest) <- doGeneralization monos allAlphas psNew

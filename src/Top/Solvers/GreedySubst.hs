@@ -43,7 +43,9 @@ greedyState = SubstState
            case mguWithTypeSynonyms synonyms t1' t2' of        
               Left _           -> addLabeledError unificationErrorLabel info
               Right (used,sub) -> 
-                 let utp = equalUnderTypeSynonyms synonyms (sub |-> t1') (sub |-> t2') 
+                 let mutp = equalUnderTypeSynonyms synonyms (sub |-> t1') (sub |-> t2') 
+                     utp = maybe err id mutp
+                     err = internalError "Top.Solvers.GreedySubst" "greedyState" "types not unifiable"
                      f (FixpointSubstitution fm) =
                            FixpointSubstitution (addListToFM fm [ (i, lookupInt i sub) | i <- dom sub ])
                      g = writeExpandedType synonyms t2 utp 

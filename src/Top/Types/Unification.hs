@@ -67,8 +67,10 @@ mguWithTypeSynonyms typesynonyms = rec emptySubst
          Just t2 -> 
             case rec sub tp t2 of
                Right (True,sub') -> 
-                  let newTP = equalUnderTypeSynonyms typesynonyms (sub' |-> tp) (sub' |-> t2)
-                  in Right (True,singleSubstitution i newTP @@ removeDom [i] sub')
+                  let mtp = equalUnderTypeSynonyms typesynonyms (sub' |-> tp) (sub' |-> t2)
+                  in case mtp of 
+                        Just newTP -> Right (True,singleSubstitution i newTP @@ removeDom [i] sub')
+                        Nothing -> internalError "Top.Types.Unification" "mguWithTypeSynonyms" "illegal types" 
                answer -> answer
          Nothing -> 
             case sub |-> tp of 
@@ -89,16 +91,18 @@ mguWithTypeSynonyms typesynonyms = rec emptySubst
 
 -- |Find the most general type for two types that are equal under type synonyms
 -- (i.e., the least number of expansions)
-equalUnderTypeSynonyms :: OrderedTypeSynonyms -> Tp -> Tp -> Tp
+equalUnderTypeSynonyms :: OrderedTypeSynonyms -> Tp -> Tp -> Maybe Tp
 equalUnderTypeSynonyms typesynonyms t1 t2 = 
    case (leftSpine t1,leftSpine t2) of 
-      ((TVar i,[]),(TVar _,[])) -> TVar i
+      ((TVar i,[]),(TVar _,[])) -> Just (TVar i) 
       ((TCon s,ss),(TCon t,tt)) 
-                    | s == t    -> foldl TApp (TCon s) $ map (uncurry (equalUnderTypeSynonyms typesynonyms)) (zip ss tt)
+                    | s == t    -> do let f (s, t) = equalUnderTypeSynonyms typesynonyms s t
+                                      xs <- mapM f (zip ss tt)
+                                      Just (foldl TApp (TCon s) xs)
                     | otherwise -> case expandOneStepOrdered typesynonyms (t1, t2) of
                                       Just (t1', t2') -> equalUnderTypeSynonyms  typesynonyms t1' t2'
-                                      Nothing         -> internalError "Top.Types.Unification" "equalUnderTypeSynonyms" "invalid types"
-      _ -> internalError "Top.Types.Unification" "equalUnderTypeSynonyms" "invalid types"
+                                      Nothing         -> Nothing
+      _ -> Nothing
 
 -- |Given a set of (ordered) type synonyms, can two types be unified?                              
 unifiable :: OrderedTypeSynonyms -> Tp -> Tp -> Bool
