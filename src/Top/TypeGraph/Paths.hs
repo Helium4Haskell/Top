@@ -196,7 +196,7 @@ removeSomeDuplicates eqF = simplifyPath . rec where
          p1 :|: p2 -> rec p1 :|: rec p2
          _ -> path
          
-participationMap :: Ord a => Path a -> (Int, FiniteMap a Int)
+participationMap :: Ord a => Path a -> (Integer, FiniteMap a Integer)
 participationMap path = 
    case path of
       Empty     -> (1, emptyFM)
@@ -210,6 +210,3 @@ participationMap path =
       p1 :|: p2 -> let (i1, fm1) = participationMap p1 
                        (i2, fm2) = participationMap p2
                    in (i1 + i2, plusFM_C (+) fm1 fm2)
-                   
---t = (\(x,y) -> (x, fmToList y))
---      $ participationMap (((Step 'a' :|: Step 'b') :+: (Step 'a' :|: Step 'c')) :|: Step 'e')

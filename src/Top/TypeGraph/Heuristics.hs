@@ -26,7 +26,6 @@ data HComponent m info
      = Filter    String ([(EdgeID, Int, info)] -> m [(EdgeID, Int, info)])
      | Voting   [Selector m info]
      | PathComponent (Path (EdgeID, Int, info) -> Heuristic info)
-     | Skip
           
 resultsEdgeFilter :: (Eq a, Monad m) => ([a] -> a) -> String -> ((EdgeID,Int,info) -> m a) -> HComponent m info
 resultsEdgeFilter selector description function =
@@ -90,11 +89,13 @@ safeApplySubst = rec [] where
     TApp t1 t2 -> do mt1 <- rec history t1
                      mt2 <- rec history t2
                      case (mt1,mt2) of 
-                       (Just t1',Just t2') -> return (Just $ TApp t1' t2')
-                       _                   -> return Nothing
+                       (Just t1', Just t2') -> return (Just $ TApp t1' t2')
+                       _                    -> return Nothing
 
 eqInfo3 :: (EdgeID, Int, info) -> (EdgeID, Int, info) -> Bool
-eqInfo3 (a1,b1,_) (a2,b2,_) = b1 == b2 -- && a1 == a2
+eqInfo3 (a1,b1,_) (a2,b2,_) = b1 == b2
+
+-----------------------------------------------------------------------------
 
 class HasTwoTypes a where
    getTwoTypes :: a -> (Tp, Tp)

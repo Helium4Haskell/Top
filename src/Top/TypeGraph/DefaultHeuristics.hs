@@ -58,7 +58,7 @@ highParticipation ratio =
                 "{"++show info++"}"
                 
          in Heuristic (Filter ("Participation ratio [ratio="++show ratio++"]")
-               (\es -> do printMessage (msg es)
+               (\es -> do printMessage (msg es)	                  
                           return (filter (\(_,cnr,_) -> cnr `elem` goodCNrs) es)))))
 
 positionInList :: Heuristic info

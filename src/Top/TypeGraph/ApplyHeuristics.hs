@@ -79,24 +79,9 @@ evalHeuristics path heuristics =
                       Just (prio, _, edgeIDs, infos) ->
                          do printMessage ("\n*** With priority "++show prio++", "++showSet edgeIDs++" was selected\n")
                             return (edgeIDs, infos)
-                
-                {-
-             Selector name f ->         
-                do results <- mapM f edges
-                   case catMaybes results of
-                      (:ts -> 
-                         do printMessage (name ++ "(selector)")
-                            printMessage ("   " ++ showSet (map fst (t:ts)))
-                            return t
-                      _   -> 
-                         do printMessage (name ++ "(selector): failed")
-                            rec edges rest -}
 
              PathComponent f -> 
                 rec edges (f path : rest)
-
-             Skip ->                
-                rec edges rest
                 
    in rec edgesBegin heuristics
 
