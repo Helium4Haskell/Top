@@ -30,6 +30,19 @@ import Data.List
 type TpScheme = Forall QType
 type QType    = Qualification Predicate Tp
 
+-- |A type class to convert something into a type scheme
+class IsTpScheme a where
+   toTpScheme :: a -> TpScheme
+   
+instance IsTpScheme TpScheme where
+   toTpScheme = id
+
+instance IsTpScheme QType where
+   toTpScheme = noQuantifiers
+   
+instance IsTpScheme Tp where
+   toTpScheme = noQuantifiers . ([] .=>.)
+
 ----------------------------------------------------------------------
 -- * Basic functionality for types and type schemes
 {-
@@ -116,4 +129,3 @@ instantiateWithNameMap unique (Quantification (qs,nm,qtp)) =
    in (u, ps, tp)
 
 instance (Show q, Show a) => ShowQuantors (Qualification q a)
---instance ShowQuantors Predicate

@@ -44,6 +44,7 @@ solveConstraints doFirst doAtEnd synonyms unique constraints =
       printState
       startSolving
       makeConsistent
+      checkErrors
       doAtEnd
 
 skip :: Monad m => m ()

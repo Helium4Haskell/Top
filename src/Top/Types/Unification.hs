@@ -20,9 +20,10 @@ import Utils (internalError)
 -- |There are two reasons why two types cannot be unified: either two (different) type constants clash (they
 -- should be the same), or a type variable should be unified with a composed type that contains this same
 -- type variable.
-data UnificationError = ConstantClash
-                      | InfiniteType
-  deriving (Show,Eq)       
+data UnificationError 
+   = ConstantClash String String
+   | InfiniteType Int
+ deriving (Show,Eq)       
 
 -- |The most general unification (substitution) of two types.
 mgu :: Tp -> Tp -> Either UnificationError FiniteMapSubstitution 
@@ -55,7 +56,7 @@ mguWithTypeSynonyms typesynonyms = rec emptySubst
                                                Just (t1',t2') -> case rec sub t1' t2' of
                                                                     Left  uError   -> Left uError
                                                                     Right (_,sub') -> Right (True,sub') 
-                                               Nothing        -> Left ConstantClash
+                                               Nothing        -> Left (ConstantClash s t)
                                                                           
                _ -> case (t1, t2) of
                        (TApp l1 r1, TApp l2 r2) -> recList sub [l1, r1] [l2, r2]
@@ -69,7 +70,7 @@ mguWithTypeSynonyms typesynonyms = rec emptySubst
                                       answer            -> answer
                              Nothing -> case sub |-> tp of 
                                            TVar j | i == j           -> Right (False,sub)
-                                           tp'    | i `elem` ftv tp' -> Left InfiniteType
+                                           tp'    | i `elem` ftv tp' -> Left (InfiniteType i)
                                                   | otherwise        -> Right (False,singleSubstitution i tp' @@ sub)                                     
             
         recList :: FiniteMapSubstitution -> Tps -> Tps -> Either UnificationError (Bool, FiniteMapSubstitution)
@@ -80,7 +81,8 @@ mguWithTypeSynonyms typesynonyms = rec emptySubst
               Right (b,sub') -> case recList sub' ss tt of
                                    Left uError      -> Left uError
                                    Right (b',sub'') -> Right (b || b', sub'')
-        recList _ _ _ = Left ConstantClash
+        recList _ _ _ = 
+	   internalError "Top.Types.Unification" "mguWithTypeSynonyms" "kinds do not match"
 
 -- |Find the most general type for two types that are equal under type synonyms
 -- (i.e., the least number of expansions)

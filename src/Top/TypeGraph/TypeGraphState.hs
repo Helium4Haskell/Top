@@ -28,14 +28,14 @@ class (HasBasic m info, HasTI m info, HasSubst m info)
    
    -- inspect the equivalence group of a vertex
    verticesInGroupOf       :: VertexID -> m [(VertexID, VertexInfo)]
-   childrenInGroupOf       :: VertexID -> m [(VertexID, (VertexID, VertexID))]  -- *
-   representativeInGroupOf :: VertexID -> m VertexID                            -- *
-   constantsInGroupOf      :: VertexID -> m [String]                            -- *
+   childrenInGroupOf       :: VertexID -> m [(VertexID, (VertexID, VertexID))]
+   representativeInGroupOf :: VertexID -> m VertexID
+   constantsInGroupOf      :: VertexID -> m [String]
    
    -- find all edges from a vertex, and all paths between a pair of vertices
    edgesFrom           :: VertexID -> m [(EdgeID, Int, info)]
-   allPaths            ::               VertexID ->  VertexID  -> m (Path (EdgeID, EdgeInfo info))  -- *1
-   allPathsList        ::               VertexID -> [VertexID] -> m (Path (EdgeID, EdgeInfo info))  -- *1
+   allPaths            ::               VertexID ->  VertexID  -> m (Path (EdgeID, EdgeInfo info))
+   allPathsList        ::               VertexID -> [VertexID] -> m (Path (EdgeID, EdgeInfo info))
    allPathsListWithout :: [VertexID] -> VertexID -> [VertexID] -> m (Path (EdgeID, EdgeInfo info))   
 
    -- functions to deconstruct (remove parts of) the typegraph

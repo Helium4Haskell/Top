@@ -28,7 +28,7 @@ basicGets f = do a <- basicGet ; return (f a)
 data BasicState m info = BasicState 
    { constraints :: Constraints m
    , debug       :: ShowS
-   , errors      :: [info]
+   , errors      :: [(info, m Bool)]
    , conditions  :: [(m Bool, String)]
    }
 
@@ -81,14 +81,19 @@ getMessages    = basicGets (($ []) . debug)
 ---------------------------------------------------------------------
 -- errors
  
-addError  :: HasBasic m info => info -> m ()
-setErrors :: HasBasic m info => [info] -> m ()                
-getErrors :: HasBasic m info => m [info]   
+addError        :: HasBasic m info => info -> m ()
+addCheckedError :: HasBasic m info => (info, m Bool) -> m ()   
+getErrors       :: HasBasic m info => m [info]   
+checkErrors     :: HasBasic m info => m ()
 
-addError x   = basicModify (\s -> s { errors = x : errors s })
-getErrors    = basicGets errors
-setErrors xs = basicModify (\s -> s { errors = xs })  
-  
+addError x        = addCheckedError (x, return True)
+addCheckedError x = basicModify (\s -> s { errors = x : errors s })
+getErrors         = basicGets (map fst . errors)
+checkErrors = 
+   do xs <- basicGets errors
+      ys <- filterM snd xs
+      basicModify (\s -> s { errors = ys })
+
 ---------------------------------------------------------------------
 -- conditions
 
