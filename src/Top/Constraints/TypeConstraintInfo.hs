@@ -2,6 +2,9 @@ module Top.Constraints.TypeConstraintInfo where
 
 import Top.Types
 
+instance TypeConstraintInfo ()
+-- instance PolyTypeConstraintInfo a ()
+
 class Show info => TypeConstraintInfo info where
    equalityTypePair     :: (Tp, Tp)  -> info -> info
    ambiguousPredicate   :: Predicate -> info -> info
