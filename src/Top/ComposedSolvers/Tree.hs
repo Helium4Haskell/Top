@@ -10,7 +10,7 @@ module Top.ComposedSolvers.Tree where
 
 import Top.Types
 import Top.ComposedSolvers.TreeWalk 
-import Data.List (partition)
+import Data.List (partition, intersperse)
 import Data.FiniteMap
 import qualified Data.Set as S
 
@@ -141,8 +141,8 @@ spreadTree spreadFunction = fst . rec emptyFM
           _ -> (tree, S.emptySet)
 
 
-phaseTree :: Tree a -> Tree a
-phaseTree = strictRec
+phaseTree :: a -> Tree a -> Tree a
+phaseTree a = strictRec
    
    where
     rec tree = 
@@ -171,7 +171,7 @@ phaseTree = strictRec
     strictRec tree = 
        let (tree', phases) = rec tree
            f i list = listTree (list [])
-       in foldr1 StrictOrder (eltsFM (addToFM_C binTree (mapFM f phases) 5 tree'))
+       in foldr1 StrictOrder (intersperse (unitTree a) (eltsFM (addToFM_C binTree (mapFM f phases) 5 tree')))
         
           
 chunkTree :: Substitution substitution => 

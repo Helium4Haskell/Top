@@ -20,7 +20,10 @@ import Utils (internalError)
 -----------------------------------------------------------------------------
 
 newtype Heuristic  info = Heuristic (forall m . HasTypeGraph m info => HComponent m info)
-newtype HasTypeGraph m info => Selector m info = Selector  (String, (EdgeID, Int, info) -> m (Maybe (Int, String, [EdgeID], [info])))
+data HasTypeGraph m info => Selector m info 
+   = Selector     (String, (EdgeID, Int, info) -> m (Maybe (Int, String, [EdgeID], [info])))
+   | SelectorList (String, [(EdgeID, Int, info)] -> m (Maybe (Int, String, [EdgeID], [info])))
+   | SelectorPath (Path (EdgeID, Int, info) -> Selector m info)
 
 data HComponent m info 
      = Filter    String ([(EdgeID, Int, info)] -> m [(EdgeID, Int, info)])

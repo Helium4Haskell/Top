@@ -58,9 +58,20 @@ evalHeuristics path heuristics =
              
              Voting selectors -> 
                 do printMessage ("Voting with "++show (length selectors) ++ " heuristics")
-                   mres <- let op best (Selector (name, f)) = 
-                                  do printMessage ("- "++name++" (selector)")
-                                     results <- mapM f edges                                     
+                   mres <- let getResults (Selector (name, f)) =
+		                  do printMessage ("- "++name++" (selector)")
+                                     mapM f edges  
+				     
+			       getResults (SelectorList (name, f)) =
+		                  do printMessage ("- "++name++" (list selector)")
+                                     result <- f edges
+				     return [result]
+				     
+			       getResults (SelectorPath f) =
+		                  getResults (f path)
+		   
+		               op best selector = 
+                                  do results <- getResults selector                                
                                      case catMaybes results of
                                         [] -> return best
                                         rs -> do let f (i,s,es,_) = "    "++s++" (prio="++show i++") => "++showSet es
