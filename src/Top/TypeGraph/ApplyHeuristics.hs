@@ -33,9 +33,10 @@ applyHeuristics heuristics =
                    (edgeID2, info2) <- rec restPath
                    return (edgeID1++edgeID2, info1++info2)
    in 
-      do errorPath     <- allErrorPaths         
-         rec (removeSomeDuplicates eqInfo3 errorPath)   
-	 
+      do errorPath     <- allErrorPaths
+         -- printMessage ("The error path: "++ show ( mapPath (\(a,_,_) -> a) errorPath)) 
+         rec (removeSomeDuplicates eqInfo3 errorPath) 
+ 
 evalHeuristics :: HasTypeGraph m info => Path (EdgeID, Int, info) -> [Heuristic info] -> m ([EdgeID], [info])
 evalHeuristics path heuristics = 
    let 
@@ -103,11 +104,10 @@ showSet as = "{" ++ f (map show as) ++ "}"
       
 allErrorPaths :: HasTypeGraph m info => m (Path (EdgeID, Int, info))
 allErrorPaths = 
-   do 
-      is      <- possibleInconsistentGroups      
+   do is      <- getPossibleInconsistentGroups     
       cGraph  <- childrenGraph is     
       let toCheck = nub $ concat (is : [ [a,b] | ((a,b),_) <- cGraph ])
-      paths1  <- constantClashPaths toCheck                                    
+      paths1  <- constantClashPaths toCheck     
       paths2  <- infiniteTypePaths cGraph        
       let errorPath = simplifyPath (altList (paths1 ++ paths2))                          
       expandPath errorPath 
@@ -118,7 +118,7 @@ allErrorPaths =
 constantClashPaths :: HasTypeGraph m info => [VertexID] -> m [Path (EdgeID, EdgeInfo info)]
 constantClashPaths []     = return []
 constantClashPaths (i:is) = 
-   do vertices <- verticesInGroupOf i    
+   do vertices <- verticesInGroupOf i 
       paths1   <- pathInGroup vertices         
       paths2   <- let vs = map fst vertices
                   in constantClashPaths (filter (`notElem` vs) is)
@@ -255,28 +255,35 @@ allSubPathsList childList start targets = rec [] start
                           
                _    -> return simplifiedDirect               
             
-      
+type ImpliedList = [(EdgeID {- original pair -}, (VertexID, VertexID) {- two parents -})]
+
 expandPath :: HasTypeGraph m info => Path (EdgeID, EdgeInfo info) -> m (Path (EdgeID, Int, info))
 expandPath path =
-   do expandTable  <- makeTable (implied path) emptyFM
+   do expandTable  <- makeTable (getImplied path) emptyFM
       expandedPath <- rec [] expandTable path           
       return (simplifyPath expandedPath)
          
  where   
-    implied :: Path (EdgeID, EdgeInfo info) -> [(VertexID,VertexID)] 
-    implied path = [ (v1, v2) | (_, Implied _ v1 v2) <- steps path ]
+    getImplied :: Path (EdgeID, EdgeInfo info) -> ImpliedList
+    getImplied path = [ (original, (v1, v2)) | (original, Implied _ v1 v2) <- steps path ]
  
     makeTable :: HasTypeGraph m info => 
-                    [(VertexID,VertexID)] 
+                    ImpliedList
                        ->    FiniteMap (VertexID,VertexID) (Path (EdgeID, EdgeInfo info)) 
                        -> m (FiniteMap (VertexID,VertexID) (Path (EdgeID, EdgeInfo info)))
     makeTable [] fm = return fm
-    makeTable (pair@(v1, v2):rest) fm
+    makeTable (impl@(_, pair):rest) fm
        | elemFM pair fm = makeTable rest fm
        | otherwise =
-            do path <- allPathsList v1 [v2]  
-               makeTable (implied path ++ rest) (addToFM fm pair path)
-           
+            do path <- pathWithinClique impl  
+               makeTable (getImplied path ++ rest) (addToFM fm pair path)
+    
+    -- to do: take a closer look to this code. The original pair (in Implied) may be superfluous.
+    pathWithinClique :: HasTypeGraph m info =>
+                           (EdgeID, (VertexID, VertexID)) -> m (Path (EdgeID, EdgeInfo info))
+    pathWithinClique (EdgeID v1 v2@target, (p1, p2)) =
+       allPathsList p1 [p2]  
+	       
     rec history fm p = 
        let f (edgeID, edgeInfo) = 
               case edgeInfo of

@@ -66,7 +66,7 @@ instance HasTypeGraph (TypeGraphX info ext) info where
       do synonyms <- getTypeSynonyms
          eqgroups <- tgGets (eltsFM . equivalenceGroupMap) 
          let f eqc = case typeOfGroup synonyms eqc of 
-                        Nothing -> internalError "Top.TypeGraph.TypeGraphSolver" "makeSubstitution" "inconsistent state"
+                        Nothing -> internalError "Top.TypeGraph.TypeGraphSolver" "makeSubstitution" ("inconsistent state" ++ show eqc)
                         Just tp -> [ (v, tp) | (v,_) <- vertices eqc, notId v tp ]
              notId i (TVar j) = i /= j
              notId _ _        = True
@@ -97,7 +97,7 @@ instance HasTypeGraph (TypeGraphX info ext) info where
       debugTrace ("constantsInGroupOf " ++ show i) >>
       do eqc <- equivalenceGroupOf i
          return (constants eqc)     
-
+	 
    edgesFrom i =
       debugTrace ("edgesFrom " ++ show i) >>
       do eqc <- equivalenceGroupOf i
@@ -123,19 +123,27 @@ instance HasTypeGraph (TypeGraphX info ext) info where
          cliques <- lookForCliques is
          mapM_ deleteClique cliques
             
-   possibleInconsistentGroups = 
-      debugTrace "possibleInconsistentGroups" >>
-      do errors <- getPossibleErrors
-         setPossibleErrors []
-         return errors     
-                     
+   getPossibleInconsistentGroups = 
+      debugTrace "getPossibleInconsistentGroups" >>
+      getPossibleErrors
+	 
+   noPossibleInconsistentGroups = 
+      debugTrace "setPossibleInconsistentGroups" >>
+      setPossibleErrors []
+	 
    removeInconsistencies = 
       debugTrace "removeInconsistencies" >> 
       do hs <- tgGets typegraphHeuristics
          (edges, errors) <- applyHeuristics hs
          mapM_ deleteEdge edges
-         mapM_ addError errors                                                                
-
+         mapM_ addError errors 
+         if null errors && null edges
+	   then -- everything is okay: no errors were found.
+	        noPossibleInconsistentGroups
+           else -- Bug patch 3 february 2004
+	        -- safety first: check whether *everything* is really removed. 
+	        removeInconsistencies
+	 
    allPathsList = allPathsListWithout []
    
    allPathsListWithout without v1 vs = 

@@ -43,8 +43,9 @@ class (HasBasic m info, HasTI m info, HasSubst m info)
    deleteClique :: Cliques -> m ()
    
    -- functions to find/remove inconsistencies        
-   removeInconsistencies      :: m ()
-   possibleInconsistentGroups :: m [Int]
+   removeInconsistencies         :: m ()
+   getPossibleInconsistentGroups :: m [Int]
+   noPossibleInconsistentGroups  :: m ()
    
    -- building a substitution from a typegraph
    makeSubstitution :: m [(VertexID, Tp)]

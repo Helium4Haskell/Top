@@ -95,6 +95,8 @@ run p input
                            [] -> putStrLn "(No errors)" 
                            es -> do putStr (unlines es)
                                     putStrLn ("(Failed with "++show (length es)++" errors)")
+				    putStrLn "Substitution"
+				    putStrLn $ show (substitutionFromResult result)
                            
                        
                       
