@@ -211,7 +211,7 @@ tpParser = level0
    list p = ((:) <$> p <*> list p) <|> succeed []
    list1 p = (:) <$> p <*> list p
    seplist sep p = (:) <$> p <*> list (sep *> p)
-   commaList = seplist (tok ",")
+   commaList p = seplist (tok ",") p <|> succeed []
 
 ----------------------------------------------------------------------
 -- The type class HasTypes
