@@ -51,7 +51,8 @@ minimalEdgeFilter = resultsEdgeFilter minimum
 edgeFilter :: Monad m => String -> ((EdgeID, Int, info) -> m Bool) -> HComponent m info
 edgeFilter description function = 
    Filter description $ \edges -> 
-      filterM function edges
+      do xs <- filterM function edges
+         return (if (null xs) then edges else xs)
 
 
 -----------------------------------------------------------------------------
