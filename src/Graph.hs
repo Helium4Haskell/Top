@@ -24,7 +24,7 @@
 
 -- $Id$
 
-module MyData.Graph( topSort ) where
+module Graph( topSort ) where
 
 {-
         ( Graph, Table, Vertex, Tree(Node), Forest

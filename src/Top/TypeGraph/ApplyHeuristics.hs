@@ -18,7 +18,7 @@ import Data.List
 import Top.Types	
 import Data.Maybe
 import Data.FiniteMap
-import MyData.Graph (topSort)
+import Graph (topSort)
 import Top.States.BasicState (printMessage)
 
 applyHeuristics :: HasTypeGraph m info => [Heuristic info] -> m ([EdgeID], [info])

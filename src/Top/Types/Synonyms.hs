@@ -15,7 +15,7 @@
 module Top.Types.Synonyms where
 
 import Top.Types.Basics
-import MyData.Graph (topSort) 
+import Graph (topSort) 
 import Data.FiniteMap
 import Utils (internalError)
 
