@@ -19,7 +19,7 @@ instance ( TypeConstraintInfo info
             classEnv <- getClassEnvironment
             return (entail syns classEnv (map fst ps) p)
    
-      normalize psNew = 
+      simplify psNew = 
          do syns     <- getTypeSynonyms
             classEnv <- getClassEnvironment
          

@@ -67,8 +67,8 @@ solveResult =
       errs        <- getLabeledErrors
       sub         <- fixpointSubst
       ps          <- getPredicates     
-      messages    <- getMessages
-      return (SolveResult uniqueAtEnd sub (map fst ps) errs messages empty)
+      messages    <- getMessages     
+      return (SolveResult uniqueAtEnd sub ps errs messages empty)
 
 ----------------------------------------------------------------------
 -- Solve type constraints

@@ -33,7 +33,7 @@ data SubstState m info = SubstState
 
 -- |Make the state consistent. Only relevant for substitution states that 
 -- can be inconsistent (for instance, the type graph substitution state).
-makeConsistent    :: HasSubst m info => m ()
+makeSubstConsistent :: HasSubst m info => m ()
 -- |Unify two terms. Supply additional information for this unification.
 unifyTerms        :: HasSubst m info => info -> Tp -> Tp -> m ()
 -- |Lookup the value of a type variable in the substitution
@@ -44,10 +44,10 @@ fixpointSubst     :: HasSubst m info => m FixpointSubstitution
 -- member of the Substitutable type class). 
 applySubst        :: (Substitutable a, HasSubst m info) => a -> m a
 
-makeConsistent  = makeConsistent_impl substState
-unifyTerms      = unifyTerms_impl substState 
-findSubstForVar = findSubstForVar_impl substState 
-fixpointSubst   = fixpointSubst_impl substState                    
+makeSubstConsistent = makeConsistent_impl substState
+unifyTerms          = unifyTerms_impl substState 
+findSubstForVar     = findSubstForVar_impl substState 
+fixpointSubst       = fixpointSubst_impl substState                    
                            
 applySubst a = 
    do let var = ftv a

@@ -24,7 +24,7 @@ data Tp       = TVar Int      -- ^The type variables are numbered.
               | TCon String   -- ^A type constant is represented by a string.
               | TApp Tp Tp    -- ^The application of two Top.Types. Not all types that can be
                               -- constructed are well-formed.
-  deriving Eq
+  deriving (Eq, Ord)
 
 ----------------------------------------------------------------------
 -- * Common types

@@ -203,14 +203,14 @@ minimalSets eqF = rec where
                         GT -> sol2
                   _ -> sol1 ++ sol2
 
-removeSomeDuplicates :: (a -> Int) -> Path a -> Path a
-removeSomeDuplicates toInt = simplifyPath . rec emptyFM where
+removeSomeDuplicates :: Ord b => (a -> b) -> Path a -> Path a
+removeSomeDuplicates toOrd = simplifyPath . rec emptyFM where
    rec fm path = 
       case path of
       
          left :+: right ->
 	    case left of 
-	       Step a    -> let int = toInt a
+	       Step a    -> let int = toOrd a
 	                        fm' = addToFM fm int Empty
 	                    in case lookupFM fm int of 
 			          Just left' -> left' :+: rec fm  right 
@@ -220,7 +220,7 @@ removeSomeDuplicates toInt = simplifyPath . rec emptyFM where
 	       
 	 left :|: right -> 
 	    case left of
-               Step a    -> let int = toInt a
+               Step a    -> let int = toOrd a
 	                        fm' = addToFM fm int Fail
                             in case lookupFM fm int of 
 			          Just left' -> left' :|: rec fm  right
@@ -229,7 +229,7 @@ removeSomeDuplicates toInt = simplifyPath . rec emptyFM where
                _         -> rec fm left :|: rec fm right
 	 
 	 Step a -> 
-	    lookupWithDefaultFM fm path (toInt a)
+	    lookupWithDefaultFM fm path (toOrd a)
 	 
 	 _ -> path
  

@@ -38,12 +38,11 @@ applyHeuristics heuristics =
    in 
       do errorPath     <- allErrorPaths
          -- printMessage ("The error path: "++ show ( mapPath (\(a,_,_) -> a) errorPath))  
-         res <- rec (removeSomeDuplicates info3ToInt errorPath) 
-         --addNewEdge undefined undefined
+         res <- rec (removeSomeDuplicates info3ToEdgeNr errorPath) 
          return res
  
 evalHeuristics :: HasTypeGraph m info => 
-                     Path (EdgeID, Int, info) -> [Heuristic info] -> 
+                     Path (EdgeID, EdgeNr, info) -> [Heuristic info] -> 
                      m (m (), [EdgeID], [info])
 evalHeuristics path heuristics = 
    rec edgesBegin heuristics
@@ -121,9 +120,9 @@ showSet as = "{" ++ f (map show as) ++ "}"
    where f [] = ""
          f xs = foldr1 (\x y -> x++","++y)  (map show xs)
       
-allErrorPaths :: HasTypeGraph m info => m (Path (EdgeID, Int, info))
+allErrorPaths :: HasTypeGraph m info => m (Path (EdgeID, EdgeNr, info))
 allErrorPaths = 
-   do is      <- getPossibleInconsistentGroups     
+   do is      <- getMarkedPossibleErrors     
       cGraph  <- childrenGraph is     
       let toCheck = nub $ concat (is : [ [a,b] | ((a,b),_) <- cGraph ])
       paths1  <- constantClashPaths toCheck
@@ -135,7 +134,7 @@ allErrorPaths =
 ----------------------------
 
 -- not simplified: can also contain implied edges
-constantClashPaths :: HasTypeGraph m info => [VertexID] -> m [Path (EdgeID, EdgeInfo info)]
+constantClashPaths :: HasTypeGraph m info => [VertexID] -> m [TypeGraphPath info]
 constantClashPaths []     = return []
 constantClashPaths (first:rest) = 
    do vertices <- verticesInGroupOf first
@@ -144,7 +143,7 @@ constantClashPaths (first:rest) =
       pathInGroup vertices <++> constantClashPaths rest'     
 
  where
-  pathInGroup :: HasTypeGraph m info => [(VertexID, VertexInfo)] -> m [Path (EdgeID, EdgeInfo info)]
+  pathInGroup :: HasTypeGraph m info => [(VertexID, VertexInfo)] -> m [TypeGraphPath info]
   pathInGroup = errorPath . groupTheConstants . getConstants
    
   getConstants :: [(VertexID, VertexInfo)] -> [(VertexID, String)]
@@ -161,7 +160,7 @@ constantClashPaths (first:rest) =
      .  groupBy (\x y -> snd x    ==     snd y)
      .  sortBy  (\x y -> snd x `compare` snd y)
    
-  errorPath :: HasTypeGraph m info => [[VertexID]] -> m [Path (EdgeID, EdgeInfo info)]   
+  errorPath :: HasTypeGraph m info => [[VertexID]] -> m [TypeGraphPath info]   
   errorPath []        = return []             
   errorPath [_]       = return []
   errorPath (is:iss) = 
@@ -171,7 +170,7 @@ constantClashPaths (first:rest) =
 ----------------------------     
 
 -- not simplified: can also contain implied edges
-infiniteTypePaths :: HasTypeGraph m info => ChildGraph -> m [Path (EdgeID, EdgeInfo info)]
+infiniteTypePaths :: HasTypeGraph m info => ChildGraph -> m [TypeGraphPath info]
 infiniteTypePaths cGraph =        
    do pss <- mapM (makePathForInfiniteGroup . inThisGroup) allGroups
       return (concat pss)
@@ -188,7 +187,7 @@ infiniteTypePaths cGraph =
           f (_, xs) (_, ys) = length xs `compare` length ys
       in sortBy f (filter p cGraph)
                 
-   makePathForInfiniteGroup :: HasTypeGraph m info => ChildGraph -> m [Path (EdgeID, EdgeInfo info)]
+   makePathForInfiniteGroup :: HasTypeGraph m info => ChildGraph -> m [TypeGraphPath info]
    makePathForInfiniteGroup groupGraph =
       case groupGraph of
          [] -> return []
@@ -234,10 +233,10 @@ infiniteGroups xs =
                    in map (map f2) ((filter p groups))
    in recursive
 
-allSubPathsList :: HasTypeGraph m info => [(VertexID, VertexID)] -> VertexID -> [VertexID] -> m (Path (EdgeID, EdgeInfo info))   
+allSubPathsList :: HasTypeGraph m info => [(VertexID, VertexID)] -> VertexID -> [VertexID] -> m (TypeGraphPath info) 
 allSubPathsList childList vertex targets = rec S.emptySet vertex
  where
-   rec :: HasTypeGraph m info => S.Set VertexID -> VertexID -> m (Path (EdgeID, EdgeInfo info))
+   rec :: HasTypeGraph m info => S.Set VertexID -> VertexID -> m (TypeGraphPath info)
    rec without start =  
       do vs <- verticesInGroupOf start
          case any (`elem` map fst vs) targets of 
@@ -267,14 +266,14 @@ allSubPathsList childList vertex targets = rec S.emptySet vertex
                   do extendedPaths <- mapM recDown targetPairs
                      return (altList extendedPaths)           
 	           
-expandPath :: HasTypeGraph m info => Path (EdgeID, EdgeInfo info) -> m (Path (EdgeID, Int, info))
+expandPath :: HasTypeGraph m info => TypeGraphPath info -> m (Path (EdgeID, EdgeNr, info))
 expandPath path =
    let impliedEdges = [ intPair (v1, v2) | (_, Implied _ v1 v2) <- steps path ]
        change table (edge, edgeInfo) =
           case edgeInfo of
-	     Initial cnr info -> Step (edge, cnr, info)
-	     Child _          -> Empty 
-	     Implied _ p1 p2  -> lookupPair table (intPair (p1, p2))
+             Initial cnr info -> Step (edge, cnr, info)
+             Child _          -> Empty 
+             Implied _ v1 v2  -> lookupPair table (intPair (v1, v2))
    in do expandTable <- impliedEdgeTable impliedEdges
          return (simplifyPath (changeStep (change expandTable) path))
 
@@ -301,13 +300,13 @@ impliedEdgeTable = foldM (insertEdge S.emptySet) emptyFM
          Empty     -> return (Empty, fm)
          Step (edge, Initial cnr info) -> return (Step (edge, cnr, info), fm)
          Step (_, Child _) -> return (Empty, fm)
-         Step (_, Implied _ p1 p2)
+         Step (_, Implied _ v1 v2)
 	        | pair `S.elementOf` history -> return (Empty, fm)
 	        | otherwise -> 
 	             do fm' <- insertEdge history fm pair
 	                return (lookupPair fm' pair, fm')
 		    
-          where pair = intPair (p1, p2) 
+          where pair = intPair (v1, v2) 
 	  
 -------------------------------
 -- 
@@ -330,18 +329,18 @@ instance Ord IntPair where
    Hidden_IP pair1 `compare` Hidden_IP pair2 = 
       pair1 `compare` pair2
 
-type PathMap info = FiniteMap IntPair (Path (EdgeID, Int, info))
+type PathMap info = FiniteMap IntPair (Path (EdgeID, EdgeNr, info))
 
-lookupPair :: PathMap info -> IntPair -> Path (EdgeID, Int, info)
+lookupPair :: PathMap info -> IntPair -> Path (EdgeID, EdgeNr, info)
 lookupPair fm pair = 
    let err = internalError "Top.TypeGraph.ApplyHeuristics" "lookupPair" "could not find implied edge while expanding"
    in lookupWithDefaultFM fm err pair
 
 -- move to another module
-predicatePath :: HasTypeGraph m info => m (Path (EdgeID, EdgeInfo info))
+predicatePath :: HasTypeGraph m info => m (Path (EdgeID, PathStep info))
 predicatePath = 
    do ps       <- getPredicates
-      simples  <- simplePredicates (map fst ps)
+      simples  <- simplePredicates ps
       makeList (S.emptySet) Empty simples
 
  where 
@@ -364,7 +363,7 @@ predicatePath =
              
              -- vertices to inspect
              let constants  = [ (i', TCon s) | (i', (VCon s, _)) <- vertices ]
-             applys <- let f i' = do tp <- getFullType i'
+             applys <- let f i' = do tp <- typeFromTermGraph i'
                                      return (i', tp)
                        in mapM f [ i' | (i', (VApp _ _, _)) <- vertices ]
                               

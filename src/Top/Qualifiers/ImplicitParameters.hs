@@ -3,6 +3,7 @@ module Top.Qualifiers.ImplicitParameters where
 import Top.States.ImplicitParameterState
 import Top.States.SubstState
 import Top.States.TIState
+import Top.States.BasicState
 import Top.Qualifiers.Qualifiers
 import Top.Constraints.Equality
 import Top.Constraints.Constraints
@@ -14,6 +15,7 @@ import Utils (internalError)
 instance ( HasIP m info
          , HasSubst m info
          , HasTI m info
+         , HasBasic m info
          , TypeConstraintInfo info
          ) => 
            Qualifier m info ImplicitParameter
@@ -23,9 +25,9 @@ instance ( HasIP m info
          return (x `elem` map fst xs)
       
       -- normalization
-      normalizeFixpoint xs =
+      improveFixpoint xs =
          let 
-             list = groupBy (\x y -> f x == f y) xs
+             list = groupBy (\x y -> f x == f y) (sortBy (\x y -> f x `compare` f y) xs)
              f (ImplicitParameter s _, _) = s
              bool = any ((>1) . length) list
              

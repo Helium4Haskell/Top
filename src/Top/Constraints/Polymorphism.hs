@@ -64,7 +64,7 @@ instance ( HasBasic m info
             do makeConsistent
                monosNew <- applySubst monosOld
                tpNew    <- applySubst tpOld
-               ps       <- doNormalization
+               ps       <- doContextReduction
                
                let someAlphas = ftv tpNew \\ ftv monosNew
                (allAlphas, psGen, psNew) <- doGeneralization (ftv monosNew) someAlphas ps
@@ -72,7 +72,7 @@ instance ( HasBasic m info
                putToProve psNew
                addToGeneralized psGen
                
-               tpNewer <- applySubst tpOld -- !! normalization can extend the substitution
+               tpNewer <- applySubst tpOld -- !! context reduction can extend the substitution
                as <- ftvList psGen
                let finalAlphas = (as `union` ftv (tpNewer)) `intersect` allAlphas
                
@@ -80,17 +80,15 @@ instance ( HasBasic m info
                storeTypeScheme var scheme
 
          Subsumption sigma1 sigma2 info -> 
-            do unique <- getUnique
-               -- left-hand side
+            do -- left-hand side
                scheme1 <- replaceSchemeVar sigma1
-               let (u1, qtp1) = instantiate unique scheme1
-                   (ps1, tp1) = split qtp1
+               qtp1    <- instantiateM scheme1
                -- right-hand side
                scheme2 <- replaceSchemeVar sigma2
-               let (u2, qtp2) = skolemize u1 scheme2
-                   (ps2, tp2) = split qtp2 
+               qtp2 <- skolemizeTruly scheme2 -- Faked info scheme2
                -- new constraints
-               setUnique u2
+               let (ps1, tp1) = split qtp1
+                   (ps2, tp2) = split qtp2
                aps1 <- annotate (equalityTypePair (tp1, tp2) $ originalTypeScheme scheme1 info) ps1
                addToProve aps1
                aps2 <- annotate (equalityTypePair (tp1, tp2) $ originalTypeScheme scheme2 info) ps2

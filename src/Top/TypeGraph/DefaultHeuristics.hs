@@ -8,6 +8,7 @@
 
 module Top.TypeGraph.DefaultHeuristics where
 
+import Top.TypeGraph.Basics
 import Top.TypeGraph.Heuristics 
 import Top.TypeGraph.Paths 
 import Data.List
@@ -76,7 +77,7 @@ positionInList =
       in maximalEdgeFilter "Constraint number of edge" f)
 
 -- |Select only specific constraint numbers
-selectConstraintNumbers :: [Int] -> Heuristic info
+selectConstraintNumbers :: [EdgeNr] -> Heuristic info
 selectConstraintNumbers is =
    Heuristic (
       let f (_, cnr, _) = return (cnr `elem` is)

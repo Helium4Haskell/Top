@@ -3,6 +3,7 @@ module Top.Qualifiers.Dependencies where
 import Top.Types
 import Top.States.SubstState
 import Top.States.TIState
+import Top.States.BasicState
 import Top.States.DependencyState
 import Top.Qualifiers.Qualifiers
 import Top.Qualifiers.QualifierMap
@@ -15,6 +16,7 @@ import Top.Constraints.Equality
 
 instance ( HasSubst m info
          , HasTI m info
+         , HasBasic m info
          , HasDep m info
          , TypeConstraintInfo info
          ) => 
@@ -25,7 +27,7 @@ instance ( HasSubst m info
          return (fdep `elem` map fst ds)
 
       -- normalization
-      normalizeFixpoint fdeps = 
+      improveFixpoint fdeps = 
          do xss     <- mapM solveOne fdeps
             (ys, b) <- simplifySet (concat xss)
             return (ys, any null xss || b)
@@ -59,7 +61,7 @@ instance ( HasSubst m info
          -- X.a ~> b and X.a ~> c implies b == c
          simplifySet ys =
             let 
-                list = groupBy (\x y -> f x == f y) ys
+                list = groupBy (\x y -> f x == f y) (sortBy (\x y -> f x `compare` f y) ys)
                 f (Dependency s t _, _) = (s, t)
                 bool = any ((>1) . length) list
                 

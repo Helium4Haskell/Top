@@ -44,7 +44,7 @@ instance (Show info, ShowQualifiers qs, Substitutable qs) => Show (ExtraConstrai
          Prove p info ->
             "Prove (" ++ concat (intersperse ", " (showQualifiers p)) ++ ")" ++ showInfo info 
          Assume p info ->
-            "Assume (" ++ par (show p) ++ concat (intersperse ", " (showQualifiers p)) ++ ")" ++ showInfo info 
+            "Assume (" ++ concat (intersperse ", " (showQualifiers p)) ++ ")" ++ showInfo info 
          Implicit t1 (monos, t2) info ->
             show t1 ++ " := Implicit" ++ commaList [show (map TVar $ ftv monos), show t2] ++ showInfo info
             

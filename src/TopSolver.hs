@@ -24,7 +24,7 @@ import Top.TypeGraph.TypeGraphSolver
 import Top.TypeGraph.DefaultHeuristics
 import Top.States.States
 import Top.States.BasicState
-import Top.States.SubstState
+import Top.States.TIState
 import Top.States.DependencyState
 import Top.States.QualifierState
 import Top.States.ImplicitParameterState
@@ -38,6 +38,7 @@ import Top.Qualifiers.Subtypings ()
 import System (getArgs)
 import Data.Char
 import Data.List
+import Data.FiniteMap
 import Utils
 
 ---------------------------------------------------------------------
@@ -126,8 +127,8 @@ lexer = P.makeTokenParser
            ( haskellStyle 
                 { reservedOpNames = ["==", "::", "<=", "=>", ":=", "~>", "<:" ] 
                 , reservedNames   = ["forall", "Generalize", "Instantiate", "Skolemize", "Implicit",
-                                     "Prove", "Assume", "MakeConsistent", "PrintState", "Stop", "Normalize",
-                                     "Declare", "Enter", "Leave" ]
+                                     "Prove", "Assume", "MakeConsistent", "PrintState", "Stop", "ContextReduction",
+                                     "Declare", "Enter", "Leave", "Class", "Instance" ]
                 })
 
 runLex :: Parser (Constraints TopSolve, Int) -> String -> IO ()
@@ -184,6 +185,8 @@ pStatement :: Parser (Either (Result TopConstraint) (Result (Constraint TopSolve
 pStatement = 
    tryList [ pOperation     >>= (return . Right)
            , pSubtypingRule >>= (return . Right)
+           , pClassDecl     >>= (return . Right)
+           , pInstanceDecl  >>= (return . Right)
            , pConstraint    >>= (return . Left)
            ]
 
@@ -308,12 +311,12 @@ pConstraint =
    
 pOperation :: Parser (Result (Constraint TopSolve))
 pOperation = 
-   let ops = [ ("Enter"         , enterGroup)
-             , ("Leave"         , do qsInfo <- doNormalization; (_ :: TopQualifiers) <- removeAnnotation qsInfo ; leaveGroup)
-             , ("MakeConsistent", makeConsistent) 
-             , ("Normalize"     , do qsInfo <- doNormalization; (_ :: TopQualifiers) <- removeAnnotation qsInfo; return ())
-             , ("PrintState"    , printState)
-             , ("Stop"          , do printState; s <- getMessages; error $ s ++ "***** Stop reached *****")
+   let ops = [ ("Enter"           , enterGroup)
+             , ("Leave"           , do qsInfo <- doContextReduction; (_ :: TopQualifiers) <- removeAnnotation qsInfo ; leaveGroup)
+             , ("MakeConsistent"  , makeConsistent) 
+             , ("ContextReduction", do qsInfo <- doContextReduction; (_ :: TopQualifiers) <- removeAnnotation qsInfo; return ())
+             , ("PrintState"      , printState)
+             , ("Stop"            , do printState; s <- getMessages; error $ s ++ "***** Stop reached *****")
              ]
        f (s, a) = do P.reserved lexer s
                      return ([], const (Constraint (a, return True, s)))
@@ -332,7 +335,35 @@ pSubtypingRule =
           varmap = zip vars [0..]
       return $ ([], \_ -> Constraint 
          (declareSubtypingRule (applyVarMap varmap rule) info, return True, "Declare "++show rule))  
-         
+    
+---------------------------------------------------------------------
+-- * Top class/instance declaration parser 
+
+pClassDecl :: Parser (Result (Constraint TopSolve))
+pClassDecl = 
+   do P.reserved lexer "Class"
+      tuple@(supers, className) <- pContext (P.identifier lexer) (P.identifier lexer)
+      
+      let change :: ClassEnvironment -> ClassEnvironment
+          change env = addToFM_C (\(s1,is1) (s2,is2) -> (s1 `union` s2,is1 `union` is2)) env className (supers, [])
+      
+      return $ ([], \_ -> Constraint
+         (tiModify (\s -> s { classenv = change (classenv s) }), return True, "Class "++show tuple))
+  
+pInstanceDecl :: Parser (Result (Constraint TopSolve))
+pInstanceDecl =
+   do P.reserved lexer "Instance"
+      tuple@(ps, p@(Predicate className _)) <- pContext pPredicate pPredicate
+      
+      let vars   = filter (isLower . head) . nub . allTypeConstants $ (ps, p)
+          varmap = zip vars [0..]
+          tuple' = applyVarMap varmap (p, ps)
+          change :: ClassEnvironment -> ClassEnvironment
+          change env = addToFM_C (\(s1,is1) (s2,is2) -> (s1 `union` s2,is1 `union` is2)) env className ([], [tuple'])
+      
+      return $ ([], \_ -> Constraint
+         (tiModify (\s -> s { classenv = change (classenv s) }), return True, "Instance "++show tuple))
+
 ---------------------------------------------------------------------
 -- * Other parsers 
          

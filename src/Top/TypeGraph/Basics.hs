@@ -8,9 +8,12 @@
 
 module Top.TypeGraph.Basics where
 
+import Top.TypeGraph.Paths
+import Top.Types
+import Utils (internalError)
 import Debug.Trace (trace)
 import Data.Maybe
-import Data.List
+import Data.List (sort, nub, partition, intersperse)
 
 ---------------------------------------------------------------------------------
 
@@ -24,30 +27,120 @@ debugTrace message
 
 -----------------------------------------------------------------------------------------
 
-type VertexID      = Int
-type VertexInfo    = ( VertexKind 
-                     , Maybe (String,[VertexID])  -- original type synonym
-                     )                      
-data VertexKind = VVar
-                | VCon String
-                | VApp VertexID VertexID
-   deriving (Show, Eq, Ord)                
+type VertexID   = Int
+type VertexInfo = (VertexKind, Maybe Tp)                      
+data VertexKind = VVar | VCon String | VApp VertexID VertexID
+   deriving (Show, Eq, Ord)     
                      
 data EdgeID        = EdgeID VertexID VertexID
-data EdgeInfo info = Initial Int {- constraint number -} info
-                   | Implied Int VertexID VertexID
-                   | Child Int
-type Clique        = (Int, [(VertexID,VertexID)] )
-type Cliques       = (Int,[[(VertexID,VertexID)]])
+type EdgeInfo info = (EdgeNr, info)
+newtype EdgeNr     = EdgeNrX Int deriving (Eq, Ord)
+data ChildSide     = LeftChild | RightChild
+   deriving (Eq, Ord)
 
-instance Show (EdgeInfo info) where
-   show (Initial cnr _)   = "#" ++ show cnr
-   show (Implied i p1 p2) = "(" ++ show i ++ " : " ++ show (p1,p2) ++ ")"
-   show (Child i)         = "(" ++ show i ++ ")"
+makeEdgeNr :: Int -> EdgeNr
+makeEdgeNr = EdgeNrX
 
+instance Show EdgeNr where
+   show (EdgeNrX i) = "#" ++ show i
+
+instance Show ChildSide where
+   show LeftChild  = "(l)"
+   show RightChild = "(r)"
+
+data ParentChild = ParentChild { parent :: VertexID, child :: VertexID, childSide :: ChildSide }
+   deriving Eq
+
+instance Show ParentChild where
+   show pc = show (child pc) ++ "<-" ++ show (parent pc) ++ show (childSide pc)
+
+instance Ord ParentChild where
+   compare pc1 pc2 = compare (child pc1, parent pc1) (child pc2, parent pc2)
+
+type TypeGraphPath info = Path (EdgeID, PathStep info)
+data PathStep info 
+   = Initial  EdgeNr info
+   | Implied  ChildSide VertexID VertexID
+   | Child    ChildSide
+   
+instance Show (PathStep info) where
+   show (Initial cnr _)  = "#" ++ show cnr
+   show (Implied cs x y) = "(" ++ show cs ++ " : " ++ show (x, y) ++ ")"
+   show (Child i)        = "(" ++ show i ++ ")"
+   
+-- A clique is a set of vertices that are equivalent because their parents are equal
+-- Invariant: a clique cannot be empty
+newtype Clique  = CliqueX [ParentChild]
+type CliqueList = [Clique]
+
+instance Show Clique where
+   show (CliqueX xs) = "<" ++ concat (intersperse ", " (map show xs)) ++ ">"
+
+instance Eq Clique where 
+   CliqueX xs == CliqueX ys = 
+      xs == ys
+
+instance Ord Clique where
+   compare (CliqueX xs) (CliqueX ys) = compare xs ys
+
+isSubsetClique :: Clique -> Clique -> Bool
+isSubsetClique (CliqueX xs) (CliqueX ys) = rec xs ys 
+ where
+   rec [] _ = True
+   rec _ [] = False
+   rec a@(x:xs) (y:ys)
+      | x == y    = rec xs ys
+      | x > y     = rec a ys
+      | otherwise = False
+   
+isDisjointClique :: Clique -> Clique -> Bool
+isDisjointClique (CliqueX xs) (CliqueX ys) = rec xs ys
+ where
+   rec [] _ = True
+   rec _ [] = True
+   rec a@(x:xs) b@(y:ys)
+      | x == y    = False
+      | x > y     = rec a ys
+      | otherwise = rec xs b
+      
+cliqueRepresentative :: Clique -> VertexID
+cliqueRepresentative (CliqueX xs) =
+   case xs of
+      []  -> internalError "Top.TypeGraph.Basics" "cliqueRepresentative" "A clique cannot be empty"
+      x:_ -> child x
+
+triplesInClique :: Clique -> [ParentChild]
+triplesInClique (CliqueX xs) = xs
+
+childrenInClique :: Clique -> [VertexID]
+childrenInClique = map child . triplesInClique
+
+mergeCliques :: CliqueList -> Clique
+mergeCliques list = CliqueX (foldr op [] [ xs | CliqueX xs <- list ])
+ where
+   op xs [] = xs
+   op [] ys = ys
+   op a@(x:xs) b@(y:ys)
+      | x == y = x : op xs ys
+      | x < y  = x : op xs b 
+      | x > y  = y : op a ys
+   
+makeClique :: [ParentChild] -> Clique
+makeClique list
+   | length set < 2 = internalError "Top.TypeGraph.Basics" "makeClique" "incorrect clique"
+   | otherwise      = CliqueX set
+ where 
+   set = sort list
+
+combineCliqueList :: CliqueList -> CliqueList -> CliqueList
+combineCliqueList [] ys = ys
+combineCliqueList (x:xs) ys =
+   let (ys1, ys2) = partition (isDisjointClique x) ys
+   in mergeCliques (x:ys2) : combineCliqueList xs ys1
+   
 instance Show EdgeID where
-   show (EdgeID a b) = "("++show a++"-"++show b++")"
-     -- where (a',b') = if a <= b then (a,b) else (b,a)
+   show (EdgeID a b) = "("++show a'++"-"++show b'++")"
+      where (a',b') = if a <= b then (a,b) else (b,a)
      
 instance Eq EdgeID where
    EdgeID a b == EdgeID c d = (a == c && b == d) || (a == d && b == c)
@@ -57,22 +150,22 @@ instance Ord EdgeID where
       where order (i,j) = if i <= j then (i,j) else (j,i)
 
 -- don't consider the stored information for equality
-instance Eq (EdgeInfo info) where
+instance Eq (PathStep info) where
    e1 == e2 = 
       case (e1, e2) of
-         (Initial cnr1 _, Initial cnr2 _)     -> cnr1 == cnr2
-         (Implied i1 a1 b1, Implied i2 a2 b2) -> (i1,a1,b1) == (i2,a2,b2)
-         (Child i1, Child i2)                 -> i1 == i2
-         _                                    -> False
+         (Initial cnr1 _, Initial cnr2 _)       -> cnr1 == cnr2
+         (Implied cs1 x1 y1, Implied cs2 x2 y2) -> (cs1, x1, y1) == (cs2, x2, y2)
+         (Child i1, Child i2)                   -> i1 == i2
+         _                                      -> False
          
 -- order edge information without looking at the information that is stored
-instance Ord (EdgeInfo info) where
+instance Ord (PathStep info) where
    compare e1 e2 = 
       case (e1, e2) of
-         (Initial cnr1 _, Initial cnr2 _)     -> compare cnr1 cnr2
-         (Initial _ _, _)                     -> LT
-         (_, Initial _ _)                     -> GT
-         (Implied i1 a1 b1, Implied i2 a2 b2) -> compare (i1,a1,b1) (i2,a2,b2)
-         (Implied _ _ _, _)                   -> LT
-         (_, Implied _ _ _)                   -> GT
-         (Child i1, Child i2)                 -> compare i1 i2
+         (Initial cnr1 _, Initial cnr2 _)       -> compare cnr1 cnr2
+         (Initial _ _, _)                       -> LT
+         (_, Initial _ _)                       -> GT
+         (Implied cs1 x1 y1, Implied cs2 x2 y2) -> compare (cs1, x1, y1) (cs2, x2, y2)
+         (Implied _ _ _, _)                     -> LT
+         (_, Implied _ _ _)                     -> GT
+         (Child i1, Child i2)                   -> compare i1 i2

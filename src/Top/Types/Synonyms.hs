@@ -88,6 +88,11 @@ expandTypeConstructor :: TypeSynonyms -> Tp -> Tp
 expandTypeConstructor synonyms tp =
    maybe tp (expandTypeConstructor synonyms) (expandTypeConstructorOneStep synonyms tp)
 
+-- |Fully expand the top-level type constructor.
+expandToplevelTC :: OrderedTypeSynonyms -> Tp -> Maybe Tp
+expandToplevelTC (_, synonyms) = 
+   fmap (expandTypeConstructor synonyms) . expandTypeConstructorOneStep synonyms
+
 -- |Try to expand the top-level type constructor one step.
 expandTypeConstructorOneStep :: TypeSynonyms -> Tp -> Maybe Tp
 expandTypeConstructorOneStep synonyms tp =
