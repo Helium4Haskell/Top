@@ -108,7 +108,7 @@ showSet as = "{" ++ f (map show as) ++ "}"
 allErrorPaths :: HasTypeGraph m info => m (Path (EdgeID, Int, info), [Int])
 allErrorPaths = 
    do 
-      is      <- extractPossibleErrors      
+      is      <- possibleInconsistentGroups      
       cGraph  <- childrenGraph is     
       let toCheck = nub $ concat (is : [ [a,b] | ((a,b),_) <- cGraph ])
       paths1  <- constantClashPaths toCheck                                    

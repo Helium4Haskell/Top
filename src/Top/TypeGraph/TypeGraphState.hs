@@ -26,35 +26,45 @@ class (HasBasic m info, HasTI m info, HasSubst m info)
    addVertex :: VertexID -> VertexInfo -> m ()
    addClique :: Cliques ->                m ()
    
+   -- inspect the equivalence group of a vertex
    verticesInGroupOf       :: VertexID -> m [(VertexID, VertexInfo)]
-   childrenInGroupOf       :: VertexID -> m [(VertexID, (VertexID, VertexID))]
-   representativeInGroupOf :: VertexID -> m VertexID
-   constantsInGroupOf      :: VertexID -> m [String]
-   edgesInGroupOf          :: VertexID -> m [(EdgeID, Int, info)]
-   allVariables            :: m [VertexID]
-
-   allPaths            :: VertexID -> VertexID   -> m (Path (EdgeID, EdgeInfo info))
-   allPathsList        :: VertexID -> [VertexID] -> m (Path (EdgeID, EdgeInfo info))   
+   childrenInGroupOf       :: VertexID -> m [(VertexID, (VertexID, VertexID))]  -- *
+   representativeInGroupOf :: VertexID -> m VertexID                            -- *
+   constantsInGroupOf      :: VertexID -> m [String]                            -- *
+   
+   -- find all edges from a vertex, and all paths between a pair of vertices
+   edgesFrom           :: VertexID -> m [(EdgeID, Int, info)]
+   allPaths            ::               VertexID ->  VertexID  -> m (Path (EdgeID, EdgeInfo info))  -- *1
+   allPathsList        ::               VertexID -> [VertexID] -> m (Path (EdgeID, EdgeInfo info))  -- *1
    allPathsListWithout :: [VertexID] -> VertexID -> [VertexID] -> m (Path (EdgeID, EdgeInfo info))   
 
-   -- functions to detect/remove inconsistencies
-   deleteClique          :: Cliques -> m ()
-   deleteEdge            :: EdgeID  -> m ()   
-   useHeuristics         :: m ()
-   extractPossibleErrors :: m [Int]
-   makeSubstitution      :: m [(VertexID, Tp)]
-   substForVar_nr        :: Int -> m Tp
+   -- functions to deconstruct (remove parts of) the typegraph
+   deleteEdge   :: EdgeID  -> m () 
+   deleteClique :: Cliques -> m ()
    
-       
+   -- functions to find/remove inconsistencies        
+   removeInconsistencies      :: m ()
+   possibleInconsistentGroups :: m [Int]
+   
+   -- building a substitution from a typegraph
+   makeSubstitution :: m [(VertexID, Tp)]
+   substForVar_nr   :: Int -> m Tp
+          
    -- default definitions   
    allPaths i1 i2    = allPathsList i1 [i2]
    allPathsList i is = mapM (allPaths i) is >>= (return . simplifyPath . altList)
-   
-   
+      
    childrenInGroupOf i = 
       do vs <- verticesInGroupOf i 
          return [ (i, (left, right)) | (i, (VApp left right, _)) <- vs ]
-         
+   
+   representativeInGroupOf i =
+      debugTrace ("representativeInGroupOf " ++ show i) >>
+      do vs <- verticesInGroupOf i  
+         case vs of 
+            (vid,_):_ -> return vid
+            _ -> internalError "Top.TypeGraph.TypeGraphState" "representativeInGroupOf" "unexpected empty equivalence group"
+                  
    constantsInGroupOf i = 
       do vs <- verticesInGroupOf i 
          return (nub [ s | (_,(VCon s, _)) <- vs ])

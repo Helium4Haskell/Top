@@ -25,6 +25,7 @@ import Top.Types
 import Data.FiniteMap
 import Control.Monad
 import Top.TypeGraph.Heuristics
+import Utils (internalError)
 
 type TypeGraphX info ext = SolveX info (TypeGraphState info) ext
 type TypeGraph  info     = TypeGraphX info ()
@@ -53,16 +54,15 @@ instance HasTypeGraph (TypeGraphX info ext) info where
 
    addVertex i info =
       debugTrace ("addVertex " ++ show i) >>
-      createNewGroup (insertVertex i info emptyGroup)
-
-   allVariables = 
-      debugTrace "allVariables" >>
-      tgGets (keysFM . referenceMap)     
+      do createNewGroup (insertVertex i info emptyGroup)
+         return ()
     
    makeSubstitution =
       do synonyms <- getTypeSynonyms
          eqgroups <- tgGets (eltsFM . equivalenceGroupMap) 
-         let f eqc = [ (v, tp) | let tp = typeOfGroup synonyms eqc,  (v,_) <- vertices eqc, notId v tp ]
+         let f eqc = case typeOfGroup synonyms eqc of 
+                        Nothing -> internalError "Top.TypeGraph.TypeGraphSolver" "makeSubstitution" "inconsistent state"
+                        Just tp -> [ (v, tp) | (v,_) <- vertices eqc, notId v tp ]
              notId i (TVar j) = i /= j
              notId _ _        = True
          return (concatMap f eqgroups)
@@ -93,23 +93,18 @@ instance HasTypeGraph (TypeGraphX info ext) info where
       do eqc <- equivalenceGroupOf i
          return (constants eqc)     
 
-   edgesInGroupOf i =
-      debugTrace ("edgesInGroupOf " ++ show i) >>
+   edgesFrom i =
+      debugTrace ("edgesFrom " ++ show i) >>
       do eqc <- equivalenceGroupOf i
-         return (edges eqc)    
-   
-   representativeInGroupOf i =
-      debugTrace ("representativeInGroupOf " ++ show i) >>
-      do eqc <- equivalenceGroupOf i
-         return (representative eqc)   
+         let predicate (EdgeID v1 v2,_,_) = v1 == i || v2 == i
+         return (filter predicate (edges eqc))
 
    deleteEdge edge@(EdgeID v1 v2) =
       debugTrace ("deleteEdge "++show edge) >>
       do eqgroup <- equivalenceGroupOf v1
          removeGroup eqgroup
          let newGroups = splitGroup (removeEdge edge eqgroup)
-         mapM_ createNewGroup newGroups
-         let is = map representative newGroups
+         is <- mapM createNewGroup newGroups
          cliques <- lookForCliques is                   
          mapM_ deleteClique cliques         
 
@@ -119,19 +114,18 @@ instance HasTypeGraph (TypeGraphX info ext) info where
          eqgroup <- equivalenceGroupOf vid
          removeGroup eqgroup
          let newGroups = splitGroup (removeClique clique eqgroup)
-         mapM_ createNewGroup newGroups
-         let is = map representative newGroups
+         is <- mapM createNewGroup newGroups
          cliques <- lookForCliques is
          mapM_ deleteClique cliques
             
-   extractPossibleErrors = 
-      debugTrace "getConflicts" >>
+   possibleInconsistentGroups = 
+      debugTrace "possibleInconsistentGroups" >>
       do errors <- getPossibleErrors
          setPossibleErrors []
          return errors     
                      
-   useHeuristics = 
-      debugTrace "applyHeuristics" >> 
+   removeInconsistencies = 
+      debugTrace "removeInconsistencies" >> 
       do hs <- tgGets typegraphHeuristics
          (edges, errors) <- applyHeuristics hs
          mapM_ deleteEdge edges
@@ -163,4 +157,7 @@ instance HasTypeGraph (TypeGraphX info ext) info where
         debugTrace ("substForVar_nr " ++ show i) >>
         do synonyms   <- getTypeSynonyms
            eqgroup <- equivalenceGroupOf i           
-           return (typeOfGroup synonyms eqgroup)
+           maybe (internalError "Top.TypeGraph.TypeGraphSolver" "substForVar_nr" "inconsistent state") 
+                 return 
+                 (typeOfGroup synonyms eqgroup)
+            

@@ -29,7 +29,6 @@ vertices          :: EquivalenceGroup info -> [(VertexID,VertexInfo)]
 edges             :: EquivalenceGroup info -> [(EdgeID,Int,info)]
 cliques           :: EquivalenceGroup info -> [Clique]
 constants         :: EquivalenceGroup info -> [String]
-representative    :: EquivalenceGroup info -> VertexID
 consistent        :: EquivalenceGroup info -> Bool
 
 pathsFrom         :: VertexID -> [VertexID] -> EquivalenceGroup info -> Path (EdgeID, EdgeInfo info)
@@ -145,10 +144,6 @@ edges      (EQGroup (vs1,ss1,es1,cs1)) = es1
 cliques    (EQGroup (vs1,ss1,es1,cs1)) = cs1
 constants  (EQGroup (vs1,ss1,es1,cs1)) = ss1
 
-representative (EQGroup (vs1,ss1,es1,cs1)) = case vs1 of
-   (vid,_) : _ -> vid
-   _           -> internalError "Top.TypeGraph.EquivalenceGroup" "representative" "no vertices in group"
-
 consistent eqgroup = 
    case length (constants eqgroup) of
       0 -> True
@@ -192,23 +187,25 @@ pathsFromWithout without v1 targets eqgroup
                                          ]) cliques                                                                                                              
 
 -- a non-recursive function to find the type of an equivalence group
-typeOfGroup :: OrderedTypeSynonyms -> EquivalenceGroup info -> Tp
+typeOfGroup :: OrderedTypeSynonyms -> EquivalenceGroup info -> Maybe Tp
 typeOfGroup synonyms eqgroup = 
-   let intErr        = internalError "Top.TypeGraph.EquivalenceGroup" "typeOfGroup" ("inconsistent equivalence group" ++ show eqgroup)
-       vertexList    = vertices eqgroup
-       constantsList = constants eqgroup
-       childrenList  = [(v, (l,r)) |  (v, (VApp l r, _)) <- vertexList ]
-       elseReturn tp = maybe tp id originalType
-       originalType  =
+   let vertexList     = vertices eqgroup
+       constantsList  = constants eqgroup
+       childrenList   = [(v, (l,r)) |  (v, (VApp l r, _)) <- vertexList ]
+       elseReturn tp  = Just (maybe tp id originalType)
+       representative = fst (head vertexList)
+       originalType   =
           case [ foldl TApp (TCon s) (map TVar is) | (_, (_, Just (s, is))) <- vertexList ]  of
              [] -> Nothing
-             xs -> let op t1 t2 = case mguWithTypeSynonyms synonyms t1 t2 of
-                                     Left _      -> intErr
-                                     Right (b,s) -> equalUnderTypeSynonyms synonyms (s |-> t1) (s |-> t2)
-                   in Just (foldr1 op xs)
+             xs -> let op (Just t1) (Just t2) = 
+                          case mguWithTypeSynonyms synonyms t1 t2 of
+                             Left _      -> Nothing
+                             Right (b,s) -> Just $ equalUnderTypeSynonyms synonyms (s |-> t1) (s |-> t2)
+                       op _ _ = Nothing                             
+                   in foldr1 op (map Just xs)
    in        
            case (constantsList, childrenList) of 
-              ([], [])          -> elseReturn (TVar (representative eqgroup))
+              ([], [])          -> elseReturn (TVar representative)
               ([s], [])         -> elseReturn (TCon s)
               ([], (_,(l,r)):_) -> elseReturn (TApp (TVar l) (TVar r))
-              _ -> intErr
+              _ -> Nothing

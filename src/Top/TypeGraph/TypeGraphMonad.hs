@@ -50,15 +50,18 @@ tgGets   f = do a <- tgGet ; return (f a)
 
 -----------------------------------------------------------------
 
-createNewGroup :: HasTG m info => EquivalenceGroup info -> m ()
+createNewGroup :: HasTG m info => EquivalenceGroup info -> m Int
 createNewGroup eqgroup =
-   tgModify
-      (\groups -> let newGroupNumber = equivalenceGroupCounter groups
-                      list = [(i, newGroupNumber) | (i, _) <- vertices eqgroup]
-                  in groups { referenceMap            = addListToFM (referenceMap groups) list
-                            , equivalenceGroupMap     = addToFM (equivalenceGroupMap groups) newGroupNumber eqgroup
-                            , equivalenceGroupCounter = newGroupNumber + 1
-                            })
+   do tgModify
+         (\groups -> let newGroupNumber = equivalenceGroupCounter groups
+                         list = [(i, newGroupNumber) | (i, _) <- vertices eqgroup]
+                     in groups { referenceMap            = addListToFM (referenceMap groups) list
+                               , equivalenceGroupMap     = addToFM (equivalenceGroupMap groups) newGroupNumber eqgroup
+                               , equivalenceGroupCounter = newGroupNumber + 1
+                               })
+      case vertices eqgroup of
+         (vid,_):_ -> return vid
+         _ -> internalError "Top.TypeGraph.TypeGraphMonad" "createNewGroup" "cannot create an empty equivalence group"
                             
 removeGroup :: HasTG m info => EquivalenceGroup info -> m ()                            
 removeGroup eqgroup = 

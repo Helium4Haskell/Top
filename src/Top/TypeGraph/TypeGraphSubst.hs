@@ -23,7 +23,7 @@ typegraphImpl = SubstState
    { 
      makeConsistent_impl = 
         debugTrace "makeConsistent" >>
-        do useHeuristics
+        do removeInconsistencies
            reducePredicates
        
    , unifyTerms_impl = \info t1 t2 ->
