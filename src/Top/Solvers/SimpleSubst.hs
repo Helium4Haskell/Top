@@ -15,13 +15,13 @@ import Top.States.SubstState
 import Top.States.BasicState
 import Top.States.TIState
 
-type SimpleState = FiniteMapSubstitution
+newtype SimpleState = SS { unSS :: FiniteMapSubstitution }
 
 instance Show SimpleState where
-   show _ = "<Simple Substitution>"
+   show _ = "<Simple Substitution>" 
 
 instance Empty SimpleState where
-   empty = emptySubst
+   empty = SS emptySubst
 
 instance IsState SimpleState
 
@@ -44,12 +44,12 @@ simpleState = SubstState
            t2'      <- applySubst t2
            case mguWithTypeSynonyms synonyms t1' t2' of
               Right (used,sub) -> 
-                 simpleModify (sub @@)
+                 simpleModify (SS . (sub @@) . unSS)
               Left _ -> addLabeledError unificationErrorLabel info
-          
+ 
    , findSubstForVar_impl = \i ->      
-       simpleGets (lookupInt i)
+       simpleGets (lookupInt i . unSS) 
           
    , fixpointSubst_impl = 
-        simpleGets FixpointSubstitution  
+        simpleGets (FixpointSubstitution . unSS) 
    }
