@@ -16,16 +16,21 @@ import Top.Types
 import Data.FiniteMap
 import Utils (internalError)
 
-type GreedyState = FixpointSubstitution
+instance Show GreedyState where
+   show (GS (FixpointSubstitution fm)) = 
+      "Fixpoint FiniteMap Substitution: " ++ show (fmToList fm)
+        
+
+newtype GreedyState = GS { unGS :: FixpointSubstitution }
 
 instance Empty GreedyState where
-   empty = FixpointSubstitution emptyFM
+   empty = GS (FixpointSubstitution emptyFM)
    
 instance IsState GreedyState
 
 class HasSubst m info => HasGreedy m info | m -> info where
-   greedyGet :: m FixpointSubstitution
-   greedyPut :: FixpointSubstitution -> m ()
+   greedyGet :: m GreedyState
+   greedyPut :: GreedyState -> m ()
 
 greedyModify f = do a <- greedyGet ; greedyPut (f a)
 greedyGets   f = do a <- greedyGet ; return (f a)
@@ -35,7 +40,7 @@ greedyState = SubstState
    { 
      makeConsistent_impl = 
         return ()
-   
+  
    , unifyTerms_impl = \info t1 t2 ->
         do t1'      <- applySubst t1
            t2'      <- applySubst t2
@@ -51,13 +56,13 @@ greedyState = SubstState
                      g = writeExpandedType synonyms t2 utp 
                        . writeExpandedType synonyms t1 utp 
                      h = if used then g . f else f
-                 in greedyModify h
-            
+                 in greedyModify (GS . h . unGS)
+
    , findSubstForVar_impl = \i ->      
-        greedyGets (lookupInt i)
-          
+        greedyGets (lookupInt i . unGS)
+         
    , fixpointSubst_impl = 
-        greedyGet 
+        greedyGets unGS 
    }
            
 -- The key idea is as follows:

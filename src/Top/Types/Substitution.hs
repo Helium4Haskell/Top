@@ -87,9 +87,11 @@ instance Substitution FixpointSubstitution where
                                               in FixpointSubstitution (delListFromFM fm js)
    dom (FixpointSubstitution fm) = keysFM fm
    cod (FixpointSubstitution fm) = eltsFM fm
-   
+
+{- (removed for GHC 6.4)
 instance Show FixpointSubstitution where
    show (FixpointSubstitution fm) = "Fixpoint FiniteMap Substitution: " ++ show (fmToList fm)
+-}
  
 -- |The empty fixpoint substitution 
 emptyFPS :: FixpointSubstitution
