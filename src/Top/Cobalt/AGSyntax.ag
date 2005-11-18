@@ -1,0 +1,43 @@
+-- compile with:
+--    ag -dm --module=Top.TypeRules.AGSyntax AGSyntax.ag
+
+DATA AGCode
+   | AGCode
+        agdatas : AGDatas
+        agattrs : AGAttrs
+        agsems  : AGSems
+
+DATA AGData 
+   | AGData 
+        nonterminal : String 
+        alternative : String 
+        children    : {[(String, String)]}
+
+DATA AGAttr
+   | AGAttr
+        nonterminals : String
+        attrKind     : Attr
+        attrName     : String
+        attrType     : String
+        
+DATA AGSem
+   | AGSem
+        nonterminal : String
+        alternative : String
+        semdecls    : AGSemDecls
+        
+DATA AGSemDecl
+   | AGSemDecl
+        leftNT   : String
+        leftAttr : String
+        right    : String
+
+DATA Attr 
+   | Inherited 
+   | Chained 
+   | Synthesized 
+
+TYPE AGDatas    = [AGData]
+TYPE AGAttrs    = [AGAttr]
+TYPE AGSems     = [AGSem]
+TYPE AGSemDecls = [AGSemDecl]

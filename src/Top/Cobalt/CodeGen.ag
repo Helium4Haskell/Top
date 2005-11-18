@@ -1,0 +1,65 @@
+ATTR TypeSystem [ | | agcode:AGCode ]
+
+SEM TypeSystem
+  | TypeSystem
+       lhs.agcode = 
+          AGCode @agDATAs.self                      -- DATAs
+                 (implicitAttrs ++ explicitAttrs)   -- ATTRs
+                 (@typerules.agsems)                -- SEMs
+
+ATTR TypeRule TypeRules [ | | agsems USE { ++ } { [] } : AGSems ]
+
+SEM TypeRule
+  | TypeRule
+       loc.(dataNT, dataChildren) = 
+          case [ (nt, cs) 
+               | AGData nt alt cs <- @lhs.agdatas
+               , alt == conAlternative @deduction.conclusionAttr ] of
+             [pair] -> pair
+             _ -> error "could not find the corresponding data"
+       
+       loc.firstChild = 
+          case filter ((=="Expr") . snd) @dataChildren of 
+             []      -> "lhs" 
+             (x,_):_ -> x
+       
+       lhs.agsems = [ AGSem @dataNT (conAlternative @deduction.conclusionAttr) (@semCSet : @semTp : @semGamma ++ @semVars) ]
+       loc.allVars = nub (@deduction.allVariables ++ @constraints.allVariables)
+       loc.freshVars = @allVars \\ ( conGamma @deduction.conclusionAttr 
+                                   : conMetas @deduction.conclusionAttr 
+                                   ++ map preType @deduction.premiseAttrs)
+       loc.varmap  = (conGamma @deduction.conclusionAttr, "@lhs.gamma") :
+                     [ (x, '@':y) | (x, y) <- @newvarmap ] ++
+                     [ (x, '@':y) | (x, y) <- @metamap ] ++
+                     [ (y, '@':(x ? @metamap)++".tp") | PremiseAttr x _ y <- @deduction.premiseAttrs ]
+       loc.metamap = zip (conMetas @deduction.conclusionAttr) (map fst @dataChildren)
+       loc.newvarmap = [ (s, "freshVar"++show i) | (s, i) <- zip @freshVars [0..] ]
+       loc.semCSet = AGSemDecl "lhs" "cset"
+                        (concat $ intersperse " ++ " $ 
+                           [ "@"++s++".cset" | (s, tp) <- @dataChildren, tp == "Expr" ] ++ 
+                           [ bracks (concat $ intersperse ", " $ map (showConstraintTerm @varmap) @constraints.self) ]
+                        )
+       loc.semTp = AGSemDecl "lhs" "tp" (conType @deduction.conclusionAttr @varmap)
+       loc.semGamma = [ AGSemDecl (cn ? @metamap) "gamma" (gamma @varmap)
+                      | PremiseAttr cn gamma _ <- @deduction.premiseAttrs
+                      ]
+       loc.semVars = AGSemDecl @firstChild "unique" ("@lhs.unique + " ++ show (length @newvarmap)) : 
+                     [ AGSemDecl "loc" fresh ("makeFresh (@lhs.unique + " ++ show i ++ ") :: " ++ show inferred) 
+                     | ((original, fresh), i) <- zip @newvarmap [0..]
+                     , let inferred = @sub |-> TVar (original ? @strmap)
+                     ]
+                     
+{
+implicitAttrs :: AGAttrs
+implicitAttrs = 
+   [ AGAttr "Expr" Inherited "gamma" "Gamma"
+   , AGAttr "Expr" Synthesized "tp" "Type"
+   ]
+
+explicitAttrs :: AGAttrs
+explicitAttrs = 
+   [ AGAttr "Expr" Chained "unique" "Int"
+   , AGAttr "Expr" Synthesized "cset" "[Constraint]"
+   ] 
+
+}

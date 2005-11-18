@@ -1,0 +1,155 @@
+-- compile with:
+--    ag -cfs --self --module=Top.TypeRules.Generator Generator.ag
+
+-- Basic data structures
+INCLUDE "AGSyntax.ag"
+INCLUDE "Syntax.ag"
+
+{
+-- Returns the elements in xs which occur more than once.  
+duplicates :: [a] -> [a]
+duplicates xs = map head (filter (\ys -> length ys > 1) (group (sort xs)))
+
+-- Maps alternatives to lists of attributes.
+type AttributesMap  = FiniteMap String{-alt or nt-} ([String{-inhs-}],[String{-syns-}])
+type JudgementsAL   = [(String,([String],[String]))]
+type ArgTypesMap = FiniteMap String{-alt-} [String]{-types of the arguments for this alternative-}
+type VarAL = [(String, String)]
+}
+
+-- Attribute definitions for these data types
+ATTR TypeSystem -> AGData [ | | altargtypes USE { ++ } { [] } : {[(String, [String])]} ]
+ATTR TypeSystem -> AGData [ | | altnts USE { ++ } { [] } : {[(String, String)]} ]
+ATTR TypeSystem -> AGData [ | | alttypes USE { ++ } { [] } : {[(String, TpScheme)]} ]
+ATTR TypeSystem -> JudgementDecl [ types : {[String]} | | ] 
+ATTR TypeSystem -> JudgementDecl [ | | judgements USE { ++ } { [] } : {JudgementsAL} ] 
+ATTR TypeSystem -> JudgementDecl [ | | staticErrors USE { ++ } { [] } : StaticMessages ] 
+
+-- The following attribute contains all information that a term needs to retrieve the list of attributes
+-- for a given alternative for a non-terminal. The functions tell us what the types are of the parameters of 
+-- each alternative (in addition to giving us the types for functions we may use.
+-- The final attribute gives us the list of arguments.
+ATTR TypeSystem -> Term [ judgementsMap : JudgementsMap | | ]
+ATTR TypeSystem -> Term [ functions : FunctionEnvironment | | ]
+ATTR TypeSystem -> Term [ argTypesMap : ArgTypesMap | | ]
+
+ATTR TypeRule -> Term [ | | allVariables USE { ++ } { [] } : {[String]} ]
+ATTR TypeSystem -> Term [ agdatas:AGDatas | | ]
+ATTR TypeSystem -> Term [ | | staticErrors USE { ++ } { [] } : StaticMessages ]
+ATTR TypeSystem -> Term [ | | staticWarnings USE { ++ } { [] } : StaticMessages ]
+ATTR Judgement Judgements [ isConclusion : Bool | | ]
+ATTR Judgement Judgements [ metaVarAL : VarAL | | ]
+ATTR TypeSystem -> TypeRule [ | | rulenames USE { ++ } { [] } : {[String]} ]
+ATTR TypeRule -> Term [ rulename:String | | ]
+
+ATTR TypeRule -> Judgement [ | | usedVars USE { ++ } { [] } : {[String]} ]
+ATTR TypeRule -> Judgement [ | | declaredVars USE { ++ } { [] } : {[String]} ]
+ATTR DeductionRule Judgements Judgement [ | | premiseAttrs USE { ++ } { [] } : PremiseAttrs ]
+ATTR DeductionRule [ | | conclusionAttr:ConclusionAttr ]                 
+
+ATTR TypeSystem -> Term [ nts : {[String]} | | ]
+
+{- Analyze.ag does the following static checks
+1. is every alternative unique?
+2. is every rulename unique?
+3. does every non-terminal have a corresponding judgement declaration?
+4. does every judgement declaration correspond to a non-terminal?
+5. is every meta variable below the line used exactly once above the line and vice verse?
+6. is every function and alternative in the type rules known?
+7. is every inherited attribute below the line a simple variable?
+8. is every synthesizes attribute above the line a simple variable?
+
+Afterwards, the type rules have in their possession the following information:
+a. type information about all the functions and alternatives that have been passed along or declared
+b. for each alternative a list of inherited and synthesized attributes.
+-}
+INCLUDE "Analyze.ag"
+
+--INCLUDE "InferTypes.ag"
+--INCLUDE "CodeGen.ag"
+
+imports {
+import Top.Cobalt.ParseRules
+import Top.Cobalt.ShowAG
+import Top.Cobalt.AGSyntax
+import Top.Cobalt.Syntax
+import Top.Cobalt.Escape
+import Top.Types
+import Data.List
+import Data.Maybe
+import Data.FiniteMap
+}
+
+ATTR TypeSystem 
+   [ classEnvironment:ClassEnvironment
+     functions:FunctionEnvironment
+   | 
+   | staticErrors : StaticMessages
+     staticWarnings : StaticMessages
+--     typeErrors   : TypeErrors
+   ]
+
+{
+
+type FunctionEnvironment = FiniteMap String TpScheme
+
+
+showConstraintTerm :: VarAL -> ConstraintTerm -> String
+showConstraintTerm vm (ConstraintTerm term) = showTerm vm term 
+
+showTerm :: VarAL -> Term -> String
+showTerm vm (TermVar s)      = s ? vm
+showTerm vm (TermString s)      = show s
+showTerm vm (TermApp f args) = unwords (f : map (pars . showTerm vm) args)
+
+bracks s = "[" ++ s ++ "]"
+pars s = "(" ++ s ++ ")"
+
+-- Association list things (functional mappings represented as lists of pairs)
+domainAL :: [(a,b)] -> [a]
+domainAL = map fst 
+rangeAL :: [(a,b)] -> [b]
+rangeAL = map snd
+
+-- No maybe here. Simply omit the a's for which we can not map through b to a c.
+joinAL :: [(a,b)] -> [(b,c)] -> [(a,c)]
+joinAL [] as2     = []
+joinAL ((x,y):xs) as2 = 
+  case lookup y of
+    Nothing -> rest
+    Just z  -> (x,z):rest
+   where
+     rest = joinAL xs as2
+
+x ? xs = let err = error ("Could not find " ++ show x ++ " in " ++ show xs) 
+         in maybe err id (lookup x xs)
+				 
+{-
+generator :: FunctionEnvironment -> ClassEnvironment -> TypeSystem -> IO ()
+generator gamma classEnv system =
+   let (agcode, _, staticErrors, typeErrors) = sem_TypeSystem system classEnv gamma
+       reportErrors :: Show a => [a] -> IO ()
+       reportErrors = putStrLn . unlines . map show
+   in case staticErrors of 
+         []   -> case typeErrors of
+                    [] -> 
+                       let msg = unlines [ "imports {", "import TempImport", "}", show agcode ]
+                       in do putStrLn msg
+                             writeFile "Temp.ag" msg
+                             putStrLn "output written to <Temp.ag>"
+                    errs -> reportErrors (map snd errs)
+         errs -> reportErrors errs
+-}
+	
+generator :: FunctionEnvironment -> ClassEnvironment -> TypeSystem -> IO ()
+generator gamma classEnv system =
+   let (_, staticErrors, staticWarnings) = sem_TypeSystem system classEnv gamma
+       reportErrors :: Show a => [a] -> IO ()
+       reportErrors = putStrLn . unlines . map show
+   in case staticErrors of 
+         []   -> case staticWarnings of
+                    [] -> putStrLn 
+                    errs -> reportErrors errs
+         errs -> reportErrors errs
+			 				 
+}

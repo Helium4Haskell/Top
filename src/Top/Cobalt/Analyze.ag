@@ -1,0 +1,228 @@
+-- Maybe convert everything to FiniteMaps and combine these instead of combining lists and converting
+-- afterwards.
+-- Every premise consists of a meta var which has a judgement associated with it through its type.
+-- Later we might want to allow arbitrary predicates here. On the other hand, why not lists these in the constraints?
+-- Analysis of the type rules only takes place if there are no errors in the agdatas and judgementdecls.
+-- There are cases where we could proceed, but for now we don't.
+-- We obtain the types that are allowed in judgement declarations from the functions
+-- that are passed to it. This includes the types and used constructed in the DATA section.
+SEM TypeSystem 
+  | TypeSystem
+       lhs.staticErrors = @errorsAfterWhichTyperulesAreSkipped ++
+                          @dupRuleName ++
+                          if null @errorsAfterWhichTyperulesAreSkipped then @typerules.staticErrors else []
+       typerules.agdatas       = @agDATAs.self
+       loc.allfunctions        = @lhs.functions `plusFM` listToFM @agDATAs.alttypes
+       typerules.functions     = @allfunctions      
+       judgementdecls.types    = nub (map constantsInType (values @allfunctions)) 
+       typerules.argTypesMap   = listToFM @agDATAs.altargtypes
+       typerules.judgementsMap = listToFM (joinAL @agDATAs.altnts @judgementdecls.judgements)
+       typerules.nts           = @agnts
+       loc.alternatives   = nub (domainAL @agDATAs.altnts)
+       loc.agnts          = nub (rangeAL @agDATAs.altnts)
+       loc.judgementsnts  = nub (domainAL @judgementdecls.judgements)
+       loc.dupRuleName    = [ DuplicateRuleName x | x <- duplicates @typerules.rulenames ]
+       loc.dupAlternative = [ DuplicateAlternative x | x <- duplicates @alternatives ]
+       loc.ntNotDefined = [ NonTerminalNotDefined nt 
+                          | nt <- @judgementsnts
+                          , not (nt `elem` @agnts)
+                          ]
+       loc.ntMissesJudgement = [ MissesJudgement nt 
+                               | nt <- @agnts
+                               , not (nt `elem` @judgementsnts)
+                               ]
+       loc.errorsAfterWhichTyperulesAreSkipped = 
+           @ntNotDefined ++ @ntMissesJudgement ++ @dupAlternative ++ @judgementdecls.staticErrors
+       
+       
+SEM AGData
+  | AGData   lhs.alttypes = [(@alternative, toTpScheme @altTp )]
+             lhs.altargtypes = [(@alternative, map snd @children)]
+             lhs.altnts  = [(@alternative, @nonterminal)] 
+             loc.altTp = foldr (.->.) (TCon @nonterminal) (map (TCon . snd) @children)
+
+SEM JudgementDecl
+  | JudgementDecl lhs.staticErrors = [ UnknownType @datatype tp
+                                     | tp <- @inhs ++ @syns 
+                                     , tp `notElem` @lhs.types
+                                     ] 
+                  lhs.judgements = [(@datatype, (@inhs, @syns))]
+  
+
+SEM TypeRule
+  | TypeRule
+       lhs.rulenames = [@rulename]
+       deduction.rulename   = @rulename
+       constraints.rulename = @rulename
+
+SEM ConstraintTerm
+  | ConstraintTerm
+       -- We check that each constraint is an application.
+       -- That the application results in a constraint is done during type inference.
+       lhs.staticErrors = 
+          [ ConstraintIsNotApplication @lhs.rulename (getTerm con)
+          | con <- @self
+          , not (isTermApp con)
+          ] 
+          ++ constraint.staticErrors
+
+-- Skip check of premises when conclusion is not correct to avoid cascade of errors.
+SEM DeductionRule
+  | DeductionRule
+       conclusion.isConclusion = True
+       conclusion.metaVarAL   = []
+       premises.isConclusion   = False
+       
+       (loc.staticErrorsConclusion, loc.conclusionAttr, premises.metaVarAL) = 
+         case checkConclusion @lhs.rulename @lhs.judgementsMap @lhs.argTypesMap @lhs.nts @conclusion.self of
+           Escape errors           -> (errors, Nothing, [])
+           Continue conclusionAttr -> ([], Just conclusionAttr, metaVarAL conclusionAttr)
+
+       loc.usedVars = nub (@premises.usedVars ++ @conclusion.usedVars)
+       lhs.usedVars = @usedVars
+       loc.declaredVars = @premises.declaredVars ++ @conclusion.declaredVars
+
+       lhs.staticWarnings = 
+          @conclusion.staticWarnings ++ @premises.staticWarnings ++
+          [ MetaVarNotUsed @lhs.rulename x
+          | x <- map snd (metaVarAL @conclusionAttr)
+          , x `notElem` @usedVars
+          ] ++
+          [ DeclaredAndUsedInPremise @lhs.rulename x -- only variables declared below may be used above the line
+          | x <- @premises.usedVars
+          , x `elem` @premises.declaredVars
+          ]
+       lhs.staticErrors = 
+          @staticErrorsConclusion ++
+          [ DuplicateVar @lhs.rulename x     -- every implictly declared variable should be unique.
+          | x <- duplicates @declaredVars
+          ] ++
+          if (@conclusionAttr == Nothing) then [] -- Skip the premises
+          else 
+            let metaVarsPremise = map preMeta @premises.premiseAttrs
+            in @premises.staticErrors ++
+               [ DuplicateMetaVarInPremise @lhs.rulename x     -- every (used) metavar in the premise must be unique
+               | x <- duplicates metaVarsPremise
+               ] ++
+               [ DuplicateVar @lhs.rulename x     -- every declared var must be unique
+               | x <- duplicates @declaredVars
+               ]
+                       
+SEM Judgement 
+  | Judgement
+       lhs.staticErrors = @inhs.staticErrors ++ @expression.staticErrors ++ @newErrors ++ @syns.staticErrors
+       (lhs.premiseAttrs, loc.newErrors) = 
+          if @lhs.isConclusion then ([], []) 
+          else checkPremise @lhs.rulename @lhs.judgementsMap @lhs.metaVarAL @self
+       lhs.usedVars = if @lhs.isConclusion then @syns.allVariables else @inhs.allVariables ++ @expression.allVariables
+       lhs.declaredVars = if @lhs.isConclusion then @inhs.allVariables ++ @expression.allVariables else @syns.allVariables
+       
+SEM Term
+  | TermVar   
+       lhs.allVariables = [@variable]
+	| TermString
+	     lhs.allVariables = []		 
+  | TermApp
+       lhs.staticErrors = 
+          [ FunctionNotDefined @lhs.rulename @function 
+          | @function `notElem` keysFM @lhs.functions 
+          ] ++
+          @arguments.staticErrors
+
+{
+type StaticMessages = [StaticMessage]
+data StaticMessage = FunctionNotDefined         String{-rulename-} String
+                   | UnknownType                String{-nt-}       String
+                   | MetaVarNotDefined          String{-rulename-} String              
+                   | DuplicateMetaVarInPremise  String{-rulename-} String
+                   | DuplicateVar               String{-rulename-} String
+                   | DuplicateRuleName          String{-rulename-}
+                   | ConstraintIsNotApplication String{-rulename-} Term
+                   | MustBeVar                  String{-rulename-} Term
+                   | MustBeSimpleApp            String{-rulename-} Term  
+                   | NonTerminalNotDefined      String     -- if a judgement is given for a non-existent nonterminal
+                   | MissesJudgement            String{-nt-}
+                   | NoJudgementForType         String{-rulename-} String{-type-}
+                   | DuplicateAlternative       String
+                   | UnknownAlternative         String{-rulename-} String
+                   | WrongNumberOfArguments     String{-rulename-} String
+                   | WrongNumberOfAttributes    String{-rulename-} String{-where-}
+                   | InternalError              String{-rulename-} String{-what happened-}
+                   
+                   | DeclaredAndUsedInPremise   String{-rulename-} String
+                   | MetaVarNotUsed             String{-rulename-} String
+     deriving Show
+
+type PremiseAttrs   = [PremiseAttr]
+data PremiseAttr    = PremiseAttr 
+   { preMeta           :: String 
+   , preMetaType       :: String
+--   , declaredInPremise :: [String] -- Variables declared by this construct: the syns in this case
+   }
+   
+data ConclusionAttr = ConclusionAttr
+   { conAlternative       :: String   -- name of the alternative
+   , metaVarAL            :: VarAL    -- maps each metavar (that has a type referring to an AG datatype) to its type
+   , conInhVars           :: [String] -- implicitly declared variables from the inherited attr section
+--   , declaredInConclusion :: [String] -- Variables declared by this construct: the inhs and the meta vars in this case
+   }
+
+
+checkPremise :: String -> JudgementDeclMap -> VarAL -> Judgement -> Escape [StaticError] PremiseAttr
+checkPremise rulename judgementdeclmap metavarAL (Judgement inhs expr syns) = 
+   do{ var <- check (matchTermVar expr) [MustBeVar rulename expr]
+     ; tp <- check (lookup var metavarAL) [MetaVarNotDefined rulename var]
+     ; (declinhs, declsyns) <- 
+         check (lookupFM var judgementdeclmap) [NoJudgementForType rulename tp]  -- retrieve info on judgement for this type
+     ; let termVars = filter (isJust . matchTermVar) syns
+     ; continueIf (length declinhs == length inhs) [WrongNumberOfAttributes rulename "premise " ++ var ++", inhs"] +++
+       continueIf (length declsyns == length syns) [WrongNumberOfAttributes rulename "premise " ++ var ++ ", syns"] +++
+       continueIf (length termVars == length syns) (map (MustBeVar rulename) (filter (not . isJust . matchTermVar) syns))
+     ; return (PremiseAttr var tp)
+     }
+
+checkConclusion :: String -> JudgementDeclMap -> ArgTypesMap -> Judgement -> Escape [StaticError] ConclusionAttr 
+checkConclusion rulename judgementdeclmap argtypesmap nts (Judgement inhs expr syns) =
+   do{ (con, args) <- check (matchSimpleTermApp expr) [MustBeSimpleApp rulename expr]
+     ; (declinhs, declsyns) <- 
+         check (lookupFM con judgementsdeclmap) [UnknownAlternative rulename con]
+     ; argTypes <- check (lookupFM con argtypesmap) [InternalError rulename "while doing lookup for argument type of conclusion"]     
+     ; let termVars = filter (isJust . matchTermVar) inhs
+     ; continueIf (length declinhs == length inhs) [WrongNumberOfAttributes rulename "conclusion,inhs"] +++
+       continueIf (length declsyns == length syns) [WrongNumberOfAttributes rulename "conclusion,syns"] +++
+       continueIf (length args == length argTypes) [WrongNumberOfArguments rulename expr] +++
+       continueIf (length termVars == length inhs) (map (MustBeVar rulename) (filter (not . isJust . matchTermVar) inhs))
+     ; return (ConclusionAttr con (metaFilter nts (zip args argTypes)) termVars)
+     }
+
+metaFilter :: [String] -> [(String,String)] -> [(String,String)] 
+metaFilter metatypes = filter (\(var,tp) -> tp `elem` metatypes)
+
+getTerm :: ConstraintTerm -> Term
+getTerm (ConstraintTerm term) = term
+
+isTermVar :: ConstraintTerm -> Bool
+isTermVar = isJust . matchTermVar . getTerm
+
+isTermApp :: ConstraintTerm -> Bool
+isTermApp = isJust . matchTermApp . getTerm 
+
+isSimpleTermApp :: ConstraintTerm -> Bool
+isSimpleTermApp = isJust . matchSimpleTermApp . getTerm
+
+matchTermVar :: Term -> Maybe String
+matchTermVar (TermVar x) = Just x
+matchTermVar _           = Nothing
+
+matchTermApp :: Term -> Maybe String
+matchTermApp (TermApp fun args) = Just fun
+matchTermApp _                  = Nothing
+
+matchSimpleTermApp :: Term -> Maybe (String, [String])
+matchSimpleTermApp (TermApp fun args) = do xs <- mapM matchTermVar args ; return (fun, xs)
+matchSimpleTermApp _                  = Nothing
+
+-- Bastiaan
+values = eltsFM
+
+}
