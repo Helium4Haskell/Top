@@ -16,12 +16,15 @@ topsolver:
 	# build the Top constraint solver
 	ghc -Wall --make -package text -fglasgow-exts -o ../bin/topsolver TopSolver.hs
         
-documentation:
+doc:
 	# make haddock documentation        
 	haddock --title=Top --prologue=prologue --html -o ../doc \
           Top/*.hs \
 	  Top/*/*.hs \
           
+ignore :
+	svn propset -R svn:ignore -F ../svn-ignore ..
+
 clean:
 	#remove .hi and .o files and documentation
 	$(RM) `find . -name "*.o" -print`
