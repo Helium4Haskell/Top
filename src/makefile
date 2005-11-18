@@ -6,7 +6,9 @@
 # make doc       - make haddock documentation 
 # make clean	 - remove .hi and .o files and documentation
 
-default: topsolver
+default: all
+
+all : topsolver topsolver
 
 prof:
 	# build the Top constraint solver with profiling
@@ -33,3 +35,39 @@ clean:
 	$(RM) ../doc/*.css
 	$(RM) ../doc/*.gif                
 	$(RM) ../bin/topsolver
+
+
+#-----------------------------------------------------------------------
+# Cobalt
+#-----------------------------------------------------------------------
+
+.SUFFIXES : .o .hs .hi .lhs .hc	.s .ag
+
+AG = ag
+
+# AG sources
+AGSOURCES = \
+     Top/Cobalt/AGSyntax.hs Top/Cobalt/Syntax.hs Top/Cobalt/Generator.hs
+
+Top/Cobalt/AGSyntax.hs : \
+	Top/Cobalt/AGSyntax.ag
+	#ag AGSyntax
+	cd Top/Cobalt; $(AG) -dm --module=Top.Cobalt.AGSyntax AGSyntax.ag; cd ../..
+
+Top/Cobalt/Syntax.hs : \
+	Top/Cobalt/Syntax.ag
+	Top/Cobalt/AGSyntax.hs Top/Cobalt/ShowAG.hs
+	#ag Syntax
+	cd Top/Cobalt; $(AG) -dm --module=Top.Cobalt.Syntax Syntax.ag; cd ../..
+
+Top/Cobalt/Generator.hs : \
+	Top/Cobalt/Generator.ag \
+	Top/Cobalt/AGSyntax.ag Top/Cobalt/Syntax.ag Top/Cobalt/Analyze.ag \
+	Top/Cobalt/InferTypes.ag Top/Cobalt/CodeGen.ag Top/Cobalt/Escape.hs \
+	Top/Cobalt/ParseRules.hs Top/Cobalt/ShowAG.hs Top/Cobalt/AGSyntax.hs \
+	Top/Cobalt/Syntax.hs Top/Types.hs
+
+	#ag Generator
+	cd Top/Cobalt; $(AG) -cfs --self --module=Top.Cobalt.Generator Generator.ag; cd ../..
+
+ag : $(AGSOURCES)
