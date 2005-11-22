@@ -1,62 +1,74 @@
 #-----------------------------------------------------------------------
-# Constraint Solver
+# Top Library
 #-----------------------------------------------------------------------
 
-# make example   - build the Top constraint solver
-# make doc       - make haddock documentation 
-# make clean	 - remove .hi and .o files and documentation
+.PHONY:  clean cobalt
 
 default: all
+all: topsolver cobalt
 
-all : topsolver topsolver
+#-----------------------------------------------------------------------
+# Compilers and Tools
+#-----------------------------------------------------------------------
 
-prof:
-	# build the Top constraint solver with profiling
-	ghc -Wall --make -package text -fglasgow-exts -prof -auto-all -o ../bin/topsolver TopSolver.hs
+AG = ag
+HC = ghc
+HADDOCK = haddock
 
-topsolver:
-	# build the Top constraint solver
-	ghc -Wall --make -package text -fglasgow-exts -o ../bin/topsolver TopSolver.hs
-        
+HC_OPTS = -static -fglasgow-exts -Wall
+
+DOC_DIR = ../doc
+BIN_DIR = ../bin
+
+#-----------------------------------------------------------------------
+# General targets
+#-----------------------------------------------------------------------
+
 doc:
 	# make haddock documentation        
-	haddock --title=Top --prologue=prologue --html -o ../doc \
-          Top/*.hs \
-	  Top/*/*.hs \
-          
-ignore :
+	$(HADDOCK) --title=Top --prologue=prologue --html -o $(DOC_DIR) Top/*.hs Top/*/*.hs
+
+ignore:
 	svn propset -R svn:ignore -F ../svn-ignore ..
 
 clean:
 	#remove .hi and .o files and documentation
 	$(RM) `find . -name "*.o" -print`
 	$(RM) `find . -name "*.hi" -print`
-	$(RM) ../doc/*.html
-	$(RM) ../doc/*.css
-	$(RM) ../doc/*.gif                
-	$(RM) ../bin/topsolver
+	$(RM) $(DOC_DIR)/*.html
+	$(RM) $(DOC_DIR)/*.css
+	$(RM) $(DOC_DIR)/*.gif                
+	$(RM) $(BIN_DIR)/topsolver
 
+#-----------------------------------------------------------------------
+# Constraint Solver
+#-----------------------------------------------------------------------
+
+topsolver:
+	# build the Top constraint solver
+	$(HC) $(HC_OPTS) --make -package text -o $(BIN_DIR)/topsolver TopSolver.hs
+
+topsolver-prof:
+	# build the Top constraint solver with profiling
+	$(HC) $(HC_OPTS) --make -package text -prof -auto-all -o $(BIN_DIR)/topsolver TopSolver.hs
 
 #-----------------------------------------------------------------------
 # Cobalt
 #-----------------------------------------------------------------------
 
-.SUFFIXES : .o .hs .hi .lhs .hc	.s .ag
-
-AG = ag
-
-# AG sources
-AGSOURCES = \
+# Cobalt's AG sources
+COBALT_AG = \
      Top/Cobalt/AGSyntax.hs Top/Cobalt/Syntax.hs Top/Cobalt/Generator.hs
 
 Top/Cobalt/AGSyntax.hs : \
 	Top/Cobalt/AGSyntax.ag
+
 	#ag AGSyntax
 	cd Top/Cobalt; $(AG) -dm --module=Top.Cobalt.AGSyntax AGSyntax.ag; cd ../..
 
 Top/Cobalt/Syntax.hs : \
-	Top/Cobalt/Syntax.ag
-	Top/Cobalt/AGSyntax.hs Top/Cobalt/ShowAG.hs
+	Top/Cobalt/Syntax.ag Top/Cobalt/AGSyntax.hs Top/Cobalt/ShowAG.hs
+
 	#ag Syntax
 	cd Top/Cobalt; $(AG) -dm --module=Top.Cobalt.Syntax Syntax.ag; cd ../..
 
@@ -70,4 +82,6 @@ Top/Cobalt/Generator.hs : \
 	#ag Generator
 	cd Top/Cobalt; $(AG) -cfs --self --module=Top.Cobalt.Generator Generator.ag; cd ../..
 
-ag : $(AGSOURCES)
+cobalt: $(COBALT_AG)
+
+ag : $(COBALT_AG)
