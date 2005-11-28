@@ -46,7 +46,7 @@ clean:
 
 topsolver:
 	# build the Top constraint solver
-	$(HC) $(HC_OPTS) --make -package text -o $(BIN_DIR)/topsolver TopSolver.hs
+	$(HC) $(HC_OPTS) --make -o $(BIN_DIR)/topsolver TopSolver.hs
 
 topsolver-prof:
 	# build the Top constraint solver with profiling

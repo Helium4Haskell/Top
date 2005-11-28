@@ -1,12 +1,11 @@
 module Main where
 
-import Parsec
-import qualified ParsecPrim as Prim
-import qualified ParsecToken as P
-import ParsecLanguage (haskellStyle, LanguageDef(..))
+import Text.ParserCombinators.Parsec
+import Text.ParserCombinators.Parsec.Token
+import Text.ParserCombinators.Parsec.Language (haskellStyle, LanguageDef(..))
+
 import Top.Constraints.Constraints
 import Top.Types
-import Top.Constraints.Constraints
 import Top.Constraints.TypeConstraintInfo
 import Top.Constraints.ExtraConstraints
 import Top.Constraints.Equality
@@ -129,8 +128,8 @@ instance HasST TopSolve TopInfo where
 ---------------------------------------------------------------------
 -- * Top lexer
 
-lexer :: P.TokenParser ()
-lexer = P.makeTokenParser 
+lexer :: TokenParser ()
+lexer = makeTokenParser 
            ( haskellStyle 
                 { reservedOpNames = ["==", "::", "<=", "=>", ":=", "~>", "<:" ] 
                 , reservedNames   = ["forall", "Generalize", "Instantiate", "Skolemize", "Implicit",
@@ -141,7 +140,7 @@ lexer = P.makeTokenParser
 
 runLex :: Parser (Constraints TopSolve, Int) -> String -> IO ()
 runLex p input
-        = run (do { P.whiteSpace lexer
+        = run (do { whiteSpace lexer
                   ; x <- p
                   ; eof
                   ; return x
@@ -229,7 +228,7 @@ pConstraint =
       
    pEquality =
       do t1 <- pType
-         P.reservedOp lexer "=="
+         reservedOp lexer "=="
          t2 <- pType
          return $ \info -> 
             ( allTypeConstants t1 ++ allTypeConstants t2
@@ -238,11 +237,11 @@ pConstraint =
             
    pGeneralize = 
       do sv <- pSigmaVar   
-         P.reservedOp lexer ":="
-         P.reserved lexer "Generalize"
-         (monos, tp) <- P.parens lexer $ 
-                           do ms <- P.brackets lexer (commas (P.identifier lexer))
-                              P.lexeme lexer (char ',')
+         reservedOp lexer ":="
+         reserved lexer "Generalize"
+         (monos, tp) <- parens lexer $ 
+                           do ms <- brackets lexer (commas (identifier lexer))
+                              lexeme lexer (char ',')
                               tp <- pType
                               return (map TCon ms, tp)
          return $ \info ->
@@ -252,9 +251,9 @@ pConstraint =
             
    pInstantiate = 
       do tp <- pType   
-         P.reservedOp lexer ":="
-         P.reserved lexer "Instantiate"
-         sigma <- P.parens lexer pSigma
+         reservedOp lexer ":="
+         reserved lexer "Instantiate"
+         sigma <- parens lexer pSigma
          return $ \info ->
             ( allTypeConstants tp ++ either toList allTypeConstants sigma
             , \varMap -> Instantiate (applyVarMap varMap tp) (makeSigma varMap sigma) info
@@ -263,7 +262,7 @@ pConstraint =
    -- explicit instance constraint = instantiate            
    pExplicit = 
       do tp <- pType   
-         P.reservedOp lexer "::"
+         reservedOp lexer "::"
          sigma <- pSigma
          return $ \info ->
             ( allTypeConstants tp ++ either toList allTypeConstants sigma
@@ -272,16 +271,16 @@ pConstraint =
            
    pSkolemize = 
       do tp <- pType   
-         P.reservedOp lexer ":="
-         P.reserved lexer "Skolemize"
-         sigma <- P.parens lexer pSigma
+         reservedOp lexer ":="
+         reserved lexer "Skolemize"
+         sigma <- parens lexer pSigma
          return $ \info ->
             ( allTypeConstants tp ++ either toList allTypeConstants sigma
             , \varMap -> Skolemize (applyVarMap varMap tp) ([], makeSigma varMap sigma) info
             ) 
             
    pProve = 
-      do P.reserved lexer "Prove"
+      do reserved lexer "Prove"
          q <- pQualifierList
          return $ \info ->
             ( allTypeConstants q
@@ -289,7 +288,7 @@ pConstraint =
             )
             
    pAssume = 
-      do P.reserved lexer "Assume"
+      do reserved lexer "Assume"
          q <- pQualifierList
          return $ \info ->
             ( allTypeConstants q
@@ -298,11 +297,11 @@ pConstraint =
             
    pImplicit =
       do t1 <- pType
-         P.reservedOp lexer ":="
-         P.reserved lexer "Implicit"
-         (monos, t2) <- P.parens lexer $ 
-                           do ms <- P.brackets lexer (commas (P.identifier lexer))
-                              P.lexeme lexer (char ',')
+         reservedOp lexer ":="
+         reserved lexer "Implicit"
+         (monos, t2) <- parens lexer $ 
+                           do ms <- brackets lexer (commas (identifier lexer))
+                              lexeme lexer (char ',')
                               tp <- pType
                               return (map TCon ms, tp)
          return $ \info ->
@@ -322,7 +321,7 @@ pOperation =
              , ("PrintState"      , printState)
              , ("Stop"            , do printState; s <- getMessages; error $ s ++ "***** Stop reached *****")
              ]
-       f (s, a) = do P.reserved lexer s
+       f (s, a) = do reserved lexer s
                      return ([], const (Constraint (a, return True, s)))
    in tryList (map f ops)   
 
@@ -331,8 +330,8 @@ pOperation =
   
 pSubtypingRule :: Parser (Result (Constraint TopSolve))
 pSubtypingRule =
-   do P.reserved lexer "Declare"
-      (xs, x) <- P.parens lexer (pContext pSubtyping pSubtyping)
+   do reserved lexer "Declare"
+      (xs, x) <- parens lexer (pContext pSubtyping pSubtyping)
       info    <- pInfo
       let rule   = SubtypingRule xs x
           vars   = filter (isLower . head) . nub . allTypeConstants $ rule
@@ -345,8 +344,8 @@ pSubtypingRule =
 
 pClassDecl :: Parser (Result (Constraint TopSolve))
 pClassDecl = 
-   do P.reserved lexer "Class"
-      tuple@(supers, className) <- pContext (P.identifier lexer) (P.identifier lexer)
+   do reserved lexer "Class"
+      tuple@(supers, className) <- pContext (identifier lexer) (identifier lexer)
       
       let change :: ClassEnvironment -> ClassEnvironment
           change env = addToFM_C (\(s1,is1) (s2,is2) -> (s1 `union` s2,is1 `union` is2)) env className (supers, [])
@@ -356,7 +355,7 @@ pClassDecl =
   
 pInstanceDecl :: Parser (Result (Constraint TopSolve))
 pInstanceDecl =
-   do P.reserved lexer "Instance"
+   do reserved lexer "Instance"
       tuple@(ps, p@(Predicate className _)) <- pContext pPredicate pPredicate
       
       let vars   = filter (isLower . head) . nub . allTypeConstants $ (ps, p)
@@ -370,7 +369,7 @@ pInstanceDecl =
 
 pNeverDecl :: Parser (Result (Constraint TopSolve))
 pNeverDecl = 
-   do P.reserved lexer "Never"
+   do reserved lexer "Never"
       p    <- pPredicate
       info <- pInfo
       
@@ -383,8 +382,8 @@ pNeverDecl =
 
 pCloseDecl :: Parser (Result (Constraint TopSolve))
 pCloseDecl = 
-   do P.reserved lexer "Close"
-      s    <- P.identifier lexer
+   do reserved lexer "Close"
+      s    <- identifier lexer
       info <- pInfo
       
       return ([], \_ -> Constraint 
@@ -392,8 +391,8 @@ pCloseDecl =
 
 pDisjointDecl :: Parser (Result (Constraint TopSolve))
 pDisjointDecl = 
-   do P.reserved lexer "Disjoint"
-      ss    <- commas (P.identifier lexer)
+   do reserved lexer "Disjoint"
+      ss    <- commas (identifier lexer)
       info <- pInfo
       
       return ([], \_ -> Constraint 
@@ -401,11 +400,11 @@ pDisjointDecl =
 
 pDefaultDecl :: Parser (Result (Constraint TopSolve))
 pDefaultDecl = 
-   do P.reserved lexer "Default"
-      className <- P.identifier lexer    
+   do reserved lexer "Default"
+      className <- identifier lexer    
       typeList  <- 
          let single = pType >>= \tp -> return [tp]
-             more   = P.parens lexer (commas pType)
+             more   = parens lexer (commas pType)
          in tryList [more, single]
       info      <- pInfo
       return ([], \_ -> Constraint 
@@ -421,13 +420,13 @@ pInfo :: Parser TopInfo
 pInfo = tryList [ withInfo, withoutInfo ]
    where
       withInfo =
-         do P.reservedOp lexer ":"
+         do reservedOp lexer ":"
             s <- manyTill anyChar (do { char '\n' ; return () } <|> eof)
-            P.whiteSpace lexer
+            whiteSpace lexer
             return (TopInfo [("msg", s)])
       withoutInfo =
-         do P.reservedOp lexer ";"
-            P.whiteSpace lexer
+         do reservedOp lexer ";"
+            whiteSpace lexer
             return (TopInfo [("msg", "<no message>")])
 
 pContext :: Parser a -> Parser b -> Parser ([a], b)
@@ -440,11 +439,11 @@ pContext p1 p2 =
       return []
    singletonContext = 
       do a <- p1
-         P.reservedOp lexer "=>"  
+         reservedOp lexer "=>"  
          return [a]        
    listContext = 
-      do as <- P.parens lexer (commas p1)      
-         P.reservedOp lexer "=>"
+      do as <- parens lexer (commas p1)      
+         reservedOp lexer "=>"
          return as
          
 pSigma :: Parser (Either String (Scheme TopQualifiers))
@@ -452,16 +451,16 @@ pSigma = try (do s <- pSigmaVar; return (Left s))
          <|> (do s <- pTypeScheme; return (Right s))
 
 pSigmaVar :: Parser String
-pSigmaVar = do s <- P.identifier lexer
+pSigmaVar = do s <- identifier lexer
                case s of
                   's' : rest | all isDigit rest -> return s
                   _ -> fail ""
 
 pTypeScheme :: Parser (Scheme TopQualifiers)
 pTypeScheme = do qs <- option [] $
-                          do P.reserved lexer "forall"
-                             xs <- many1 (P.identifier lexer)
-                             P.symbol lexer "."
+                          do reserved lexer "forall"
+                             xs <- many1 (identifier lexer)
+                             symbol lexer "."
                              return xs
                  (pss, tp) <- pContext pOneQualifier pType 
                  let sub = zip qs [10000..]
@@ -470,7 +469,7 @@ pTypeScheme = do qs <- option [] $
  
 pQualifierList :: Parser TopQualifiers
 pQualifierList = 
-   tryList [ P.parens lexer (commas pOneQualifier) >>= (return . foldr plus empty)
+   tryList [ parens lexer (commas pOneQualifier) >>= (return . foldr plus empty)
            , pOneQualifier
            ]
  
@@ -480,43 +479,43 @@ pOneQualifier = tryList
    , pDependency        >>= (return . toTopQual)
    , pImplicitParameter >>= (return . toTopQual)
    , pSubtyping         >>= (return . toTopQual)
-   , P.parens lexer pOneQualifier
+   , parens lexer pOneQualifier
    ]
 
 pPredicate :: Parser Predicate
 pPredicate = 
-   do s  <- P.identifier lexer
+   do s  <- identifier lexer
       tp <- pType2
       return (Predicate s tp)
 
 pDependency :: Parser Dependency
 pDependency = 
-   do s <- P.identifier lexer
-      P.symbol lexer "."
+   do s <- identifier lexer
+      symbol lexer "."
       t1 <- pType
-      P.reservedOp lexer "~>"
+      reservedOp lexer "~>"
       t2 <- pType
       return (Dependency s t1 t2)
 
 pImplicitParameter :: Parser ImplicitParameter
 pImplicitParameter = 
-   do P.reservedOp lexer "?"
-      s <- P.identifier lexer
-      P.reservedOp lexer "::"
+   do reservedOp lexer "?"
+      s <- identifier lexer
+      reservedOp lexer "::"
       tp <- pType
       return (ImplicitParameter s tp)
 
 pSubtyping :: Parser Subtyping
 pSubtyping = 
    do t1 <- pType
-      P.reservedOp lexer "<:"
+      reservedOp lexer "<:"
       t2 <- pType
       return (t1 :<: t2)
 
 pType :: Parser Tp
 pType = do left <- pType1
            option left $
-             do P.reservedOp lexer "->"
+             do reservedOp lexer "->"
                 right <- pType
                 return (left .->. right)
 
@@ -526,13 +525,13 @@ pType1 = do tps <- many1 pType2
       
 pType2 :: Parser Tp
 pType2 = tryList [
-          do s <- P.identifier lexer
+          do s <- identifier lexer
              return (TCon s)
-        , do tps <- P.parens lexer (commas pType)
+        , do tps <- parens lexer (commas pType)
              case tps of
                 [tp] -> return tp
                 _    -> return (tupleType tps)
-        , do tp <- P.brackets lexer pType
+        , do tp <- brackets lexer pType
              return (listType tp)
     ]
 ---------------------------------------------------------------------
@@ -551,7 +550,7 @@ applyVarMap varmap =
    in changeTypes f
    
 commas :: Parser a -> Parser [a]
-commas  p = p `sepBy` P.lexeme lexer (char ',')
+commas  p = p `sepBy` lexeme lexer (char ',')
 
 tryList :: [Parser a] -> Parser a 
 tryList = foldr1 (<|>) . map try

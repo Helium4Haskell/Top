@@ -15,7 +15,8 @@
 module Top.Types.Synonyms where
 
 import Top.Types.Basics
-import Graph (topSort) 
+import Data.Graph (scc, buildG)
+import Data.Tree (flatten)
 import Data.FiniteMap
 import Utils (internalError)
 
@@ -61,8 +62,9 @@ getTypeSynonymOrdering synonyms =
                                       Nothing -> id
                       in foldr add es cs
                in foldFM op [] synonyms
-
-       list = reverse (topSort (sizeFM synonyms - 1) edges)
+       
+       graph = buildG (0, (sizeFM synonyms - 1)) edges
+       list  = map flatten (scc graph)
 
        (ordering, recursive, _) =
           let op ints (os, rs, counter) =

@@ -19,7 +19,8 @@ import Top.Types
 import Data.Maybe
 import qualified Data.Set as S
 import Data.FiniteMap
-import Graph (topSort)
+import Data.Graph (buildG, scc)
+import Data.Tree (flatten)
 import Top.States.BasicState (printMessage)
 import Top.States.TIState
 
@@ -208,7 +209,8 @@ infiniteGroups xs =
        map2 = listToFM (zip [0..] representatives)
        f2   = lookupWithDefaultFM map2 (internalError "Top.TypeGraph.ApplyHeuristics" "infiniteGroups" "error in lookup2 of makeMap")
        edgeList = [ (f1 i, f1 c) | (i, c) <- xs ]
-       groups   = topSort (length representatives - 1) edgeList
+       graph    = buildG (0, length representatives - 1) edgeList
+       groups   = map flatten (scc graph)
        selfRecursive = [ f1 i | (i, j) <- xs, i == j ]
        recursive = let p [i] = i `elem` selfRecursive
                        p is  = length is > 1
