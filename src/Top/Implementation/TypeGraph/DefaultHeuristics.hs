@@ -6,15 +6,15 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.TypeGraph.DefaultHeuristics where
+module Top.Implementation.TypeGraph.DefaultHeuristics where
 
-import Top.TypeGraph.Basics
-import Top.TypeGraph.Heuristics 
-import Top.TypeGraph.Paths 
+import Top.Implementation.TypeGraph.ApplyHeuristics (predicatePath, expandPath)
+import Top.Implementation.TypeGraph.Basics
+import Top.Implementation.TypeGraph.Heuristic
+import Top.Implementation.TypeGraph.Path
 import Data.List
-import Data.FiniteMap
-import Top.States.BasicState
-import Top.TypeGraph.ApplyHeuristics
+import qualified Data.Map as M
+import Top.Solver
 
 -----------------------------------------------------------------------------
 
@@ -44,7 +44,7 @@ highParticipation ratio path =
  where
    selectTheBest es = 
       let (nrOfPaths, fm)   = participationMap (mapPath (\(EdgeId _ _ cnr,_) -> cnr) path)
-          participationList = fmToList (filterFM p fm)
+          participationList = M.assocs (M.filterWithKey p fm)
           p cnr _    = cnr `elem` activeCNrs
           activeCNrs = [ cnr | (EdgeId _ _ cnr, _) <- es ] 
           maxInList  = maximum (map snd participationList)
@@ -60,9 +60,9 @@ highParticipation ratio path =
           f (edgeID@(EdgeId _ _ cnr),info) = 
              take 5  (show cnr++(if cnr `elem` goodCNrs then "*" else "")++repeat ' ') ++
              take 14 (show edgeID++repeat ' ') ++
-             take 8  (show (lookupWithDefaultFM fm 0 cnr * 100 `div` nrOfPaths)++"%"++repeat ' ') ++
+             take 8  (show (M.findWithDefault 0 cnr fm * 100 `div` nrOfPaths)++"%"++repeat ' ') ++
              "{"++show info++"}"
-      in do printMessage msg
+      in do logMsg msg
             return bestEdges
             
 -- |Select the "latest" constraint
@@ -80,7 +80,7 @@ selectConstraintNumbers is =
       in edgeFilter ("select constraint numbers " ++ show is) f)
 
 -- |Select only the constraints for which there is evidence in the predicates
--- of the current state that the constraint at hand is incorrect.
+-- of the current state that the constraint at hand is incorrect. 
 inPredicatePath :: Heuristic info
 inPredicatePath = 
    Heuristic (Filter "in a predicate path" f) where

@@ -6,11 +6,11 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.TypeGraph.Paths where  
+module Top.Implementation.TypeGraph.Path where  
 
 import Data.List
 import Data.Maybe
-import Data.FiniteMap
+import qualified Data.Map as M
 import Utils (internalError)
 
 ----------------------
@@ -65,9 +65,9 @@ steps = ($ []) . rec where
       case path of 
          x :|: y -> rec x . rec y
          x :+: y -> rec x . rec y
-	 Step a  -> (a:)
-	 Fail  -> id
-	 Empty -> id
+         Step a  -> (a:)
+         Fail  -> id
+         Empty -> id
       
 mapPath :: (a -> b) -> Path a -> Path b
 mapPath f = changeStep (Step . f) 
@@ -206,50 +206,50 @@ minimalSets eqF = rec where
                   _ -> sol1 ++ sol2
 
 removeSomeDuplicates :: Ord b => (a -> b) -> Path a -> Path a
-removeSomeDuplicates toOrd = simplifyPath . rec emptyFM where
+removeSomeDuplicates toOrd = simplifyPath . rec M.empty where
    rec fm path = 
       case path of
       
          left :+: right ->
-	    case left of 
-	       Step a    -> let int = toOrd a
-	                        fm' = addToFM fm int Empty
-	                    in case lookupFM fm int of 
-			          Just left' -> left' :+: rec fm  right 
-				  Nothing    -> left  :+: rec fm' right
-	       p1 :+: p2 -> rec fm (p1 :+: (p2 :+: right))
-	       _         -> rec fm left :+: rec fm right
-	       
-	 left :|: right -> 
-	    case left of
+            case left of 
                Step a    -> let int = toOrd a
-	                        fm' = addToFM fm int Fail
-                            in case lookupFM fm int of 
-			          Just left' -> left' :|: rec fm  right
-				  Nothing    -> left  :|: rec fm' right
-	       p1 :|: p2 -> rec fm (p1 :|: (p2 :|: right))
+                                fm' = M.insert int Empty fm
+                            in case M.lookup int fm of 
+                                 Just left' -> left' :+: rec fm  right 
+                                 Nothing    -> left  :+: rec fm' right
+               p1 :+: p2 -> rec fm (p1 :+: (p2 :+: right))
+               _         -> rec fm left :+: rec fm right
+   
+         left :|: right -> 
+            case left of
+               Step a    -> let int = toOrd a
+                                fm' = M.insert int Fail fm
+                            in case M.lookup int fm of 
+                                  Just left' -> left' :|: rec fm  right
+                                  Nothing    -> left  :|: rec fm' right
+               p1 :|: p2 -> rec fm (p1 :|: (p2 :|: right))
                _         -> rec fm left :|: rec fm right
-	 
-	 Step a -> 
-	    lookupWithDefaultFM fm path (toOrd a)
-	 
-	 _ -> path
+  
+         Step a -> 
+            M.findWithDefault path (toOrd a) fm
+  
+         _ -> path
  
-participationMap :: Ord a => Path a -> (Integer, FiniteMap a Integer)
+participationMap :: Ord a => Path a -> (Integer, M.Map a Integer)
 participationMap path = 
    case path of
-      Empty     -> (1, emptyFM)
-      Fail      -> (0, emptyFM)
-      Step a    -> (1, unitFM a 1)
+      Empty     -> (1, M.empty)
+      Fail      -> (0, M.empty)
+      Step a    -> (1, M.singleton a 1)
       p1 :+: p2 -> let (i1, fm1) = participationMap p1 
                        (i2, fm2) = participationMap p2
-                       fm1'      = mapFM (const (*i2)) fm1
-                       fm2'      = mapFM (const (*i1)) fm2
-                   in (i1 * i2, plusFM_C (\j1 j2 -> j1 + j2 - ((j1*j2) `div` (i1*i2))) fm1' fm2')
+                       fm1'      = M.map (*i2) fm1
+                       fm2'      = M.map (*i1) fm2
+                   in (i1 * i2, M.unionWith (\j1 j2 -> j1 + j2 - ((j1*j2) `div` (i1*i2))) fm1' fm2')
       p1 :|: p2 -> let (i1, fm1) = participationMap p1 
                        (i2, fm2) = participationMap p2
-                   in (i1 + i2, plusFM_C (+) fm1 fm2)
-		   
+                   in (i1 + i2, M.unionWith (+) fm1 fm2)
+   
 pathSize :: Path a -> Int
 pathSize (p1 :|: p2) = pathSize p1 + pathSize p2
 pathSize (p1 :+: p2) = pathSize p1 * pathSize p2

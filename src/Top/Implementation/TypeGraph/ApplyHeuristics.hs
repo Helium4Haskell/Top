@@ -1,3 +1,4 @@
+{-# OPTIONS -fglasgow-exts #-}
 -----------------------------------------------------------------------------
 -- |
 -- Maintainer  :  bastiaan@cs.uu.nl
@@ -6,23 +7,23 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.TypeGraph.ApplyHeuristics (applyHeuristics, expandPath, predicatePath) where
+module Top.Implementation.TypeGraph.ApplyHeuristics (applyHeuristics, predicatePath, expandPath) where
 
-import Top.TypeGraph.TypeGraphState
-import Top.TypeGraph.Heuristics
-import Top.TypeGraph.Basics
-import Top.TypeGraph.Paths
-import Utils (internalError)
-import Control.Monad
-import Data.List
-import Top.Types	
-import Data.Maybe
-import qualified Data.Set as S
-import Data.FiniteMap
 import Data.Graph (buildG, scc)
+import Data.List
+import Data.Maybe
 import Data.Tree (flatten)
-import Top.States.BasicState (printMessage)
-import Top.States.TIState
+import qualified Data.Map as M
+import qualified Data.Set as S
+import Top.Implementation.TypeGraph.Basics
+import Top.Implementation.TypeGraph.ClassMonadic
+import Top.Implementation.TypeGraph.Heuristic
+import Top.Implementation.TypeGraph.Path
+import Top.Interface.Qualification hiding (contextReduction)
+import Top.Interface.TypeInference
+import Top.Solver
+import Top.Types 
+import Utils (internalError)
 
 type ErrorInfo info = ([EdgeId], info)
 
@@ -51,7 +52,7 @@ evalHeuristics path heuristics =
    rec edges [] = 
       case edges of
          (edgeId@(EdgeId _ _ cnr), info) : _ -> 
-            do printMessage ("\n*** The selected constraint: " ++ show cnr ++ " ***\n")
+            do logMsg ("\n*** The selected constraint: " ++ show cnr ++ " ***\n")
                return ([edgeId], info)
          _ -> internalError "Top.TypeGraph.ApplyHeuristics" "evalHeuristics" "empty list"
              
@@ -60,12 +61,12 @@ evalHeuristics path heuristics =
       
          Filter name f -> 
             do edges' <- f edges                
-               printMessage (name ++ " (filter)")
-               printMessage ("   " ++ showSet [ i | (EdgeId _ _ i, _) <- edges' ])
+               logMsg (name ++ " (filter)")
+               logMsg ("   " ++ showSet [ i | (EdgeId _ _ i, _) <- edges' ])
                rec edges' rest
         
          Voting selectors -> 
-            do printMessage ("Voting with "++show (length selectors) ++ " heuristics")
+            do logMsg ("Voting with "++show (length selectors) ++ " heuristics")
                results <- mapM (evalSelector edges) selectors
                let (thePrio, listWithBest) = foldr op (minBound, []) (concat results)
                    op (prio, es, info) best@(i, list) =
@@ -74,28 +75,28 @@ evalHeuristics path heuristics =
                          EQ -> (i, (head es, info):list)
                          GT -> (prio, [(head es, info)])
                case listWithBest of 
-                  [] -> do printMessage "Unfortunately, none of the heuristics could be applied"
+                  [] -> do logMsg "Unfortunately, none of the heuristics could be applied"
                            rec edges rest
-                  _  -> do printMessage ("\n*** Selected with priority "++show thePrio++": "++showSet (map fst listWithBest)++"\n")
+                  _  -> do logMsg ("\n*** Selected with priority "++show thePrio++": "++showSet (map fst listWithBest)++"\n")
                            rec listWithBest rest
                
-evalSelector :: HasTypeGraph m info => [(EdgeId, info)] -> Selector m info -> m [(Int, [EdgeId], info)]
+evalSelector :: (MonadWriter LogEntries m, HasTypeGraph m info) => [(EdgeId, info)] -> Selector m info -> m [(Int, [EdgeId], info)]
 evalSelector edges selector = 
    case selector of
 
       Selector (name, f) -> 
-         do printMessage ("- "++name++" (selector)")
+         do logMsg ("- "++name++" (selector)")
             let op list edge =
                    do x <- f edge
                       case x of
                          Nothing -> return list
                          Just (prio, string, es, info) -> 
-                            do printMessage ("     "++string++" (prio="++show prio++") => "++showSet es)
+                            do logMsg ("     "++string++" (prio="++show prio++") => "++showSet es)
                                return ((prio, es, info) : list)
             foldM op [] edges
      
       SelectorList (name, f) ->
-         do printMessage ("- "++name++" (list selector)")
+         do logMsg ("- "++name++" (list selector)")
             result <- f edges
             case result of 
                Nothing -> return []
@@ -204,10 +205,10 @@ childrenGraph = rec []
 infiniteGroups :: [(VertexId, VertexId)] -> [[VertexId]]
 infiniteGroups xs = 
    let representatives = nub (map fst xs ++ map snd xs)
-       map1 = listToFM (zip representatives [0..])
-       f1   = lookupWithDefaultFM map1 (internalError "Top.TypeGraph.ApplyHeuristics" "infiniteGroups" "error in lookup1 of makeMap")
-       map2 = listToFM (zip [0..] representatives)
-       f2   = lookupWithDefaultFM map2 (internalError "Top.TypeGraph.ApplyHeuristics" "infiniteGroups" "error in lookup2 of makeMap")
+       map1 = M.fromList (zip representatives [0..])
+       f1 i = M.findWithDefault (internalError "Top.TypeGraph.ApplyHeuristics" "infiniteGroups" "error in lookup1 of makeMap") i map1
+       map2 = M.fromList (zip [0..] representatives)
+       f2 i = M.findWithDefault (internalError "Top.TypeGraph.ApplyHeuristics" "infiniteGroups" "error in lookup2 of makeMap") i map2
        edgeList = [ (f1 i, f1 c) | (i, c) <- xs ]
        graph    = buildG (0, length representatives - 1) edgeList
        groups   = map flatten (scc graph)
@@ -218,7 +219,7 @@ infiniteGroups xs =
    in recursive
 
 allSubPathsList :: HasTypeGraph m info => [(VertexId, VertexId)] -> VertexId -> [VertexId] -> m (TypeGraphPath info) 
-allSubPathsList childList vertex targets = rec S.emptySet vertex
+allSubPathsList childList vertex targets = rec S.empty vertex
  where
    rec :: HasTypeGraph m info => S.Set VertexId -> VertexId -> m (TypeGraphPath info)
    rec without start =  
@@ -231,8 +232,8 @@ allSubPathsList childList vertex targets = rec S.emptySet vertex
 	       
             False -> -- go down to another equivalence group  
                let recDown (newStart, childTargets) =
-                      do let newWithout = without `S.union` S.mkSet (map fst vs){- don't return to this equivalence group -}
-                             f ct = let set = S.mkSet [ t | t <- childTargets, t /= ct ]
+                      do let newWithout = without `S.union` S.fromList (map fst vs){- don't return to this equivalence group -}
+                             f ct = let set = S.fromList [ t | t <- childTargets, t /= ct ]
                                     in rec (set `S.union` newWithout) ct
                          path     <- allPathsListWithout without start [newStart]
                          newPaths <- mapM f childTargets
@@ -241,7 +242,7 @@ allSubPathsList childList vertex targets = rec S.emptySet vertex
                    targetPairs :: [(VertexId, [VertexId])]
                    targetPairs =
                       let p (i, j) =  i `elem` map fst vs
-			                       && not (i `S.elementOf` without || j `S.elementOf` without)
+			                       && not (i `S.member` without || j `S.member` without)
                       in map (\((i,j):rest) -> (i, j:map snd rest))
                        . groupBy (\x y -> fst x     ==    fst y)
                        . sortBy  (\x y -> fst x `compare` fst y)
@@ -268,25 +269,25 @@ expandPath p =
                       Initial info -> Step (edge, info)
                       Child _ -> Empty
                       Implied _ (VertexId v1) (VertexId v2)
-                         | pair `S.elementOf` history -> Empty
+                         | pair `S.member` history -> Empty
                          | otherwise -> 
-                              convert (S.addToSet history pair) (lookupPair expandTable pair)
+                              convert (S.insert pair history) (lookupPair expandTable pair)
                        where 
                         pair = intPair (v1, v2)
 
-      return (convert S.emptySet p)                 
+      return (convert S.empty p)                 
 
 impliedEdgeTable :: HasTypeGraph m info => [IntPair] -> m (PathMap info)
-impliedEdgeTable = insertPairs emptyFM
+impliedEdgeTable = insertPairs M.empty
  where
    insertPairs fm [] = return fm
    insertPairs fm (pair:rest)
-      | pair `elemFM` fm = insertPairs fm rest
+      | pair `M.member` fm = insertPairs fm rest
       | otherwise =
            do path <- let (i1, i2) = tupleFromIntPair pair
                       in allPaths (VertexId i1) (VertexId i2)
               let new = nub [ intPair (v1, v2) | (_, Implied _ (VertexId v1) (VertexId v2)) <- steps path ]
-              insertPairs (addToFM fm pair path) (rest `union` new)
+              insertPairs (M.insert pair path fm) (rest `union` new)
 	  
 -------------------------------
 -- 
@@ -309,19 +310,19 @@ instance Ord IntPair where
    Hidden_IP pair1 `compare` Hidden_IP pair2 = 
       pair1 `compare` pair2
 
-type PathMap info = FiniteMap IntPair (Path (EdgeId, PathStep info))
+type PathMap info = M.Map IntPair (Path (EdgeId, PathStep info))
 
 lookupPair :: PathMap info -> IntPair -> Path (EdgeId, PathStep info)
 lookupPair fm pair = 
    let err = internalError "Top.TypeGraph.ApplyHeuristics" "lookupPair" "could not find implied edge while expanding"
-   in lookupWithDefaultFM fm err pair
+   in M.findWithDefault err pair fm
 
 -- move to another module
-predicatePath :: HasTypeGraph m info => m (Path (EdgeId, PathStep info))
+predicatePath :: (HasQual m info, HasTypeGraph m info) => m (Path (EdgeId, PathStep info))
 predicatePath =
-   do ps       <- getPredicates
+   do ps       <- allQualifiers
       simples  <- simplePredicates ps
-      makeList (S.emptySet) Empty simples
+      makeList (S.empty) Empty simples
 
  where 
   simplePredicates ps =
@@ -335,7 +336,7 @@ predicatePath =
         return (altList xs)
        
   make history path (pClass, i)
-     | i `S.elementOf` history = return Fail
+     | i `S.member` history = return Fail
      | otherwise = 
           do classEnv <- getClassEnvironment
              syns     <- getTypeSynonyms
@@ -350,7 +351,7 @@ predicatePath =
              let f (vid, tp)
                     | null errs = -- everything is okay: recursive call
                          do let -- don't visit these vertices
-                                donts = S.mkSet [ VertexId j | j <- ftv (map snd applys), j `notElem` ftv tp ]
+                                donts = S.fromList [ VertexId j | j <- ftv (map snd applys), j `notElem` ftv tp ]
                             path'   <- allPathsListWithout history i [vid]
                             simples <- simplePredicates reduced
                             makeList (donts `S.union` newHistory) (path :+: path') simples
@@ -360,7 +361,7 @@ predicatePath =
                             return (path :+: path')
                                
                   where (reduced, errs) = contextReduction syns classEnv [Predicate pClass tp]
-                        newHistory      = S.mkSet (map fst vertices) `S.union` history
+                        newHistory      = S.fromList (map fst vertices) `S.union` history
                         
              xs <- mapM f (constants ++ applys)
              return (altList xs)

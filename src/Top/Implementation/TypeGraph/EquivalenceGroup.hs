@@ -10,7 +10,7 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.TypeGraph.EquivalenceGroup 
+module Top.Implementation.TypeGraph.EquivalenceGroup 
    ( EquivalenceGroup 
    , emptyGroup, insertVertex, insertEdge, insertClique, combineGroups
    , vertices, constants, edges, equalPaths
@@ -18,13 +18,11 @@ module Top.TypeGraph.EquivalenceGroup
    , typeOfGroup, consistent, checkGroup
    ) where
    
-import Top.TypeGraph.Paths
-import Top.TypeGraph.Basics
+import Top.Implementation.TypeGraph.Path
+import Top.Implementation.TypeGraph.Basics
 import Top.Types
-import Debug.Trace (trace)
 import Data.List
 import qualified Data.Set as S
-import Utils (internalError)
 
 -----------------------------------------------------------------------
 -- * Representation of an equivalence group
@@ -64,18 +62,17 @@ insertEdge edge info eqgroup =
    
 insertClique :: Clique -> EquivalenceGroup info -> EquivalenceGroup info 
 insertClique clique eqgroup =
-   (if debugTypeGraph then trace msg else id) 
    eqgroup { cliques = newCliques }
       
  where
    newCliques = mergeCliques (clique : cs2) : cs1
    (cs1, cs2) = partition (isDisjointClique clique) (cliques eqgroup)
 	    
-   msg = unlines [ "------------------insert clique -------------------------"
+   {- msg = unlines [ "------------------insert clique -------------------------"
                  , show eqgroup
                  , "---- new cliques ----"
                  , show newCliques
-                 ]
+                 ] -}
 
 combineGroups :: EquivalenceGroup info -> EquivalenceGroup info -> EquivalenceGroup info
 combineGroups eqgroup1 eqgroup2 = 
@@ -129,25 +126,24 @@ consistent eqgroup =
        
 equalPaths  :: S.Set VertexId -> VertexId -> [VertexId] -> EquivalenceGroup info -> TypeGraphPath info
 equalPaths without start targets eqgroup =
-   (if debugTypeGraph then trace msg else id)
    reduceNumberOfPaths $
       tailSharingBy (\(e1, _) (e2, _) -> e1 `compare` e2) $
       rec start (edgeList, cliqueList)
  where   
-      msg        = "Path from "++show start++" to "++show targets++" without "++show (S.setToList without)
+      -- msg        = "Path from "++show start++" to "++show targets++" without "++show (S.elems without)
       edgeList   = let p (EdgeId v1 v2 _, _) = 
-                          not (v1 `S.elementOf` without) && not (v2 `S.elementOf` without)
+                          not (v1 `S.member` without) && not (v2 `S.member` without)
                    in filter p (edges eqgroup)
-      cliqueList = let f = filter (not . (`S.elementOf` without) . child) . triplesInClique
+      cliqueList = let f = filter (not . (`S.member` without) . child) . triplesInClique
                    in map f (cliques eqgroup)
-      targetSet  = S.mkSet targets
+      targetSet  = S.fromList targets
       
       -- Allow a second visit of a clique in a path?
       secondCliqueVisit = False
       
       rec :: VertexId -> ([(EdgeId, info)], [[ParentChild]]) -> TypeGraphPath info
       rec v1 (es, cs)
-        | v1 `S.elementOf` targetSet  = Empty
+        | v1 `S.member` targetSet  = Empty
         | otherwise =
              let (edges1,es' ) = partition (\(EdgeId a _ _, _) -> v1 == a) es
                  (edges2,es'') = partition (\(EdgeId _ a _, _) -> v1 == a) es'

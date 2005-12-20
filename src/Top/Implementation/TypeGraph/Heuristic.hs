@@ -1,3 +1,4 @@
+{-# OPTIONS -fglasgow-exts #-}
 -----------------------------------------------------------------------------
 -- |
 -- Maintainer  :  bastiaan@cs.uu.nl
@@ -6,15 +7,18 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.TypeGraph.Heuristics where
+module Top.Implementation.TypeGraph.Heuristic where
 
-import Top.TypeGraph.TypeGraphState
-import Top.TypeGraph.Basics
+import Top.Implementation.TypeGraph.ClassMonadic
+import Top.Implementation.TypeGraph.Basics
+import Top.Implementation.TypeGraph.Path
 import Top.Types
-import Control.Monad
+import Top.Solver
 import Utils (internalError)
 
 -----------------------------------------------------------------------------
+
+type PathHeuristics info = Path (EdgeId, info) -> [Heuristic info]
 
 newtype Heuristic  info = Heuristic (forall m . HasTypeGraph m info => HComponent m info)
 data HasTypeGraph m info => Selector m info 
@@ -61,7 +65,6 @@ doWithoutEdges xs computation =
 
 doWithoutEdge :: HasTypeGraph m info => (EdgeId, info) -> m result -> m result
 doWithoutEdge (edge, info) computation =
-   debugTrace ("doWithoutEdge " ++ show edge)  >> 
    do -- copy1 <- mapM showGroupOf [0..100]
       deleteEdge edge       
       result <- computation           

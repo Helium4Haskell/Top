@@ -6,24 +6,13 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.TypeGraph.Basics where
+module Top.Implementation.TypeGraph.Basics where
 
-import Top.TypeGraph.Paths
+import Top.Implementation.TypeGraph.Path
 import Top.Types
 import Utils (internalError)
-import Debug.Trace (trace)
 import Data.Maybe
 import Data.List (sort, partition, intersperse)
-
----------------------------------------------------------------------------------
-
-debugTypeGraph :: Bool
-debugTypeGraph = False
-
-debugTrace :: Monad m => String -> m ()
-debugTrace message
-   | debugTypeGraph = trace (message++";") (return ())
-   | otherwise      = return ()
 
 -----------------------------------------------------------------------------------------
 
@@ -33,7 +22,7 @@ data VertexKind  = VVar | VCon String | VApp VertexId VertexId
    deriving (Show, Eq, Ord)     
 
 instance Show VertexId where
-   show (VertexId i) = "<" ++ show i ++ ">"
+   show (VertexId i) = show i
             
 vertexIdToTp :: VertexId -> Tp     
 vertexIdToTp (VertexId i) = TVar i
@@ -60,7 +49,7 @@ data ParentChild = ParentChild { parent :: VertexId, child :: VertexId, childSid
    deriving Eq
 
 instance Show ParentChild where
-   show pc = show (child pc) ++ "<-" ++ show (parent pc) ++ show (childSide pc)
+   show pc = show (child pc) ++ " <- " ++ show (parent pc) ++ show (childSide pc)
 
 instance Ord ParentChild where
    compare pc1 pc2 = compare (child pc1, parent pc1) (child pc2, parent pc2)
@@ -75,14 +64,25 @@ instance Show (PathStep info) where
    show (Initial _)      = "Initial"
    show (Implied cs x y) = "(" ++ show cs ++ " : " ++ show (x, y) ++ ")"
    show (Child i)        = "(" ++ show i ++ ")"
+
+instance Show EdgeId where
+   show (EdgeId a b _) = "("++show a'++"-"++show b'++")"
+      where (a',b') = if a <= b then (a,b) else (b,a)
+     
+instance Eq EdgeId where -- why not compare the edge numbers here?
+   EdgeId a b _ == EdgeId c d _ = (a == c && b == d) || (a == d && b == c)
    
+instance Ord EdgeId where
+   EdgeId a b _ <= EdgeId c d _ = order (a,b) <= order (c,d)
+      where order (i,j) = if i <= j then (i,j) else (j,i)
+
 -- A clique is a set of vertices that are equivalent because their parents are equal
 -- Invariant: a clique cannot be empty
 newtype Clique  = CliqueX [ParentChild]
 type CliqueList = [Clique]
 
 instance Show Clique where
-   show (CliqueX xs) = "<" ++ concat (intersperse ", " (map show xs)) ++ ">"
+   show (CliqueX xs) = "{" ++ concat (intersperse ", " (map show xs)) ++ "}"
 
 instance Eq Clique where 
    CliqueX xs == CliqueX ys = 
@@ -145,14 +145,3 @@ combineCliqueList [] ys = ys
 combineCliqueList (x:xs) ys =
    let (ys1, ys2) = partition (isDisjointClique x) ys
    in mergeCliques (x:ys2) : combineCliqueList xs ys1
-   
-instance Show EdgeId where
-   show (EdgeId a b _) = "("++show a'++"-"++show b'++")"
-      where (a',b') = if a <= b then (a,b) else (b,a)
-     
-instance Eq EdgeId where
-   EdgeId a b _ == EdgeId c d _ = (a == c && b == d) || (a == d && b == c)
-   
-instance Ord EdgeId where
-   EdgeId a b _ <= EdgeId c d _ = order (a,b) <= order (c,d)
-      where order (i,j) = if i <= j then (i,j) else (j,i)
