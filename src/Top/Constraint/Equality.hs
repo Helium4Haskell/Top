@@ -1,10 +1,12 @@
-module Top.Constraints.Equality where
+{-# OPTIONS -fglasgow-exts #-}
+
+module Top.Constraint.Equality where
 
 import Top.Types
-import Top.Constraints.Constraints
-import Top.Constraints.TypeConstraintInfo
-import Top.States.SubstState
-import Top.States.TIState
+import Top.Constraint
+import Top.Constraint.Information
+import Top.Interface.Substitution
+import Top.Interface.TypeInference
 import Data.List (union)
 
 data EqualityConstraint info

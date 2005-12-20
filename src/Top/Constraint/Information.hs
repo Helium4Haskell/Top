@@ -1,9 +1,13 @@
-module Top.Constraints.TypeConstraintInfo where
+{-# OPTIONS -fglasgow-exts #-}
+module Top.Constraint.Information where
 
 import Top.Types
 
 instance TypeConstraintInfo ()
--- instance PolyTypeConstraintInfo a ()
+instance PolyTypeConstraintInfo ()
+
+instance TypeConstraintInfo String
+instance PolyTypeConstraintInfo String
 
 class Show info => TypeConstraintInfo info where
    equalityTypePair     :: (Tp, Tp)  -> info -> info
@@ -27,9 +31,9 @@ class Show info => TypeConstraintInfo info where
    closeDirective _       = id
    disjointDirective _ _  = id
    
-class TypeConstraintInfo info => PolyTypeConstraintInfo qs info | info -> qs where
-   instantiatedTypeScheme :: Forall (Qualification qs Tp) -> info -> info
-   skolemizedTypeScheme   :: (Tps, Forall (Qualification qs Tp)) -> info -> info
+class TypeConstraintInfo info => PolyTypeConstraintInfo info where
+   instantiatedTypeScheme :: Forall (Qualification Predicates Tp) -> info -> info
+   skolemizedTypeScheme   :: (Tps, Forall (Qualification Predicates Tp)) -> info -> info
 
    -- default definition
    instantiatedTypeScheme _  = id

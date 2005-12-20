@@ -1,106 +1,105 @@
-module Top.Constraints.Polymorphism where
+{-# OPTIONS -fglasgow-exts #-}
+module Top.Constraint.Polymorphism where
 
-import Top.Types
-import Top.Constraints.Constraints
-import Top.Qualifiers.Qualifiers
-import Top.Constraints.Equality ( (.==.) )
-import Top.Constraints.TypeConstraintInfo
-import Top.States.BasicState
-import Top.States.TIState
-import Top.States.SubstState
-import Top.States.QualifierState
-import Data.List (union, intersect, (\\))
+import Top.Types hiding (contextReduction)
+import Top.Constraint
+import Top.Constraint.Equality ( (.==.) )
+import Top.Interface.Basic
+import Top.Interface.TypeInference
+import Top.Interface.Substitution
+import Top.Interface.Qualification
+import Top.Constraint.Information
+import Data.List (union, intersperse)
 
-data PolymorphismConstraint qs info
+data PolymorphismConstraint info
    = Generalize   Int (Tps, Tp) info
-   | Instantiate  Tp (Sigma qs) info   -- or: explicit instance constraint
-   | Skolemize    Tp (Tps, Sigma qs) info
-
+   | Instantiate  Tp (Sigma Predicates) info   -- or: explicit instance constraint
+   | Skolemize    Tp (Tps, Sigma Predicates) info
+   | Implicit     Tp (Tps, Tp) info
+   
 -- |The constructor of an instantiate (explicit instance) constraint.
-(.::.) :: Tp -> Scheme qs -> info -> PolymorphismConstraint qs info
+(.::.) :: Tp -> Scheme Predicates -> info -> PolymorphismConstraint info
 tp .::. s = Instantiate tp (SigmaScheme s)
 
-instance (ShowQualifiers qs, Show info, Substitutable qs) => Show (PolymorphismConstraint qs info) where
+instance Show info => Show (PolymorphismConstraint info) where
    show constraint = 
       case constraint of
          Generalize sv (monos, tp) info ->
-            "s" ++ show sv ++ " := Generalize" ++ commaList [show (ftv monos), show tp] ++ showInfo info
+            "s" ++ show sv ++ " := Generalize" ++ commaList [show (map TVar (ftv monos)), show tp] ++ showInfo info
          Instantiate tp sigma info ->
-            show tp ++ " := Instantiate" ++ commaList [show sigma] ++ showInfo info            
+            show tp ++ " := Instantiate" ++ commaList [showQuantors sigma] ++ showInfo info            
          Skolemize tp (monos, sigma) info ->
-            show tp ++ " := Skolemize" ++ commaList [show monos, show sigma] ++ showInfo info 
+            show tp ++ " := Skolemize" ++ commaList [show (map TVar (ftv monos)), showQuantors sigma] ++ showInfo info 
+         Implicit t1 (monos, t2) info ->
+            show t1 ++ " := Implicit" ++ commaList [show (map TVar (ftv monos)), show t2] ++ showInfo info
             
     where showInfo info = "   : {" ++ show info ++ "}"
-          commaList xs
-             | null xs   = par ""
-             | otherwise = par (foldr1 (\x y -> x++","++y) xs)
-          par s = "("++s++")"
+          commaList = par . concat . intersperse ", "
+          par s = "(" ++ s ++ ")"
 
-instance Functor (PolymorphismConstraint qs) where
+instance Functor PolymorphismConstraint where
    fmap f constraint =
       case constraint of
          Generalize sv pair info      -> Generalize sv pair (f info)
          Instantiate tp sigma info    -> Instantiate tp sigma (f info)          
          Skolemize tp pair info       -> Skolemize tp pair (f info)
+         Implicit t1 (monos, t2) info -> Implicit t1 (monos, t2) (f info)
          
-instance Substitutable qs => Substitutable (PolymorphismConstraint qs info) where
+instance Substitutable (PolymorphismConstraint info) where
    sub |-> typeConstraint =
       case typeConstraint of
          Generalize sv (monos, tp) info -> Generalize sv (sub |-> monos, sub |-> tp) info
          Instantiate tp sigma info      -> Instantiate (sub |-> tp) (sub |-> sigma) info         
          Skolemize tp pair info         -> Skolemize (sub |-> tp) (sub |-> pair) info
+         Implicit t1 (monos, t2) info   -> Implicit (sub |-> t1) (sub |-> monos, sub |-> t2) info
          
    ftv typeConstraint =
       case typeConstraint of
          Generalize _ (monos, tp) _ -> ftv monos `union` ftv tp
          Instantiate tp sigma _     -> ftv tp `union` ftv sigma         
          Skolemize tp pair _        -> ftv tp `union` ftv pair
+         Implicit t1 (monos, t2) _ -> ftv t1 `union` ftv monos `union` ftv t2
          
-instance ( HasBasic m info
+instance ( HasBasic m info 
          , HasTI m info
          , HasSubst m info
-         , HasQual m ps info
-         , QualifierList m info ps aps
-         , PolyTypeConstraintInfo ps info
-         ) => Solvable (PolymorphismConstraint ps info) m where
+         , HasQual m info
+         , PolyTypeConstraintInfo info
+         ) => 
+           Solvable (PolymorphismConstraint info) m where
    solveConstraint constraint =
       case constraint of
 
-         Generalize var (monosOld, tpOld) _ ->
-            do makeConsistent
-               monosNew <- applySubst monosOld
-               tpNew    <- applySubst tpOld
-               ps       <- doContextReduction
-               
-               let someAlphas = ftv tpNew \\ ftv monosNew
-               (allAlphas, psGen, psNew) <- doGeneralization (ftv monosNew) someAlphas ps
-               psGenSimple <- removeAnnotation psGen
-               putToProve psNew
-               addToGeneralized psGen
-               
-               tpNewer <- applySubst tpOld -- !! context reduction can extend the substitution
-               as <- ftvList psGen
-               let finalAlphas = (as `union` ftv (tpNewer)) `intersect` allAlphas
-               
-               let scheme = quantify finalAlphas (psGenSimple .=>. tpNewer)
+         Generalize var (m, tp) _ ->
+            do -- makeConsistent -- done by contextReduction
+               contextReduction
+               m'     <- applySubst m
+               tp'    <- applySubst tp
+               changeQualifiers applySubst
+               scheme <- generalizeWithQualifiers m' tp'
                storeTypeScheme var scheme
-
+                     
          Instantiate tp sigma info ->
-            do scheme <- replaceSchemeVar sigma
+            do scheme <- findScheme sigma
                let newInfo = instantiatedTypeScheme scheme info
                qtp    <- instantiateM scheme
                let (ps, itp) = split qtp
-               aps <- annotate (equalityTypePair (itp, tp) $ newInfo) ps
-               addToProve aps
+               proveQualifiers (equalityTypePair (itp, tp) newInfo) ps
                pushConstraint $ liftConstraint
                   (itp .==. tp $ newInfo)
-         
+
          Skolemize tp (monos, sigma) info -> 
-            do scheme <- replaceSchemeVar sigma
+            do scheme <- findScheme sigma
                let newInfo = skolemizedTypeScheme (monos, scheme) info
                qtp <- skolemizeFaked (equalityTypePair (tp, tp) $ newInfo) monos scheme
                let (ps, stp) = split qtp
-               aps <- annotate (equalityTypePair (tp, tp) $ newInfo) ps
-               addToAssumptions aps
+               assumeQualifiers (equalityTypePair (tp, tp) newInfo) ps
                pushConstraint $ liftConstraint
-                  (tp .==. stp $ newInfo)
+                  (tp .==. stp $ newInfo) 
+                  
+         Implicit t1 (monos, t2) info ->
+            do sv <- getUnique
+               pushConstraints $ liftConstraints
+                  [ Generalize sv (monos, t2) info
+                  , Instantiate t1 (SigmaVar sv) info
+                  ]
