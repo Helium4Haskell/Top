@@ -1,35 +1,26 @@
+{-# OPTIONS -fglasgow-exts -fallow-undecidable-instances -fallow-overlapping-instances #-}
+
 module Main where
 
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Token
 import Text.ParserCombinators.Parsec.Language (haskellStyle, LanguageDef(..))
-
-import Top.Constraints.Constraints
+import Top.Constraint
 import Top.Types
-import Top.Constraints.TypeConstraintInfo
-import Top.Constraints.ExtraConstraints
-import Top.Constraints.Equality
-import Top.Constraints.Polymorphism (PolymorphismConstraint(..))
-import Top.Solvers.SolveConstraints
-import Top.TypeGraph.TypeGraphSolver
-import Top.States.States
-import Top.States.BasicState
-import Top.States.TIState
-import Top.States.DependencyState
-import Top.States.QualifierState
-import Top.States.ImplicitParameterState
-import Top.States.SubtypingState
-import Top.Solvers.BasicMonad
-import Top.Qualifiers.Qualifiers
-import Top.Qualifiers.TypeClasses ()
-import Top.Qualifiers.Dependencies ()
-import Top.Qualifiers.ImplicitParameters ()
-import Top.Qualifiers.Subtypings ()
-import System (getArgs)
-import Data.Char
-import Data.List
-import Data.FiniteMap
-import Utils
+import Top.Monad.Select
+import Top.Constraint.Information
+import Top.Constraint.Qualifier
+import Top.Constraint.Equality
+import Top.Constraint.Polymorphism (PolymorphismConstraint(..))
+import Top.Interface.TypeInference
+import Top.Implementation.TypeInference
+import Top.Solver
+import Top.Solver.TypeGraph
+import Utils (internalError)
+import Data.Char (isDigit, isLower)
+import Data.List (intersperse, nub, union)
+import qualified Data.Map as M
+import System.Environment (getArgs)
 
 ---------------------------------------------------------------------
 -- * Top logo
@@ -64,35 +55,16 @@ instance TypeConstraintInfo TopInfo where
    closeDirective tuple    = addTopInfo "close directive"      (show tuple)
    disjointDirective t1 t2 = addTopInfo "disjoint directive"   (show (t1, t2))
    
-instance PolyTypeConstraintInfo TopQualifiers TopInfo where
+instance PolyTypeConstraintInfo TopInfo where
    instantiatedTypeScheme s = addTopInfo "instantiated type scheme" (show s)
    skolemizedTypeScheme s   = addTopInfo "skolemized type scheme" (show s)
-   
----------------------------------------------------------------------
--- * Top qualifiers
-
-type TopQualifiers = (Predicates, (Dependencies, (ImplicitParameters, Subtypings)))
-
-class IsTopQualifier a where
-   toTopQual :: a -> TopQualifiers
-   
-instance IsTopQualifier Predicate where
-   toTopQual x = ([x], empty)
-   
-instance IsTopQualifier Dependency where
-   toTopQual x = (empty, ([x], empty))
-
-instance IsTopQualifier ImplicitParameter where
-   toTopQual x = (empty, (empty, ([x], empty)))
-
-instance IsTopQualifier Subtyping where
-   toTopQual x = (empty, (empty, (empty, [x])))
-   
+  
 ---------------------------------------------------------------------
 -- * Top constraints
 
+type TopQualifiers = Predicates
 type TopConstraint = ConstraintSum (EqualityConstraint) 
-                        (ConstraintSum (PolymorphismConstraint TopQualifiers) (ExtraConstraint TopQualifiers))
+                        (ConstraintSum PolymorphismConstraint ExtraConstraint)
                         TopInfo
                  
 class IsTopConstraint a where
@@ -101,18 +73,18 @@ class IsTopConstraint a where
 instance IsTopConstraint (EqualityConstraint TopInfo) where
    toTopCon = SumLeft
    
-instance IsTopConstraint (PolymorphismConstraint TopQualifiers TopInfo) where
+instance IsTopConstraint (PolymorphismConstraint TopInfo) where
    toTopCon = SumRight . SumLeft
 
-instance IsTopConstraint (ExtraConstraint TopQualifiers TopInfo) where
+instance IsTopConstraint (ExtraConstraint TopInfo) where
    toTopCon = SumRight . SumRight                 
-                 
+
 ---------------------------------------------------------------------
 -- * Top solve monad
 
-type TopExtraState = (DependencyState TopInfo, (ImplicitParameterState TopInfo, SubtypingState TopInfo))
-type TopSolve      = TypeGraphX TopInfo TopQualifiers TopExtraState
-   
+-- type TopExtraState = () --(DependencyState TopInfo, (ImplicitParameterState TopInfo, SubtypingState TopInfo))
+type TopSolve      = TG TopInfo --TypeGraphX TopInfo TopQualifiers TopExtraState
+   {-
 instance HasDep TopSolve TopInfo where
    depGet    = do (_, (_, (_, (x1, _)))) <- getX ; return x1
    depPut x1 = do (a, (b, (c, (_, xr)))) <- getX ; putX (a, (b, (c, (x1, xr))))
@@ -123,7 +95,7 @@ instance HasIP TopSolve TopInfo where
 
 instance HasST TopSolve TopInfo where
    stGet    = do (_, (_, (_, (_, (_, x3))))) <- getX ; return x3
-   stPut x3 = do (a, (b, (c, (x1, (x2, _))))) <- getX ; putX (a, (b, (c, (x1, (x2, x3)))))
+   stPut x3 = do (a, (b, (c, (x1, (x2, _))))) <- getX ; putX (a, (b, (c, (x1, (x2, x3))))) -}
 
 ---------------------------------------------------------------------
 -- * Top lexer
@@ -133,8 +105,9 @@ lexer = makeTokenParser
            ( haskellStyle 
                 { reservedOpNames = ["==", "::", "<=", "=>", ":=", "~>", "<:" ] 
                 , reservedNames   = ["forall", "Generalize", "Instantiate", "Skolemize", "Implicit",
-                                     "Prove", "Assume", "MakeConsistent", "PrintState", "Stop", "ContextReduction",
-                                     "Declare", "Enter", "Leave", "Class", "Instance", "Never", "Close", 
+                                     "Prove", "Assume", "MakeConsistent", "LogState", "Stop", 
+                                     "Declare", {- "Enter", "Leave", "ContextReduction",-} 
+                                     "Class", "Instance", "Never", "Close", 
                                      "Disjoint", "Default" ]
                 })
 
@@ -165,27 +138,27 @@ run p input =
          do putStr "parse error at "
             print err
       Right (cset, unique) -> 
-         let result :: SolveResult TopInfo TopQualifiers TopExtraState
-             result  = runTypeGraph standardClasses noOrderedTypeSynonyms unique cset
-             -- doAtEnd :: TypeGraphX TopInfo TopQualifiers TopExtraState ()
-             --doAtEnd = return () -- makeConsistent >> checkSkolems -- >> doAmbiguityCheck
-         in do putStrLn (unlines logo)
-               putStrLn (debugFromResult result)
+         do putStrLn (unlines logo)
+            let result :: SolveResult TopInfo
+                options = solveOptions {uniqueCounter = unique}
+                (result, log) = solve options cset typegraphConstraintSolverDefault
+                
+            putStrLn (show log)          
+            
+            putStrLn . concat $ 
+               "Substitution: " : intersperse ", " (
+                  [ show (i, lookupInt i (substitutionFromResult result)) 
+                  | i <- dom (substitutionFromResult result) 
+                  ])
                
-               putStrLn . concat $ 
-                  "Substitution: " : intersperse ", " (
-                     [ show (i, lookupInt i (substitutionFromResult result)) 
-                     | i <- dom (substitutionFromResult result) 
-                     ])
-               
-               case errorsFromResult result of
-                  [] -> putStrLn "(No errors)"
-                  es -> let nice (info, lab) =
-                               let TopInfo xs = addTopInfo "label" (show lab) info
-                               in "{" ++ concat (intersperse ", " [ a++"="++b | (a, b) <- xs]) ++ "}"
-                        in do putStr (unlines (map nice es))
-                              putStrLn ("(Failed with "++show (length es)++" errors)")
-    
+            case errorsFromResult result of
+               [] -> putStrLn "(No errors)"
+               es -> let nice (info, lab) =
+                            let TopInfo xs = addTopInfo "label" (show lab) info
+                            in "{" ++ concat (intersperse ", " [ a++"="++b | (a, b) <- xs]) ++ "}"
+                     in do putStr (unlines (map nice es))
+                           putStrLn ("(Failed with "++show (length es)++" errors)")
+  
 pStatements :: Parser (Constraints TopSolve, Int)
 pStatements = 
    do xs <- many pStatement
@@ -199,8 +172,8 @@ pStatement :: Parser (Either (Result TopConstraint) (Result (Constraint TopSolve
 pStatement = 
    tryList (map (\m -> m >>= (return . Right)) decl ++ [ pConstraint >>= (return . Left) ])
  where
-   decl = [ pOperation, pSubtypingRule, pClassDecl, pInstanceDecl, pNeverDecl
-          , pCloseDecl, pDisjointDecl, pDefaultDecl
+   decl = [ pOperation {-, pSubtypingRule, pClassDecl, pInstanceDecl, pNeverDecl
+          , pCloseDecl, pDisjointDecl, pDefaultDecl -}
           ]
           
 ---------------------------------------------------------------------
@@ -211,10 +184,10 @@ pConstraint =
    do f <- tryList $
               change pEquality :
               map change
-                 [ pGeneralize, pInstantiate, pExplicit, pSkolemize
+                 [ pGeneralize, pInstantiate, pExplicit, pSkolemize, pImplicit
                  ] ++
               map change 
-                 [ pProve, pAssume, pImplicit
+                 [ pProve, pAssume
                  ]
       info <- pInfo
       return (f info)
@@ -273,15 +246,19 @@ pConstraint =
       do tp <- pType   
          reservedOp lexer ":="
          reserved lexer "Skolemize"
-         sigma <- parens lexer pSigma
+         (monos, sigma) <- parens lexer $ 
+                              do ms <- brackets lexer (commas (identifier lexer))
+                                 lexeme lexer (char ',')
+                                 sigma <- pSigma
+                                 return (map TCon ms, sigma)
          return $ \info ->
-            ( allTypeConstants tp ++ either toList allTypeConstants sigma
-            , \varMap -> Skolemize (applyVarMap varMap tp) ([], makeSigma varMap sigma) info
+            ( allTypeConstants tp ++ allTypeConstants monos ++ either toList allTypeConstants sigma
+            , \varMap -> Skolemize (applyVarMap varMap tp) (applyVarMap varMap monos, makeSigma varMap sigma) info
             ) 
-            
+       
    pProve = 
       do reserved lexer "Prove"
-         q <- pQualifierList
+         q <- parens lexer pPredicate
          return $ \info ->
             ( allTypeConstants q
             , \varMap -> Prove (applyVarMap varMap q) info
@@ -289,7 +266,7 @@ pConstraint =
             
    pAssume = 
       do reserved lexer "Assume"
-         q <- pQualifierList
+         q <- parens lexer pPredicate
          return $ \info ->
             ( allTypeConstants q
             , \varMap -> Assume (applyVarMap varMap q) info
@@ -311,23 +288,23 @@ pConstraint =
 
 ---------------------------------------------------------------------
 -- * Top operation parser 
-   
+
 pOperation :: Parser (Result (Constraint TopSolve))
 pOperation = 
-   let ops = [ ("Enter"           , enterGroup)
-             , ("Leave"           , do qsInfo <- doContextReduction; (_ :: TopQualifiers) <- removeAnnotation qsInfo ; leaveGroup)
-             , ("MakeConsistent"  , makeConsistent) 
-             , ("ContextReduction", do qsInfo <- doContextReduction; (_ :: TopQualifiers) <- removeAnnotation qsInfo; return ())
-             , ("PrintState"      , printState)
-             , ("Stop"            , do printState; s <- getMessages; error $ s ++ "***** Stop reached *****")
+   let ops = [ --("Enter"           , enterGroup)
+             --, ("Leave"           , do qsInfo <- doContextReduction; (_ :: TopQualifiers) <- removeAnnotation qsInfo ; leaveGroup)
+               ("MakeConsistent"  , makeConsistent) 
+             --, ("ContextReduction", do qsInfo <- doContextReduction; (_ :: TopQualifiers) <- removeAnnotation qsInfo; return ())
+             -- , ("LogState"        , logState)
+             -- , ("Stop"            , do logState; error "***** Stop reached *****")
              ]
        f (s, a) = do reserved lexer s
-                     return ([], const (Constraint (a, return True, s)))
+                     return ([], const (operation s a))
    in tryList (map f ops)   
 
 ---------------------------------------------------------------------
 -- * Top subtyping rule parser 
-  
+  {-
 pSubtypingRule :: Parser (Result (Constraint TopSolve))
 pSubtypingRule =
    do reserved lexer "Declare"
@@ -337,22 +314,22 @@ pSubtypingRule =
           vars   = filter (isLower . head) . nub . allTypeConstants $ rule
           varmap = zip vars [0..]
       return $ ([], \_ -> Constraint 
-         (declareSubtypingRule (applyVarMap varmap rule) info, return True, "Declare "++show rule))  
+         (declareSubtypingRule (applyVarMap varmap rule) info, return True, "Declare "++show rule)) -} 
     
 ---------------------------------------------------------------------
 -- * Top class/instance declaration parser 
-
+{-
 pClassDecl :: Parser (Result (Constraint TopSolve))
 pClassDecl = 
    do reserved lexer "Class"
       tuple@(supers, className) <- pContext (identifier lexer) (identifier lexer)
       
-      let change :: ClassEnvironment -> ClassEnvironment
-          change env = addToFM_C (\(s1,is1) (s2,is2) -> (s1 `union` s2,is1 `union` is2)) env className (supers, [])
+      let f :: TIState info -> TIState info
+          f s = s { classenv = g (classenv s) }
+          g = M.insertWith (\(s1,is1) (s2,is2) -> (s1 `union` s2,is1 `union` is2)) className (supers, [])
       
-      return ([], \_ -> Constraint
-         (tiModify (\s -> s { classenv = change (classenv s) }), return True, "Class "++show tuple))
-  
+      return ([], \_ -> operation ("Class "++show tuple) (deselect (modify f)))
+
 pInstanceDecl :: Parser (Result (Constraint TopSolve))
 pInstanceDecl =
    do reserved lexer "Instance"
@@ -361,11 +338,12 @@ pInstanceDecl =
       let vars   = filter (isLower . head) . nub . allTypeConstants $ (ps, p)
           varmap = zip vars [0..]
           tuple' = applyVarMap varmap (p, ps)
-          change :: ClassEnvironment -> ClassEnvironment
-          change env = addToFM_C (\(s1,is1) (s2,is2) -> (s1 `union` s2,is1 `union` is2)) env className ([], [tuple'])
+          
+          f :: TIState info -> TIState info
+          f s = s { classenv = g (classenv s) }
+          g = M.insertWith (\(s1,is1) (s2,is2) -> (s1 `union` s2,is1 `union` is2)) className ([], [tuple'])
       
-      return ([], \_ -> Constraint
-         (tiModify (\s -> s { classenv = change (classenv s) }), return True, "Instance "++show tuple))
+      return ([], \_ -> operation ("Instance "++show tuple) (deselect (modify f)))
 
 pNeverDecl :: Parser (Result (Constraint TopSolve))
 pNeverDecl = 
@@ -377,8 +355,7 @@ pNeverDecl =
           varmap = zip vars [0..]
           p'     = applyVarMap varmap p
       
-      return ([], \_ -> Constraint 
-         (addNeverDirective (p', info), return True, "Never " ++ show p ++ "   : {" ++ show info ++ "}"))
+      return ([], \_ -> operation ("Never " ++ show p ++ "   : {" ++ show info ++ "}") (addNeverDirective (p', info)))
 
 pCloseDecl :: Parser (Result (Constraint TopSolve))
 pCloseDecl = 
@@ -386,8 +363,7 @@ pCloseDecl =
       s    <- identifier lexer
       info <- pInfo
       
-      return ([], \_ -> Constraint 
-         (addCloseDirective (s, info), return True, "Close " ++ s ++ "   : {" ++ show info ++ "}"))
+      return ([], \_ -> operation ("Close " ++ s ++ "   : {" ++ show info ++ "}") (addCloseDirective (s, info)))
 
 pDisjointDecl :: Parser (Result (Constraint TopSolve))
 pDisjointDecl = 
@@ -395,8 +371,7 @@ pDisjointDecl =
       ss    <- commas (identifier lexer)
       info <- pInfo
       
-      return ([], \_ -> Constraint 
-         (addDisjointDirective (ss, info), return True, "Disjoint " ++ show ss ++ "   : {" ++ show info ++ "}"))
+      return ([], \_ -> operation ("Disjoint " ++ show ss ++ "   : {" ++ show info ++ "}") (addDisjointDirective (ss, info)))
 
 pDefaultDecl :: Parser (Result (Constraint TopSolve))
 pDefaultDecl = 
@@ -407,12 +382,10 @@ pDefaultDecl =
              more   = parens lexer (commas pType)
          in tryList [more, single]
       info      <- pInfo
-      return ([], \_ -> Constraint 
-         ( addDefaultDirective (className, (typeList, info))
-         , return True
-         , "Default " ++ className ++ " (" ++ concat (intersperse "," (map show typeList)) ++ ")   : {" ++ show info ++ "}")
-         )
-       
+      return ([], \_ -> operation 
+         ("Default " ++ className ++ " (" ++ concat (intersperse "," (map show typeList)) ++ ")   : {" ++ show info ++ "}")
+         ( addDefaultDirective (className, (typeList, info)))) -}
+                
 ---------------------------------------------------------------------
 -- * Other parsers 
          
@@ -464,21 +437,20 @@ pTypeScheme = do qs <- option [] $
                              return xs
                  (pss, tp) <- pContext pOneQualifier pType 
                  let sub = zip qs [10000..]
-                     ps  = foldr plus empty pss
-                 return (quantify (map snd sub) (applyVarMap sub ps .=>. applyVarMap sub tp))
- 
+                 return (quantify (map snd sub) (applyVarMap sub (concat pss) .=>. applyVarMap sub tp))
+
 pQualifierList :: Parser TopQualifiers
 pQualifierList = 
-   tryList [ parens lexer (commas pOneQualifier) >>= (return . foldr plus empty)
+   tryList [ parens lexer (commas pOneQualifier) >>= (return . concat)
            , pOneQualifier
            ]
  
 pOneQualifier :: Parser TopQualifiers
 pOneQualifier = tryList
-   [ pPredicate         >>= (return . toTopQual)
-   , pDependency        >>= (return . toTopQual)
-   , pImplicitParameter >>= (return . toTopQual)
-   , pSubtyping         >>= (return . toTopQual)
+   [ pPredicate         >>= return . (:[])
+   --, pDependency        >>= (return . toTopQual)
+   --, pImplicitParameter >>= (return . toTopQual)
+   --, pSubtyping         >>= (return . toTopQual)
    , parens lexer pOneQualifier
    ]
 
@@ -488,29 +460,29 @@ pPredicate =
       tp <- pType2
       return (Predicate s tp)
 
-pDependency :: Parser Dependency
+{- pDependency :: Parser Dependency
 pDependency = 
    do s <- identifier lexer
       symbol lexer "."
       t1 <- pType
       reservedOp lexer "~>"
       t2 <- pType
-      return (Dependency s t1 t2)
+      return (Dependency s t1 t2) -}
 
-pImplicitParameter :: Parser ImplicitParameter
+{-pImplicitParameter :: Parser ImplicitParameter
 pImplicitParameter = 
    do reservedOp lexer "?"
       s <- identifier lexer
       reservedOp lexer "::"
       tp <- pType
-      return (ImplicitParameter s tp)
+      return (ImplicitParameter s tp) -}
 
-pSubtyping :: Parser Subtyping
+{- pSubtyping :: Parser Subtyping
 pSubtyping = 
    do t1 <- pType
       reservedOp lexer "<:"
       t2 <- pType
-      return (t1 :<: t2)
+      return (t1 :<: t2) -}
 
 pType :: Parser Tp
 pType = do left <- pType1
