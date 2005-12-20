@@ -26,7 +26,7 @@ BIN_DIR = ../bin
 
 doc:
 	# make haddock documentation        
-	$(HADDOCK) --title=Top --prologue=$(DOC_DIR)/prologue --html -o $(DOC_DIR) \
+	$(HADDOCK) --title="The Top Library" --prologue=$(DOC_DIR)/prologue --html -o $(DOC_DIR) \
 	   Top/*.hs Top/*/*.hs Top/*/*/*.hs
 
 ignore:

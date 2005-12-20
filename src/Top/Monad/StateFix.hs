@@ -1,4 +1,12 @@
 {-# OPTIONS -fglasgow-exts #-}
+-----------------------------------------------------------------------------
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  non-portable (requires extensions)
+-----------------------------------------------------------------------------
+
 module Top.Monad.StateFix 
    ( module Top.Monad.StateFix
    , module Control.Monad.State

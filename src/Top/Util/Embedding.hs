@@ -1,3 +1,11 @@
+-----------------------------------------------------------------------------
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  portable
+-----------------------------------------------------------------------------
+
 module Top.Util.Embedding where
 
 data Embedding a b = Embedding { getE :: a -> b, changeE :: (b -> b) -> a -> a }

@@ -1,8 +1,9 @@
 -----------------------------------------------------------------------------
--- |
--- Maintainer  :  bastiaan@cs.uu.nl
--- Stability   :  experimental
--- Portability :  unknown
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  portable
 --
 -- Type classes and the standard reduction instances. A part of the code
 -- was taken from the paper "Typing Haskell in Haskell".

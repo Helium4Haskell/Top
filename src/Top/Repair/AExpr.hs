@@ -1,3 +1,11 @@
+-----------------------------------------------------------------------------
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  portable
+-----------------------------------------------------------------------------
+
 module Top.Repair.AExpr where
 
 import Top.Types

@@ -1,9 +1,10 @@
 {-# OPTIONS -fglasgow-exts #-}
 -----------------------------------------------------------------------------
--- |
--- Maintainer  :  bastiaan@cs.uu.nl
--- Stability   :  experimental
--- Portability :  unknown
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  non-portable (requires extensions)
 --
 -- This module contains a data type to represent (plain) types, some basic 
 -- functionality for types, and an instance for Show.

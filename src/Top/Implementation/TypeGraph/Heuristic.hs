@@ -1,10 +1,10 @@
 {-# OPTIONS -fglasgow-exts #-}
 -----------------------------------------------------------------------------
--- |
--- Maintainer  :  bastiaan@cs.uu.nl
--- Stability   :  experimental
--- Portability :  unknown
---
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  non-portable (requires extensions)
 -----------------------------------------------------------------------------
 
 module Top.Implementation.TypeGraph.Heuristic where

@@ -1,16 +1,17 @@
 {-# OPTIONS -fglasgow-exts -fallow-undecidable-instances -fallow-overlapping-instances #-}
-
 -----------------------------------------------------------------------------
--- |
--- Maintainer  :  bastiaan@cs.uu.nl
--- Stability   :  experimental
--- Portability :  unknown
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  non-portable (requires extensions)
 --
 -- An interface for a monad that constains the most basic operations to 
 -- solve constraints. Can be reused for all kinds of constraint-based
 -- analyses.
 --
 -----------------------------------------------------------------------------
+
 
 module Top.Implementation.Basic where
 

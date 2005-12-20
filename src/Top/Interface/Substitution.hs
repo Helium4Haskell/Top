@@ -1,4 +1,11 @@
 {-# OPTIONS -fglasgow-exts -fallow-undecidable-instances #-}
+-----------------------------------------------------------------------------
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  non-portable (requires extensions)
+-----------------------------------------------------------------------------
 
 module Top.Interface.Substitution where
 

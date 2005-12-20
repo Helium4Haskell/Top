@@ -1,3 +1,11 @@
+-----------------------------------------------------------------------------
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  portable
+-----------------------------------------------------------------------------
+
 module Top.Cobalt.Escape where
 
 data Escape a b = Escape a | Continue b deriving Show

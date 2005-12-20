@@ -1,8 +1,9 @@
 -----------------------------------------------------------------------------
--- |
--- Maintainer  :  bastiaan@cs.uu.nl
--- Stability   :  experimental
--- Portability :  unknown
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  portable
 --
 -- A collection of type utilities.
 --

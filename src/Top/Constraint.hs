@@ -1,9 +1,10 @@
 {-# OPTIONS -fglasgow-exts -fallow-undecidable-instances #-}
 -----------------------------------------------------------------------------
--- |
--- Maintainer  :  bastiaan@cs.uu.nl
--- Stability   :  experimental
--- Portability :  unknown
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  non-portable (requires extensions)
 --
 -- A data type to represent constraints in general, and a type class for
 -- constraints that are solvable.

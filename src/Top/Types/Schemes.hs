@@ -1,9 +1,10 @@
 {-# OPTIONS -fglasgow-exts #-}
 -----------------------------------------------------------------------------
--- |
--- Maintainer  :  bastiaan@cs.uu.nl
--- Stability   :  experimental
--- Portability :  unknown
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  non-portable (requires extensions)
 --
 -- A representation of type schemes. A type scheme is a (qualified) type
 -- with a number of quantifiers (foralls) in front of it. A partial mapping 

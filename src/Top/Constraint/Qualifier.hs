@@ -1,13 +1,15 @@
 {-# OPTIONS -fglasgow-exts #-}
 -----------------------------------------------------------------------------
--- |
--- Maintainer  :  bastiaan@cs.uu.nl
--- Stability   :  experimental
--- Portability :  unknown
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  non-portable (requires extensions)
 --
--- Some additional constraints.
+-- Constraints for overloading
 --
 -----------------------------------------------------------------------------
+
 
 module Top.Constraint.Qualifier where
 

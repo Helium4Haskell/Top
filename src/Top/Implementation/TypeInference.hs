@@ -1,10 +1,10 @@
 {-# OPTIONS -fglasgow-exts -fallow-undecidable-instances #-}
-
 -----------------------------------------------------------------------------
--- |
--- Maintainer  :  bastiaan@cs.uu.nl
--- Stability   :  experimental
--- Portability :  unknown
+-- | License      :  GPL
+-- 
+--   Maintainer   :  bastiaan@cs.uu.nl
+--   Stability    :  provisional
+--   Portability  :  non-portable (requires extensions)
 --
 -- Additional state information that should be stored in order to perform
 -- type inference.
