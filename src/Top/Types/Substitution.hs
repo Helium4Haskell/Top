@@ -1,3 +1,4 @@
+{-# OPTIONS -fglasgow-exts #-}
 -----------------------------------------------------------------------------
 -- |
 -- Maintainer  :  bastiaan@cs.uu.nl
@@ -11,9 +12,9 @@
 
 module Top.Types.Substitution where
 
-import Top.Types.Basics
+import Top.Types.Primitive
 import Data.List (union, (\\), nub)
-import Data.FiniteMap
+import qualified Data.Map as M
 import Utils (internalError)
 
 ----------------------------------------------------------------------
@@ -42,66 +43,61 @@ nextFTV a = case ftv a of
 -- * Substitution instances 
 
 -- |A substitution represented by a finite map.
-type FiniteMapSubstitution = FiniteMap Int Tp
+type MapSubstitution = M.Map Int Tp
 
-instance Substitution FiniteMapSubstitution where
+instance Substitution MapSubstitution where
 
-   lookupInt i fm = lookupWithDefaultFM fm (TVar i) i
-   removeDom      = flip delListFromFM
-   restrictDom is = filterFM (\i _ -> i `elem` is)
+   lookupInt i    = M.findWithDefault (TVar i) i
+   removeDom is   = M.filterWithKey (\i _ -> i `notElem` is)
+   restrictDom is = M.filterWithKey (\i _ -> i `elem` is)
    
-   dom = keysFM
-   cod = eltsFM 
+   dom = M.keys
+   cod = M.elems 
 
-emptySubst :: FiniteMapSubstitution
-emptySubst = emptyFM
+emptySubst :: MapSubstitution
+emptySubst = M.empty
 
 -- |Compose two finite map substitutions: safe.
--- Note for 'plusFM': bindings in right argument shadow those in the left
-(@@) :: FiniteMapSubstitution -> FiniteMapSubstitution -> FiniteMapSubstitution
-fm1 @@ fm2 = fm1 `plusFM` mapFM (\_ t -> fm1 |-> t) fm2  
+-- Note for 'M.union': bindings in right argument shadow those in the left
+(@@) :: MapSubstitution -> MapSubstitution -> MapSubstitution
+fm1 @@ fm2 = fm1 `M.union` M.map (\t -> fm1 |-> t) fm2  
 
 -- |Compose two finite map substitutions: quick and dirty!
-(@@@) :: FiniteMapSubstitution -> FiniteMapSubstitution -> FiniteMapSubstitution
-(@@@) = plusFM 
+(@@@) :: MapSubstitution -> MapSubstitution -> MapSubstitution
+(@@@) = M.union 
 
-singleSubstitution :: Int -> Tp -> FiniteMapSubstitution
-singleSubstitution = unitFM
+singleSubstitution :: Int -> Tp -> MapSubstitution
+singleSubstitution = M.singleton
 
-listToSubstitution :: [(Int,Tp)] -> FiniteMapSubstitution
-listToSubstitution = listToFM
+listToSubstitution :: [(Int,Tp)] -> MapSubstitution
+listToSubstitution = M.fromList
 
 -- |A fixpoint is computed when looking up the target of a type variable in this substitution. 
 -- Combining two substitutions is cheap, whereas a lookup is more expensive than the 
 -- normal finite map substitution.
-newtype FixpointSubstitution = FixpointSubstitution (FiniteMap Int Tp)
+newtype FixpointSubstitution = FixpointSubstitution (M.Map Int Tp)
 
 instance Substitution FixpointSubstitution where
    lookupInt i original@(FixpointSubstitution fm) = 
-      case lookupFM fm i of
+      case M.lookup i fm of
          Just tp | tp == TVar i -> TVar i
                  | otherwise    -> original |-> tp
          Nothing                -> TVar i
-   removeDom   is (FixpointSubstitution fm) = FixpointSubstitution (delListFromFM fm is)
-   restrictDom is (FixpointSubstitution fm) = let js = keysFM fm \\ is
-                                              in FixpointSubstitution (delListFromFM fm js)
-   dom (FixpointSubstitution fm) = keysFM fm
-   cod (FixpointSubstitution fm) = eltsFM fm
+   removeDom   is (FixpointSubstitution fm) = FixpointSubstitution (M.filterWithKey (\i _ -> i `notElem` is) fm)
+   restrictDom is (FixpointSubstitution fm) = let js = M.keys fm \\ is
+                                              in FixpointSubstitution (M.filterWithKey (\i _ -> i `notElem` js) fm)
+   dom (FixpointSubstitution fm) = M.keys fm
+   cod (FixpointSubstitution fm) = M.elems fm
 
-{- (removed for GHC 6.4)
-instance Show FixpointSubstitution where
-   show (FixpointSubstitution fm) = "Fixpoint FiniteMap Substitution: " ++ show (fmToList fm)
--}
- 
 -- |The empty fixpoint substitution 
 emptyFPS :: FixpointSubstitution
-emptyFPS = FixpointSubstitution emptyFM
+emptyFPS = FixpointSubstitution M.empty
  
 -- |Combine two fixpoint substitutions that are disjoint
 disjointFPS :: FixpointSubstitution -> FixpointSubstitution -> FixpointSubstitution
 disjointFPS (FixpointSubstitution fm1) (FixpointSubstitution fm2) = 
    let notDisjoint = internalError "Substitution" "disjointFPS" "the two fixpoint substitutions are not disjoint"
-   in FixpointSubstitution (plusFM_C notDisjoint fm1 fm2)   
+   in FixpointSubstitution (M.unionWith notDisjoint fm1 fm2)   
  
 ----------------------------------------------------------------------
 -- * Wrapper for substitutions

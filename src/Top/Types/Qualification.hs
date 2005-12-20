@@ -10,7 +10,7 @@
 
 module Top.Types.Qualification where
 
-import Top.Types.Basics
+import Top.Types.Primitive
 import Top.Types.Substitution
 import Data.List
 

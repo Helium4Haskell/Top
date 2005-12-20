@@ -12,9 +12,9 @@
 module Top.Types.Unification where
 
 import Top.Types.Substitution
-import Top.Types.Basics
-import Top.Types.Synonyms
-import Data.FiniteMap
+import Top.Types.Primitive
+import Top.Types.Synonym
+import qualified Data.Map as M
 import Utils (internalError)
 
 -- |There are two reasons why two types cannot be unified: either two (different) type constants clash (they
@@ -26,7 +26,7 @@ data UnificationError
  deriving (Show,Eq)       
 
 -- |The most general unification (substitution) of two types.
-mgu :: Tp -> Tp -> Either UnificationError FiniteMapSubstitution 
+mgu :: Tp -> Tp -> Either UnificationError MapSubstitution 
 mgu t1 t2 = 
    case mguWithTypeSynonyms noOrderedTypeSynonyms t1 t2 of
       Left uError  -> Left uError
@@ -40,7 +40,7 @@ mgu t1 t2 =
 --      [ v11 := [Char] , v14 := Char ]
 --
 -- Note: the boolean indicates whether exansions were necessary       
-mguWithTypeSynonyms :: OrderedTypeSynonyms -> Tp -> Tp -> Either UnificationError (Bool, FiniteMapSubstitution)
+mguWithTypeSynonyms :: OrderedTypeSynonyms -> Tp -> Tp -> Either UnificationError (Bool, MapSubstitution)
 mguWithTypeSynonyms typesynonyms = rec emptySubst
 
  where
@@ -63,7 +63,7 @@ mguWithTypeSynonyms typesynonyms = rec emptySubst
                 _ ->  internalError "Top.Types.Unification" "mguWithTypeSynonyms" "illegal type"
 
    recVar sub i tp = 
-      case lookupFM sub i of
+      case M.lookup i sub of
          Just t2 -> 
             case rec sub tp t2 of
                Right (True,sub') -> 
@@ -96,7 +96,7 @@ equalUnderTypeSynonyms typesynonyms t1 t2 =
    case (leftSpine t1,leftSpine t2) of 
       ((TVar i,[]),(TVar _,[])) -> Just (TVar i) 
       ((TCon s,ss),(TCon t,tt)) 
-                    | s == t    -> do let f (s, t) = equalUnderTypeSynonyms typesynonyms s t
+                    | s == t    -> do let f = uncurry (equalUnderTypeSynonyms typesynonyms)
                                       xs <- mapM f (zip ss tt)
                                       Just (foldl TApp (TCon s) xs)
                     | otherwise -> case expandOneStepOrdered typesynonyms (t1, t2) of

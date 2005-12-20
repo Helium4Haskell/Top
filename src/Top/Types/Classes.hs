@@ -11,13 +11,13 @@
 
 module Top.Types.Classes where
 
-import Top.Types.Basics
+import Top.Types.Primitive
 import Top.Types.Substitution
 import Top.Types.Unification
-import Top.Types.Synonyms
+import Top.Types.Synonym
 import Top.Types.Qualification
 import Control.Monad
-import Data.FiniteMap
+import qualified Data.Map as M
 
 ----------------------------------------------------------------------  
 -- * Class predicates
@@ -43,34 +43,33 @@ instance ShowQualifiers Predicate
 ----------------------------------------------------------------------  
 -- * Class environments and instances
 
-type ClassEnvironment = FiniteMap String Class
+type ClassEnvironment = M.Map String Class
 type Class            = ([String], Instances)
 type Instances        = [Instance]
 type Instance         = (Predicate, Predicates)
 
 -- |The empty class environment
 emptyClassEnvironment :: ClassEnvironment
-emptyClassEnvironment = emptyFM
+emptyClassEnvironment = M.empty
 
-matchPredicates :: OrderedTypeSynonyms -> Predicate -> Predicate -> Maybe FiniteMapSubstitution
+matchPredicates :: OrderedTypeSynonyms -> Predicate -> Predicate -> Maybe MapSubstitution
 matchPredicates synonyms (Predicate s1 t1) (Predicate s2 t2)
    | s1 == s2 = case mguWithTypeSynonyms synonyms (freezeVariablesInType t1) t2 of
         Left _       -> Nothing
-        Right (_, s) -> let f _ = unfreezeVariablesInType
-                        in Just (mapFM f s)
+        Right (_, s) -> Just (M.map unfreezeVariablesInType s)
    | otherwise = Nothing
 
 insertInstance :: String -> Instance -> ClassEnvironment -> ClassEnvironment 
 insertInstance className inst env = 
-    case lookupFM env className of
-        Nothing -> addToFM env className ([], [inst])
-        Just (parents, insts) -> addToFM env className (parents, inst:insts)
+    case M.lookup className env of
+        Nothing -> M.insert className ([], [inst]) env
+        Just (parents, insts) -> M.insert className (parents, inst:insts) env
 
 ---------------------------------------------------------------------- 
 -- * Class environment
 
 inClassEnvironment :: String -> ClassEnvironment -> Bool
-inClassEnvironment = elemFM
+inClassEnvironment = M.member
 
 superclassPaths :: String -> String -> ClassEnvironment -> [[String]]
 superclassPaths from to cs 
@@ -79,10 +78,10 @@ superclassPaths from to cs
 
 -- |For example, Eq is a superclass of Ord
 superclasses :: String -> ClassEnvironment -> [String]
-superclasses s cs = maybe [] fst (lookupFM cs s)
+superclasses s cs = maybe [] fst (M.lookup s cs)
 
 instances :: String -> ClassEnvironment -> Instances 
-instances s cs = maybe [] snd (lookupFM cs s)
+instances s cs = maybe [] snd (M.lookup s cs)
 
 ---------------------------------------------------------------------- 
 -- * Head normal form
@@ -174,7 +173,7 @@ associatedContextReduction synonyms classes ps =
 --   o  Warnings.ag
 --   o  Collect.ag  (initialization in import environment)
 standardClasses :: ClassEnvironment
-standardClasses = listToFM $ 
+standardClasses = M.fromList $ 
 
    -- only two instances for Num: Int and Float
    ( "Num",  

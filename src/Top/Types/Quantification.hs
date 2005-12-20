@@ -1,3 +1,4 @@
+{-# OPTIONS -fglasgow-exts #-}
 -----------------------------------------------------------------------------
 -- |
 -- Maintainer  :  bastiaan@cs.uu.nl
@@ -10,7 +11,7 @@
 
 module Top.Types.Quantification where
 
-import Top.Types.Basics
+import Top.Types.Primitive
 import Top.Types.Substitution
 import Data.List
 import Data.Maybe
@@ -176,6 +177,9 @@ defaultOptions = ShowQuantorOptions
    , showAllTheSame       = False
    , useTheNameMap        = True
    }
+
+showQuantors :: ShowQuantors a => a -> String
+showQuantors = showQuantorsWithout (defaultOptions { showTopLevelQuantors = True }) 
 
 -- |This class can deal with the pretty printing of (possibly nested) quantifiers.
 class Show a => ShowQuantors a where

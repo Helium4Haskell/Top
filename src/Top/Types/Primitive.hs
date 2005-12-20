@@ -9,7 +9,7 @@
 --
 -----------------------------------------------------------------------------
 
-module Top.Types.Basics where
+module Top.Types.Primitive where
 
 import Data.List (union, isPrefixOf)
 import Data.Char (isDigit, isSpace)

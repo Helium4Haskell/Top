@@ -1,3 +1,4 @@
+{-# OPTIONS -fglasgow-exts #-}
 -----------------------------------------------------------------------------
 -- |
 -- Maintainer  :  bastiaan@cs.uu.nl
@@ -12,15 +13,15 @@
 
 module Top.Types.Schemes where
 
-import Top.Types.Basics
+import Top.Types.Primitive
 import Top.Types.Quantification
 import Top.Types.Qualification
 import Top.Types.Substitution
-import Top.Types.Synonyms
+import Top.Types.Synonym
 import Top.Types.Unification
 import Top.Types.Classes
 import Data.List
-import Data.FiniteMap
+import qualified Data.Map as M
 
 ----------------------------------------------------------------------
 -- * Type schemes
@@ -101,8 +102,14 @@ instance Substitutable qs => Substitutable (Sigma qs) where
    ftv (SigmaVar _)    = []
    ftv (SigmaScheme s) = ftv s 
 
+instance (Substitutable qs, ShowQualifiers qs) => ShowQuantors (Sigma qs) where
+   showQuantorsWithout options sigma =
+      case sigma of
+         SigmaVar _     -> show sigma
+         SigmaScheme ts -> showQuantorsWithout options ts
+   
 -- |A substitution for type scheme variables
-type TpSchemeMap = FiniteMap SigmaVar TpScheme
+type TpSchemeMap = M.Map SigmaVar TpScheme
 
 type SigmaPreds = Sigma Predicates
 

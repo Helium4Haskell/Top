@@ -10,7 +10,7 @@
 
 module Top.Types.Kinds where
 
-import Top.Types.Basics
+import Top.Types.Primitive
 import Top.Types.Substitution
 import Top.Types.Quantification
 import Top.Types.Schemes
