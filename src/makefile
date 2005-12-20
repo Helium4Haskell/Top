@@ -4,7 +4,7 @@
 
 .PHONY:  clean cobalt
 
-default: all
+default: topsolver
 all: topsolver cobalt
 
 #-----------------------------------------------------------------------
@@ -26,7 +26,8 @@ BIN_DIR = ../bin
 
 doc:
 	# make haddock documentation        
-	$(HADDOCK) --title=Top --prologue=prologue --html -o $(DOC_DIR) Top/*.hs Top/*/*.hs Top/*/*/*.hs
+	$(HADDOCK) --title=Top --prologue=$(DOC_DIR)/prologue --html -o $(DOC_DIR) \
+	   Top/*.hs Top/*/*.hs Top/*/*/*.hs
 
 ignore:
 	svn propset -R svn:ignore -F ../svn-ignore ..
