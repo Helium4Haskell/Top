@@ -1,0 +1,13 @@
+At its most general, Top is a framework for constructing abstract interpretations 
+which focuses on giving good feedback on why an abstract interpretation does not give 
+any useful information. In a mathematical notation this is usually make explicit by 
+returning the top element of a (complete) lattice. This is also one of the reasons 
+for the name of the project.
+
+We have obtained good results with our first subproject, delivering good type error messages
+for a language quite similar to Haskell (a restricted implementation can be found in the
+Helium compiler). For this reason, Top may also be read as Typing Our Programs. 
+However, the approach that we used can also be deployed for other program analyses for which 
+good feedback is desirable.
+
+The sources can be obtained from <https://svn.cs.uu.nl:12443/repos/Top/trunk/>.
