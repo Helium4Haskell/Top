@@ -44,14 +44,14 @@ highParticipation ratio path =
  where
    selectTheBest es = 
       let (nrOfPaths, fm)   = participationMap (mapPath (\(EdgeId _ _ cnr,_) -> cnr) path)
-          participationList = M.assocs (M.filterWithKey p fm)
+          participationList = M.filterWithKey p fm
           p cnr _    = cnr `elem` activeCNrs
-          activeCNrs = [ cnr | (EdgeId _ _ cnr, _) <- es ] 
-          maxInList  = maximum (map snd participationList)
+          activeCNrs = [ cnr | (EdgeId _ _ cnr, _) <- es ]
+          maxInList  = maximum (M.elems participationList)
           limit     -- test if one edge can solve it completely
              | maxInList == nrOfPaths = maxInList 
              | otherwise              = round (fromIntegral maxInList * ratio) `max` 1
-          goodCNrs   = [ cnr | (cnr, i) <- participationList, i >= limit ]
+          goodCNrs   = M.keys (M.filter (>= limit) participationList)
           bestEdges  = filter (\(EdgeId _ _ cnr,_) -> cnr `elem` goodCNrs) es
   
           -- prints a nice report

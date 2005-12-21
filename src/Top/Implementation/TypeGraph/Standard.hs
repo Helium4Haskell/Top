@@ -208,10 +208,10 @@ createGroup eqgroup stg =
 
 removeGroup :: EquivalenceGroup info -> StandardTypeGraph info -> StandardTypeGraph info               
 removeGroup eqgroup stg =
-   let vertexIds  = map fst (vertices eqgroup)
-       oldGroupNr = maybe [] (:[]) (M.lookup (head vertexIds) (referenceMap stg))
-   in stg { referenceMap        = M.filterWithKey (\x _ -> x `notElem` vertexIds)  (referenceMap stg) -- is not necessary
-          , equivalenceGroupMap = M.filterWithKey (\x _ -> x `notElem` oldGroupNr) (equivalenceGroupMap stg)
+   let vertexIds   = map fst (vertices eqgroup)
+       oldGroupNr  = maybe [] (:[]) (M.lookup (head vertexIds) (referenceMap stg))
+   in stg { referenceMap        = foldr M.delete (referenceMap stg) vertexIds
+          , equivalenceGroupMap = foldr M.delete (equivalenceGroupMap stg) oldGroupNr
           }
           
 updateGroupOf :: VertexId -> (EquivalenceGroup info -> EquivalenceGroup info) -> StandardTypeGraph info -> StandardTypeGraph info

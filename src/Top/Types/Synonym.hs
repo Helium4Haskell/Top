@@ -41,6 +41,10 @@ type OrderedTypeSynonyms = (TypeSynonymOrdering, TypeSynonyms)
 noOrderedTypeSynonyms :: OrderedTypeSynonyms
 noOrderedTypeSynonyms = (M.empty, M.empty)
 
+-- |A string is a list of characters
+stringAsTypeSynonym :: OrderedTypeSynonyms
+stringAsTypeSynonym = (M.singleton "String" 0, M.singleton "String" (0, \_ -> listType charType))
+
 -- |Order a collection of type synonyms, and return this ordering paired with
 -- sets of mutually recursive type synonyms that are detected.
 getTypeSynonymOrdering :: TypeSynonyms -> (TypeSynonymOrdering, [[String]])

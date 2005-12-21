@@ -10,23 +10,22 @@
 module Main where
 
 import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec.Token
+import qualified Text.ParserCombinators.Parsec.Token as P
 import Text.ParserCombinators.Parsec.Language (haskellStyle, LanguageDef(..))
 import Top.Constraint
 import Top.Types
-import Top.Monad.Select
 import Top.Constraint.Information
 import Top.Constraint.Qualifier
 import Top.Constraint.Equality
 import Top.Constraint.Polymorphism (PolymorphismConstraint(..))
 import Top.Interface.TypeInference
-import Top.Implementation.TypeInference
 import Top.Solver
 import Top.Solver.TypeGraph
 import Utils (internalError)
 import Data.Char (isDigit, isLower)
-import Data.List (intersperse, nub, union)
+import Data.List (intersperse)
 import qualified Data.Map as M
+import qualified Data.Set as S
 import System.Environment (getArgs)
 
 ---------------------------------------------------------------------
@@ -107,8 +106,8 @@ instance HasST TopSolve TopInfo where
 ---------------------------------------------------------------------
 -- * Top lexer
 
-lexer :: TokenParser ()
-lexer = makeTokenParser 
+lexer :: P.TokenParser ()
+lexer = P.makeTokenParser 
            ( haskellStyle 
                 { reservedOpNames = ["==", "::", "<=", "=>", ":=", "~>", "<:" ] 
                 , reservedNames   = ["forall", "Generalize", "Instantiate", "Skolemize", "Implicit",
@@ -120,11 +119,25 @@ lexer = makeTokenParser
 
 runLex :: Parser (Constraints TopSolve, Int) -> String -> IO ()
 runLex p input
-        = run (do { whiteSpace lexer
+        = run (do { whiteSpace
                   ; x <- p
                   ; eof
                   ; return x
                   }) input
+
+whiteSpace             :: CharParser () ()
+comma, dot, identifier :: CharParser () String
+parens, brackets       :: CharParser () a -> CharParser () a
+reserved, reservedOp   :: String -> CharParser () ()
+
+whiteSpace = P.whiteSpace lexer
+comma      = P.comma lexer
+dot        = P.dot lexer
+parens     = P.parens lexer
+brackets   = P.brackets lexer
+identifier = P.identifier lexer
+reserved   = P.reserved lexer
+reservedOp = P.reservedOp lexer
 
 ---------------------------------------------------------------------
 -- * Top parser and main function
@@ -147,7 +160,7 @@ run p input =
       Right (cset, unique) -> 
          do putStrLn (unlines logo)
             let result :: SolveResult TopInfo
-                options = solveOptions {uniqueCounter = unique}
+                options = solveOptions { uniqueCounter = unique, typeSynonyms = stringAsTypeSynonym }
                 (result, log) = solve options cset typegraphConstraintSolverDefault
                 
             putStrLn (show log)          
@@ -169,11 +182,11 @@ run p input =
 pStatements :: Parser (Constraints TopSolve, Int)
 pStatements = 
    do xs <- many pStatement
-      let vars = filter (isLower . head) . nub . concatMap (either fst fst) $ xs
-          varmap = zip vars [0..]
+      let vars = S.filter (isLower . head) . S.unions . map (either fst fst) $ xs
+          varmap = M.fromList (zip (S.elems vars) [0..])
           g (Left (_,f))   = liftConstraint (f varmap)
           g (Right (_, f)) = f varmap
-      return (map g xs, length varmap)
+      return (map g xs, S.size vars)
 
 pStatement :: Parser (Either (Result TopConstraint) (Result (Constraint TopSolve)))
 pStatement = 
@@ -197,7 +210,8 @@ pConstraint =
                  [ pProve, pAssume
                  ]
       info <- pInfo
-      return (f info)
+      let (list, fun) = f info
+      return (S.fromList list, fun)
              
  where
    change parser =  
@@ -208,7 +222,7 @@ pConstraint =
       
    pEquality =
       do t1 <- pType
-         reservedOp lexer "=="
+         reservedOp "=="
          t2 <- pType
          return $ \info -> 
             ( allTypeConstants t1 ++ allTypeConstants t2
@@ -217,23 +231,23 @@ pConstraint =
             
    pGeneralize = 
       do sv <- pSigmaVar   
-         reservedOp lexer ":="
-         reserved lexer "Generalize"
-         (monos, tp) <- parens lexer $ 
-                           do ms <- brackets lexer (commas (identifier lexer))
-                              lexeme lexer (char ',')
+         reservedOp ":="
+         reserved "Generalize"
+         (monos, tp) <- parens $ 
+                           do ms <- brackets (commas identifier)
+                              comma
                               tp <- pType
                               return (map TCon ms, tp)
          return $ \info ->
             ( sv : allTypeConstants monos ++ allTypeConstants tp
-            , \varMap -> Generalize (maybe (-1) id $ lookup sv varMap) (applyVarMap varMap monos, applyVarMap varMap tp) info
+            , \varMap -> Generalize (maybe (-1) id $ M.lookup sv varMap) (applyVarMap varMap monos, applyVarMap varMap tp) info
             )
             
    pInstantiate = 
       do tp <- pType   
-         reservedOp lexer ":="
-         reserved lexer "Instantiate"
-         sigma <- parens lexer pSigma
+         reservedOp ":="
+         reserved "Instantiate"
+         sigma <- parens pSigma
          return $ \info ->
             ( allTypeConstants tp ++ either toList allTypeConstants sigma
             , \varMap -> Instantiate (applyVarMap varMap tp) (makeSigma varMap sigma) info
@@ -242,7 +256,7 @@ pConstraint =
    -- explicit instance constraint = instantiate            
    pExplicit = 
       do tp <- pType   
-         reservedOp lexer "::"
+         reservedOp "::"
          sigma <- pSigma
          return $ \info ->
             ( allTypeConstants tp ++ either toList allTypeConstants sigma
@@ -251,11 +265,11 @@ pConstraint =
            
    pSkolemize = 
       do tp <- pType   
-         reservedOp lexer ":="
-         reserved lexer "Skolemize"
-         (monos, sigma) <- parens lexer $ 
-                              do ms <- brackets lexer (commas (identifier lexer))
-                                 lexeme lexer (char ',')
+         reservedOp ":="
+         reserved "Skolemize"
+         (monos, sigma) <- parens $ 
+                              do ms <- brackets (commas identifier)
+                                 comma
                                  sigma <- pSigma
                                  return (map TCon ms, sigma)
          return $ \info ->
@@ -264,16 +278,16 @@ pConstraint =
             ) 
        
    pProve = 
-      do reserved lexer "Prove"
-         q <- parens lexer pPredicate
+      do reserved "Prove"
+         q <- parens pPredicate
          return $ \info ->
             ( allTypeConstants q
             , \varMap -> Prove (applyVarMap varMap q) info
             )
             
    pAssume = 
-      do reserved lexer "Assume"
-         q <- parens lexer pPredicate
+      do reserved "Assume"
+         q <- parens pPredicate
          return $ \info ->
             ( allTypeConstants q
             , \varMap -> Assume (applyVarMap varMap q) info
@@ -281,11 +295,11 @@ pConstraint =
             
    pImplicit =
       do t1 <- pType
-         reservedOp lexer ":="
-         reserved lexer "Implicit"
-         (monos, t2) <- parens lexer $ 
-                           do ms <- brackets lexer (commas (identifier lexer))
-                              lexeme lexer (char ',')
+         reservedOp ":="
+         reserved "Implicit"
+         (monos, t2) <- parens $ 
+                           do ms <- brackets (commas identifier)
+                              comma
                               tp <- pType
                               return (map TCon ms, tp)
          return $ \info ->
@@ -305,8 +319,8 @@ pOperation =
              -- , ("LogState"        , logState)
              -- , ("Stop"            , do logState; error "***** Stop reached *****")
              ]
-       f (s, a) = do reserved lexer s
-                     return ([], const (operation s a))
+       f (s, a) = do reserved s
+                     return (S.empty, const (operation s a))
    in tryList (map f ops)   
 
 ---------------------------------------------------------------------
@@ -400,13 +414,13 @@ pInfo :: Parser TopInfo
 pInfo = tryList [ withInfo, withoutInfo ]
    where
       withInfo =
-         do reservedOp lexer ":"
+         do reservedOp ":"
             s <- manyTill anyChar (do { char '\n' ; return () } <|> eof)
-            whiteSpace lexer
+            whiteSpace
             return (TopInfo [("msg", s)])
       withoutInfo =
-         do reservedOp lexer ";"
-            whiteSpace lexer
+         do reservedOp ";"
+            whiteSpace
             return (TopInfo [("msg", "<no message>")])
 
 pContext :: Parser a -> Parser b -> Parser ([a], b)
@@ -419,11 +433,11 @@ pContext p1 p2 =
       return []
    singletonContext = 
       do a <- p1
-         reservedOp lexer "=>"  
+         reservedOp "=>"  
          return [a]        
    listContext = 
-      do as <- parens lexer (commas p1)      
-         reservedOp lexer "=>"
+      do as <- parens (commas p1)      
+         reservedOp "=>"
          return as
          
 pSigma :: Parser (Either String (Scheme TopQualifiers))
@@ -431,24 +445,24 @@ pSigma = try (do s <- pSigmaVar; return (Left s))
          <|> (do s <- pTypeScheme; return (Right s))
 
 pSigmaVar :: Parser String
-pSigmaVar = do s <- identifier lexer
+pSigmaVar = do s <- identifier
                case s of
                   's' : rest | all isDigit rest -> return s
                   _ -> fail ""
 
 pTypeScheme :: Parser (Scheme TopQualifiers)
 pTypeScheme = do qs <- option [] $
-                          do reserved lexer "forall"
-                             xs <- many1 (identifier lexer)
-                             symbol lexer "."
+                          do reserved "forall"
+                             xs <- many1 identifier
+                             dot
                              return xs
                  (pss, tp) <- pContext pOneQualifier pType 
-                 let sub = zip qs [10000..]
-                 return (quantify (map snd sub) (applyVarMap sub (concat pss) .=>. applyVarMap sub tp))
+                 let sub = M.fromList (zip qs [10000..])
+                 return (quantify (M.elems sub) (applyVarMap sub (concat pss) .=>. applyVarMap sub tp))
 
 pQualifierList :: Parser TopQualifiers
 pQualifierList = 
-   tryList [ parens lexer (commas pOneQualifier) >>= (return . concat)
+   tryList [ parens (commas pOneQualifier) >>= (return . concat)
            , pOneQualifier
            ]
  
@@ -458,12 +472,12 @@ pOneQualifier = tryList
    --, pDependency        >>= (return . toTopQual)
    --, pImplicitParameter >>= (return . toTopQual)
    --, pSubtyping         >>= (return . toTopQual)
-   , parens lexer pOneQualifier
+   , parens pOneQualifier
    ]
 
 pPredicate :: Parser Predicate
 pPredicate = 
-   do s  <- identifier lexer
+   do s  <- identifier
       tp <- pType2
       return (Predicate s tp)
 
@@ -494,7 +508,7 @@ pSubtyping =
 pType :: Parser Tp
 pType = do left <- pType1
            option left $
-             do reservedOp lexer "->"
+             do reservedOp "->"
                 right <- pType
                 return (left .->. right)
 
@@ -504,32 +518,32 @@ pType1 = do tps <- many1 pType2
       
 pType2 :: Parser Tp
 pType2 = tryList [
-          do s <- identifier lexer
+          do s <- identifier
              return (TCon s)
-        , do tps <- parens lexer (commas pType)
+        , do tps <- parens (commas pType)
              case tps of
                 [tp] -> return tp
                 _    -> return (tupleType tps)
-        , do tp <- brackets lexer pType
+        , do tp <- brackets pType
              return (listType tp)
     ]
 ---------------------------------------------------------------------
 -- * Miscellaneous
 
-type VarMap   = [(String, Int)]
-type Result a = ([String], VarMap -> a)
+type VarMap   = M.Map String Int
+type Result a = (S.Set String, VarMap -> a)
 
 applyVarMap :: HasTypes a => VarMap -> a -> a
 applyVarMap varmap = 
    let f tp =
           case tp of
              TApp l r -> TApp (f l) (f r)
-             TCon s   -> maybe (TCon s) TVar (lookup s varmap)
+             TCon s   -> maybe (TCon s) TVar (M.lookup s varmap)
              TVar _   -> tp   
    in changeTypes f
    
 commas :: Parser a -> Parser [a]
-commas  p = p `sepBy` lexeme lexer (char ',')
+commas  p = p `sepBy` comma
 
 tryList :: [Parser a] -> Parser a 
 tryList = foldr1 (<|>) . map try
@@ -539,5 +553,5 @@ toList a = [a]
 
 makeSigma :: VarMap -> Either String (Scheme TopQualifiers) -> Sigma TopQualifiers
 makeSigma vm (Left s)  = let err = internalError "TopSolver.hs" "makeSigma" "sigma var not in variable map" 
-                         in SigmaVar (maybe err id $ lookup s vm)
+                         in SigmaVar (maybe err id $ M.lookup s vm)
 makeSigma vm (Right s) = SigmaScheme (applyVarMap vm s)

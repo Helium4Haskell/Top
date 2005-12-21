@@ -16,6 +16,7 @@ module Top.Types.Substitution where
 import Top.Types.Primitive
 import Data.List (union, (\\), nub)
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Utils (internalError)
 
 ----------------------------------------------------------------------
@@ -49,8 +50,9 @@ type MapSubstitution = M.Map Int Tp
 instance Substitution MapSubstitution where
 
    lookupInt i    = M.findWithDefault (TVar i) i
-   removeDom is   = M.filterWithKey (\i _ -> i `notElem` is)
-   restrictDom is = M.filterWithKey (\i _ -> i `elem` is)
+   removeDom      = flip (foldr M.delete)
+   restrictDom is = let set = S.fromList is 
+                    in M.filterWithKey (\i _ -> S.member i set)
    
    dom = M.keys
    cod = M.elems 
