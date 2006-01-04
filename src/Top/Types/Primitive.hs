@@ -150,6 +150,10 @@ isTApp :: Tp -> Bool
 isTApp (TApp _ _) = True
 isTApp _          = False
 
+isFunctionType :: Tp -> Bool
+isFunctionType (TApp (TApp (TCon "->") _) _) = True
+isFunctionType _                             = False
+
 isTupleConstructor :: String -> Bool
 isTupleConstructor ('(':[]) = False
 isTupleConstructor ('(':cs) = all (','==) (init cs) && last cs == ')'

@@ -58,12 +58,13 @@ class Show a => ShowQualifiers a where
    showQualifiers = (:[]) . show
 
 showContext :: ShowQualifiers a => a -> String
-showContext a =
-   case showQualifiers a of
-      []  -> ""
-      [x] -> x ++ " => "
-      xs  -> "(" ++ concat (intersperse ", " xs) ++ ") => "
+showContext = showContextSimple . showQualifiers
 
+showContextSimple :: [String] -> String
+showContextSimple []  = ""
+showContextSimple [x] = x ++ " => "
+showContextSimple xs  = "(" ++ concat (intersperse ", " xs) ++ ") => "
+      
 instance (ShowQualifiers a, ShowQualifiers b) => ShowQualifiers (a, b) where
    showQualifiers (a, b) = showQualifiers a ++ showQualifiers b
 
