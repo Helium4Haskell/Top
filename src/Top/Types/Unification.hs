@@ -50,7 +50,8 @@ mguWithTypeSynonyms typesynonyms = rec emptySubst
         ((TVar i,[]), _) -> recVar sub i t2               
         (_, (TVar i,[])) -> recVar sub i t1
         ((TCon s, ss), (TCon t, tt)) 
-           | s == t    -> recList sub ss tt
+           | s == t && not (isPhantomTypeSynonym typesynonyms s) -> 
+                recList sub ss tt
            | otherwise -> 
                 case expandOneStepOrdered typesynonyms (t1, t2) of 
                    Just (t1', t2') -> 
@@ -97,12 +98,14 @@ equalUnderTypeSynonyms typesynonyms t1 t2 =
    case (leftSpine t1,leftSpine t2) of 
       ((TVar i,[]),(TVar _,[])) -> Just (TVar i) 
       ((TCon s,ss),(TCon t,tt)) 
-                    | s == t    -> do let f = uncurry (equalUnderTypeSynonyms typesynonyms)
-                                      xs <- mapM f (zip ss tt)
-                                      Just (foldl TApp (TCon s) xs)
-                    | otherwise -> case expandOneStepOrdered typesynonyms (t1, t2) of
-                                      Just (t1', t2') -> equalUnderTypeSynonyms  typesynonyms t1' t2'
-                                      Nothing         -> Nothing
+         | s == t && not (isPhantomTypeSynonym typesynonyms s) -> 
+              do let f = uncurry (equalUnderTypeSynonyms typesynonyms)
+                 xs <- mapM f (zip ss tt)
+                 Just (foldl TApp (TCon s) xs)
+         | otherwise -> 
+              do (t1', t2') <- expandOneStepOrdered typesynonyms (t1, t2)
+                 equalUnderTypeSynonyms typesynonyms t1' t2'
+
       _ -> Nothing
 
 -- |Given a set of (ordered) type synonyms, can two types be unified?                              

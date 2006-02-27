@@ -16,6 +16,7 @@
 module Top.Types.Synonym where
 
 import Top.Types.Primitive
+import Top.Types.Substitution
 import Utils (internalError)
 import Data.Graph (scc, buildG)
 import Data.Tree (flatten)
@@ -81,6 +82,16 @@ getTypeSynonymOrdering synonyms =
    in
       (ordering, recursive)
 
+isPhantomTypeSynonym :: OrderedTypeSynonyms -> String -> Bool
+isPhantomTypeSynonym (_, xs) s = 
+   case M.lookup s xs of 
+      Nothing     -> False
+      Just (i, f) -> 
+         let is   = take i [0..]
+             tp   = f (map TVar is)
+             free = ftv tp
+         in any (`notElem` free) is
+
 ----------------------------------------------------------------------
 -- * Expansion of a type
 
@@ -124,7 +135,7 @@ expandOneStepOrdered (ordering, synonyms) (t1,t2) =
                       Just x  -> x
                       Nothing -> internalError "Top.Types.Synonyms" "expandOneStep" "invalid set of OrderedTypeSynonyms"
    in case (f t1, f t2) of
-         (Just i1, Just i2) | i1 < i2   -> Just (expand t1, t2)
+         (Just i1, Just i2) | i1 <= i2  -> Just (expand t1, t2)
                             | otherwise -> Just (t1, expand t2)
          (Just _ , Nothing) -> Just (expand t1, t2)
          (Nothing, Just _ ) -> Just (t1, expand t2)
