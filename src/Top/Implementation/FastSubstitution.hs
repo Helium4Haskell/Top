@@ -85,13 +85,19 @@ writeExpandedType synonyms = writeTypeType where
    writeTypeType :: Tp -> Tp -> FixpointSubstitution -> FixpointSubstitution
    writeTypeType atp utp original = 
       case (leftSpine atp,leftSpine utp) of        
-         ((TVar i,[]),_)                    -> writeIntType i utp original
-         ((TCon s,as),(TCon t,bs)) | s == t -> foldr (uncurry writeTypeType) original (zip as bs)                   
+         ((TVar i,[]),_) -> 
+            writeIntType i utp original
+         
+         ((TCon s,as),(TCon t,bs)) 
+            | s == t && not (isPhantomTypeSynonym synonyms s) -> 
+                 foldr (uncurry writeTypeType) original (zip as bs)                   
+         
          ((TCon _, _),_) -> 
             case expandTypeConstructorOneStep (snd synonyms) atp of
                Just atp' -> writeTypeType atp' utp original
                Nothing   -> internalError "Top.Solvers.GreedySubst" "writeTypeType" ("inconsistent types(1)" ++ show (atp, utp))      
-         _               -> internalError "Top.Solvers.GreedySubst" "writeTypeType" ("inconsistent types(2)" ++ show (atp, utp))  
+    
+         _ -> internalError "Top.Solvers.GreedySubst" "writeTypeType" ("inconsistent types(2)" ++ show (atp, utp))  
       
    writeIntType :: Int -> Tp -> FixpointSubstitution -> FixpointSubstitution     
    writeIntType i utp original@(FixpointSubstitution fm) = 
@@ -115,6 +121,6 @@ writeExpandedType synonyms = writeTypeType where
                                          case expandTypeConstructorOneStep (snd synonyms) utp of
                                            Just utp' -> 
                                               writeIntType i atp (FixpointSubstitution (M.insert i utp' fm))
-                                           Nothing -> 
+                                           Nothing ->
                                                internalError "Top.Solvers.GreedySubst" "writeIntType" ("inconsistent types(1)" ++ show (i, utp, atp))
                _                -> internalError "Top.Solvers.GreedySubst" "writeIntType" "inconsistent types(2)"
