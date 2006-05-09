@@ -107,6 +107,10 @@ toHeadNormalForm synonyms classes p
 ---------------------------------------------------------------------- 
 -- * Entailment
 
+bySuperclass' :: ClassEnvironment -> Predicate -> Predicates
+bySuperclass' classes p@(Predicate s tp) =
+   [ Predicate s' tp | s' <- superclasses s classes ]
+
 bySuperclass :: ClassEnvironment -> Predicate -> Predicates
 bySuperclass classes p@(Predicate s tp) =
    p : concat [ bySuperclass classes (Predicate s' tp) | s' <- superclasses s classes ]

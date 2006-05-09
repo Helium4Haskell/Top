@@ -23,6 +23,9 @@ import qualified Data.Map as M
 import Data.Maybe
 import Data.List (intersperse, (\\), partition)
 
+import Debug.Trace
+import Top.Implementation.PredGraph.Graph (constructGraph, constructGraphT, RuleEnv, Rule)
+
 ------------------------------------------------------------------------
 -- (I)  Algebraic data type
 
@@ -105,83 +108,130 @@ instance ( MonadState s m
              cs       = filter    p preds2
          modifyPredicateMap (\qm -> qm { globalQualifiers = bs, globalGeneralizedQs = as ++ globalGeneralizedQs qm })
          return (generalize monos (map fst (as ++ cs) .=>. tp))
-         
+
 
    -- improveQualifiersFinal -- use Default directives
-   
+
    simplifyQualifiers =
       do preds       <- proveQsSubst
          assumptions <- assumeQsSubst
          syns        <- select getTypeSynonyms
          classEnv    <- getClassEnvironment
          directives  <- gets typeClassDirectives
-         new         <- select (simplify syns classEnv directives preds)
-         let final = filter (not . entail syns classEnv (map fst assumptions) . fst) new
-         modifyPredicateMap (\qm -> qm { globalQualifiers = final })
- 
+         prds        <- select (resolve syns classEnv directives preds assumptions)
+        -- let final = filter (not . entail syns classEnv (map fst assumptions) . fst) new
+         modifyPredicateMap (\qm -> qm { globalQualifiers = prds })
+
    ambiguousQualifiers =
       do ps <- proveQsSubst
          select (ambiguous ps)
-         
-------------------------------------------------------------------------
--- (IV)  Helper-functions
 
-simplify :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
-               => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info -> [(Predicate, info)] -> m [(Predicate, info)]
-simplify syns classEnv directives psNew = 
+------------------------------------------------------------------------
+-- Resolving predicates with by constructing a graph, and choose a
+-- solution from the Graph.
+------------------------------------------------------------------------
+
+------------------------------------------------
+-- A datatype to embed a 'foreign' predicate in.
+------------------------------------------------
+data Pred p i = Pred (p, i)
+              | And [(p, i)]
+              | Assume (p, i)
+              | Prove  (p, i)
+
+instance Eq p => Eq (Pred p i) where
+  Pred (p, _)   == Pred (p', _)   = p == p'
+  And  ps       == And  ps'       = map fst ps == map fst ps'
+  Assume (p, _) == Assume (p', _) = p == p'
+  Prove  (p, _) == Prove  (p', _) = p == p'
+  _             == _              = False
+
+instance Ord p => Ord (Pred p i) where
+  Pred (p, _)   >= Pred (p', _)   = p >= p'
+  And  ps       >= And  ps'       = map fst ps >= map fst ps'
+  Assume (p, _) >= Assume (p', _) = p >= p'
+  Prove  (p, _) >= Prove  (p', _) = p >= p'
+  _             >= _              = False
+
+
+resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
+               => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info
+               -> [(Predicate, info)] -> [(Predicate, info)] -> m [(Predicate, info)]
+resolve syns classEnv directives prvPrds assPrds = return prvPrds
+  where prds = map Prove  prvPrds ++ map Assume assPrds
+
+class2rule :: OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv (Pred Predicate info) String
+class2rule _ _ (Prove (p, i))  = [(Prove (p, i) , Pred   (p, i), "prv")]
+class2rule _ _ (Assume (p, i)) = [(Pred   (p, i), Assume (p, i), "ass")]
+class2rule syns classEnv pred@(Pred (p, i)) = instRules ++ supRules
+ where supRules  = zip3 (map (\p -> Pred (p, i)) (bySuperclass' classEnv p)) (repeat pred) (repeat "sup")
+       instRules = case byInstance syns classEnv p of
+                    Nothing -> []
+                    (Just [nd]) -> [(pred, Pred (nd, i), "inst")]
+                    (Just nds)  -> (pred, And (map (\p -> (p, i)) nds), "inst") : zip3 (repeat (And (map (\p -> (p, i)) nds))) (map (\p -> Pred (p, i)) nds) (repeat "and")
+
+-----------------------------------------------------------------------------
+-- Function for transforming the THIH environment to a rules env.
+-----------------------------------------------------------------------------
+
+{--
+
+
+
    do let loopIn t@(p@(Predicate className _), info)
              | inHeadNormalForm p = return [t]
-             | otherwise =                         
+             | otherwise =
                   case byInstance syns classEnv p of
-                     Just ps -> 
+                     Just ps ->
                         loopInList [ (q, parentPredicate p info) | q <- ps ]
                      Nothing ->
                         let nevers  = [ (q, i) | NeverDirective q i <- directives, isJust (matchPredicates syns p q) ]
-                            newInfo = 
-                               case nevers of 
+                            newInfo =
+                               case nevers of
                                   tuple:_ -> neverDirective tuple info
                                   [] -> case [ i | CloseDirective s i <- directives, s == className ] of
                                            [i] -> closeDirective (className, i) info
                                            _   -> unresolvedPredicate p info
                         in addLabeledError unresolvedLabel newInfo >> return []
-                
-          loopInList ts = 
+
+          loopInList ts =
              do psList <- mapM loopIn ts
                 return (concat psList)
-                
+
           loopSc rs [] = rs
-          loopSc rs (x:xs) 
+          loopSc rs (x:xs)
              | scEntail classEnv (map fst (rs++xs)) (fst x)
                   = loopSc rs xs
-             | otherwise                    
+             | otherwise
                   = loopSc (x:rs) xs
-                
+
           testDisjoints [] = return []
           testDisjoints (t@(Predicate className tp, info):ts) =
-             let f t'@(Predicate className' tp', info') = 
+             let f t'@(Predicate className' tp', info') =
                     case [ i | tp == tp', DisjointDirective ss i <- directives, className `elem` ss, className' `elem` ss ] of
                        [] -> return ([t'], True)
                        infodir : _ ->
                           do addLabeledError disjointLabel (disjointDirective (className, info) (className', info') infodir)
                              return ([], False)
-                             
+
              in do result <- mapM f ts
                    let (list, bs) = unzip result
                    rest <- testDisjoints (concat list)
                    return $ if and bs then t : rest else rest
-                
+
       hnf <- loopInList psNew
       testDisjoints (loopSc [] hnf)
-      
-ambiguous :: (HasBasic m info, HasTI m info, TypeConstraintInfo info) 
+--}
+
+ambiguous :: (HasBasic m info, HasTI m info, TypeConstraintInfo info)
                 => [(Predicate, info)] -> m ()
 ambiguous listStart =
    do skolems <- getSkolems
       let skolemPairs = [ (is, info) | (is, info, _) <- skolems ]
-      
-          reportAmbiguous (p, info) = 
+
+          reportAmbiguous (p, info) =
              addLabeledError ambiguousLabel (ambiguousPredicate p info)
-             
+
           reportMissing pair info2 =
              addLabeledError missingInSignatureLabel (predicateArisingFrom pair info2)
           
