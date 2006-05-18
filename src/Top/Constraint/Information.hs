@@ -17,7 +17,7 @@ instance PolyTypeConstraintInfo ()
 instance TypeConstraintInfo String
 instance PolyTypeConstraintInfo String
 
-class Show info => TypeConstraintInfo info where
+class (Show info, Ord info) => TypeConstraintInfo info where
    equalityTypePair     :: (Tp, Tp)  -> info -> info
    ambiguousPredicate   :: Predicate -> info -> info
    unresolvedPredicate  :: Predicate -> info -> info

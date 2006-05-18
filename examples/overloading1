@@ -1,0 +1,13 @@
+Prove (Eq  v1) : #1
+Prove (Ord v2) : #2
+Prove (Num v3) : #3
+
+v1 == v2       : #4
+v1 == v3       : #5
+
+s0 := Generalize([], v1 -> (v2, v3)) : #6
+
+v4 := Instantiate (s0) : #7
+
+
+s1 := Generalize([], v4 -> v4) : #9

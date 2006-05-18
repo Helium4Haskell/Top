@@ -25,6 +25,8 @@ import Data.List (intersperse, (\\), partition)
 
 import Debug.Trace
 import Top.Implementation.PredGraph.Graph (constructGraph, constructGraphT, RuleEnv, Rule)
+import Data.Graph.Inductive.Graph(nodes,edges, outdeg, lab, Graph)
+import Data.Graph.Inductive.Graphviz(graphviz')
 
 ------------------------------------------------------------------------
 -- (I)  Algebraic data type
@@ -131,97 +133,47 @@ instance ( MonadState s m
 -- solution from the Graph.
 ------------------------------------------------------------------------
 
-------------------------------------------------
--- A datatype to embed a 'foreign' predicate in.
-------------------------------------------------
-data Pred p i = Pred (p, i)
-              | And [(p, i)]
-              | Assume (p, i)
-              | Prove  (p, i)
+data Pred a = Pred a
+            | And [a]
+            | Assume a
+            | Prove a
+            deriving (Eq, Ord, Show)
 
-instance Eq p => Eq (Pred p i) where
-  Pred (p, _)   == Pred (p', _)   = p == p'
-  And  ps       == And  ps'       = map fst ps == map fst ps'
-  Assume (p, _) == Assume (p', _) = p == p'
-  Prove  (p, _) == Prove  (p', _) = p == p'
-  _             == _              = False
+truePredicate = And []
 
-instance Ord p => Ord (Pred p i) where
-  Pred (p, _)   >= Pred (p', _)   = p >= p'
-  And  ps       >= And  ps'       = map fst ps >= map fst ps'
-  Assume (p, _) >= Assume (p', _) = p >= p'
-  Prove  (p, _) >= Prove  (p', _) = p >= p'
-  _             >= _              = False
+unPred (Pred p) = p
+unPred _        = error ""
 
+isAssumePredicate (Assume _) = True
+isAssumePredicate _          = False
 
-resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
-               => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info
-               -> [(Predicate, info)] -> [(Predicate, info)] -> m [(Predicate, info)]
-resolve syns classEnv directives prvPrds assPrds = return prvPrds
-  where prds = map Prove  prvPrds ++ map Assume assPrds
+-- resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
+--                => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info
+--                -> [(Predicate, info)] -> [(Predicate, info)] -> m [(Predicate, info)]
+resolve syns classEnv directives prvPrds assPrds = return  (remaining gr)
+  where prds     = map Prove  prvPrds ++ map Assume assPrds
+        ruleEnv  = class2rule syns classEnv
+        (gr, nm) = constructGraphT ruleEnv prds
 
-class2rule :: OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv (Pred Predicate info) String
-class2rule _ _ (Prove (p, i))  = [(Prove (p, i) , Pred   (p, i), "prv")]
-class2rule _ _ (Assume (p, i)) = [(Pred   (p, i), Assume (p, i), "ass")]
-class2rule syns classEnv pred@(Pred (p, i)) = instRules ++ supRules
- where supRules  = zip3 (map (\p -> Pred (p, i)) (bySuperclass' classEnv p)) (repeat pred) (repeat "sup")
-       instRules = case byInstance syns classEnv p of
-                    Nothing -> []
-                    (Just [nd]) -> [(pred, Pred (nd, i), "inst")]
-                    (Just nds)  -> (pred, And (map (\p -> (p, i)) nds), "inst") : zip3 (repeat (And (map (\p -> (p, i)) nds))) (map (\p -> Pred (p, i)) nds) (repeat "and")
+-- remaining :: Graph gr => gr Pred b -> [Pred]
+remaining tree
+  = map unPred . filter (\p -> p /= truePredicate && not (isAssumePredicate p)) $ preds
+  where nds = filter (\n -> (outdeg tree n) == 0) (nodes tree)
+        preds = map (fromJust . lab tree) nds
+   
 
------------------------------------------------------------------------------
--- Function for transforming the THIH environment to a rules env.
------------------------------------------------------------------------------
-
-{--
-
-
-
-   do let loopIn t@(p@(Predicate className _), info)
-             | inHeadNormalForm p = return [t]
-             | otherwise =
-                  case byInstance syns classEnv p of
-                     Just ps ->
-                        loopInList [ (q, parentPredicate p info) | q <- ps ]
-                     Nothing ->
-                        let nevers  = [ (q, i) | NeverDirective q i <- directives, isJust (matchPredicates syns p q) ]
-                            newInfo =
-                               case nevers of
-                                  tuple:_ -> neverDirective tuple info
-                                  [] -> case [ i | CloseDirective s i <- directives, s == className ] of
-                                           [i] -> closeDirective (className, i) info
-                                           _   -> unresolvedPredicate p info
-                        in addLabeledError unresolvedLabel newInfo >> return []
-
-          loopInList ts =
-             do psList <- mapM loopIn ts
-                return (concat psList)
-
-          loopSc rs [] = rs
-          loopSc rs (x:xs)
-             | scEntail classEnv (map fst (rs++xs)) (fst x)
-                  = loopSc rs xs
-             | otherwise
-                  = loopSc (x:rs) xs
-
-          testDisjoints [] = return []
-          testDisjoints (t@(Predicate className tp, info):ts) =
-             let f t'@(Predicate className' tp', info') =
-                    case [ i | tp == tp', DisjointDirective ss i <- directives, className `elem` ss, className' `elem` ss ] of
-                       [] -> return ([t'], True)
-                       infodir : _ ->
-                          do addLabeledError disjointLabel (disjointDirective (className, info) (className', info') infodir)
-                             return ([], False)
-
-             in do result <- mapM f ts
-                   let (list, bs) = unzip result
-                   rest <- testDisjoints (concat list)
-                   return $ if and bs then t : rest else rest
-
-      hnf <- loopInList psNew
-      testDisjoints (loopSc [] hnf)
---}
+class2rule :: OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv (Pred (Predicate, info)) String
+class2rule _ _ (Prove p)  = [(Prove p, Pred p, "prv")]
+class2rule _ _ (Assume p) = [(Pred  p, Assume p, "ass")]
+class2rule syns classEnv prd@(Pred (p, i)) = instRules ++ supRules
+ where superClasses = map (\p -> Pred (p, i)) (bySuperclass' classEnv p)
+       supRules     = zip3 superClasses (repeat prd) (repeat "sup")
+       instRules    = case byInstance syns classEnv p of
+                       Nothing -> []
+                       (Just [nd]) -> [(prd, Pred (nd, i), "inst")]
+                       (Just nds)  -> (prd, andClasses, "inst") : zip3 (repeat andClasses) instClasses (repeat "and")
+                                      where andClasses = And $ map (\p -> (p, i)) nds
+                                            instClasses = map (\p -> Pred (p, i)) nds
 
 ambiguous :: (HasBasic m info, HasTI m info, TypeConstraintInfo info)
                 => [(Predicate, info)] -> m ()
@@ -243,29 +195,6 @@ ambiguous listStart =
 
       mapM_ f listStart
 
-{-
-   -- try to use a defaulting directive before reporting an error message
-   tryToDefault (i, ts) =
-      do candidates <- 
-            let f (Predicate cn _) = 
-                   case [ (tps, info) | DefaultDirective s tps info <- directives, s == cn ] of 
-                      [(tps, info)] ->
-                         let op result tp = 
-                                do let sub = singleSubstitution i tp
-                                   let b = entailList syns classEnv [] [ sub |-> x | (x, _) <- ts ]
-                                   return $ if b then (tp, info) : result else result
-                         in foldM op [] (reverse tps)
-                      _ -> return []
-             in mapM (f . fst) ts
-                    
-         case [ x | x:_ <- candidates ] of
-            (tp, info) : rest | all (tp ==) (map fst rest) -> 
-               do solveConstraint ( TVar i .==. tp $ info )
-                  makeSubstConsistent -- ??
-                  return []
-                  
-            _ -> return ts -}
-      
 modifyPredicateMap :: MonadState (OverloadingState info) m => (PredicateMap info -> PredicateMap info) -> m ()
 modifyPredicateMap f = 
    modify (\s -> s { predicateMap = f (predicateMap s) })

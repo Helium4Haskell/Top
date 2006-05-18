@@ -24,7 +24,7 @@ import qualified Data.Map as M
 -- * Class predicates
 
 type Predicates = [Predicate]
-data Predicate  = Predicate String Tp deriving Eq
+data Predicate  = Predicate String Tp deriving (Eq, Ord)
 
 instance Show Predicate where
    show (Predicate s tp) = if priorityOfType tp == 2 

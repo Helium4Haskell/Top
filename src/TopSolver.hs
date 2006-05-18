@@ -41,7 +41,8 @@ logo = [ "__ __|"
 ---------------------------------------------------------------------
 -- * Top constraint information
 
-newtype TopInfo = TopInfo [(String, String)]
+newtype TopInfo = TopInfo [(String, String)] 
+                  deriving (Eq, Ord)
 
 instance Show TopInfo where 
    show (TopInfo xs)
