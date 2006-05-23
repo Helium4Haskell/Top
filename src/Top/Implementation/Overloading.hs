@@ -133,47 +133,47 @@ instance ( MonadState s m
 -- solution from the Graph.
 ------------------------------------------------------------------------
 
-data Pred a = Pred a
-            | And [a]
-            | Assume a
-            | Prove a
-            deriving (Eq, Ord, Show)
+data Pred info = Pred Predicate
+               | And [Predicate]
+               | Assume Predicate info  
+               | Prove Predicate info
+               deriving (Eq, Ord, Show)
 
 truePredicate = And []
 
 unPred (Pred p) = p
-unPred _        = error ""
+unPred _        = error "Only a (Pred p) can be unPred'ed"
 
-isAssumePredicate (Assume _) = True
-isAssumePredicate _          = False
+isAssumePredicate (Assume _ _) = True
+isAssumePredicate _            = False
 
 -- resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
 --                => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info
 --                -> [(Predicate, info)] -> [(Predicate, info)] -> m [(Predicate, info)]
 resolve syns classEnv directives prvPrds assPrds = return  (remaining gr)
-  where prds     = map Prove  prvPrds ++ map Assume assPrds
+  where prds     = map (uncurry Prove)  prvPrds ++ map (uncurry Assume) assPrds
         ruleEnv  = class2rule syns classEnv
         (gr, nm) = constructGraphT ruleEnv prds
 
 -- remaining :: Graph gr => gr Pred b -> [Pred]
 remaining tree
-  = map unPred . filter (\p -> p /= truePredicate && not (isAssumePredicate p)) $ preds
+  = map (flip (,) emptyInfo . unPred) . filter (\p -> p /= truePredicate && not (isAssumePredicate p)) $ preds
   where nds = filter (\n -> (outdeg tree n) == 0) (nodes tree)
         preds = map (fromJust . lab tree) nds
    
 
-class2rule :: OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv (Pred (Predicate, info)) String
-class2rule _ _ (Prove p)  = [(Prove p, Pred p, "prv")]
-class2rule _ _ (Assume p) = [(Pred  p, Assume p, "ass")]
-class2rule syns classEnv prd@(Pred (p, i)) = instRules ++ supRules
- where superClasses = map (\p -> Pred (p, i)) (bySuperclass' classEnv p)
-       supRules     = zip3 superClasses (repeat prd) (repeat "sup")
+class2rule :: OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv (Pred info) String
+class2rule _ _ c@(Prove  p _) = [(c, Pred p, "prv")]
+class2rule _ _ c@(Assume p _) = [(Pred p, c, "ass")]
+class2rule syns classEnv c@(Pred p) = instRules ++ supRules
+ where superClasses = map Pred (bySuperclass' classEnv p)
+       supRules     = zip3 superClasses (repeat c) (repeat "sup")
        instRules    = case byInstance syns classEnv p of
                        Nothing -> []
-                       (Just [nd]) -> [(prd, Pred (nd, i), "inst")]
-                       (Just nds)  -> (prd, andClasses, "inst") : zip3 (repeat andClasses) instClasses (repeat "and")
-                                      where andClasses = And $ map (\p -> (p, i)) nds
-                                            instClasses = map (\p -> Pred (p, i)) nds
+                       (Just [nd]) -> [(c, Pred nd, "inst")]
+                       (Just nds)  -> (c, andClasses, "inst") : zip3 (repeat andClasses) instClasses (repeat "and")
+                                      where andClasses = And nds
+                                            instClasses = map Pred nds
 
 ambiguous :: (HasBasic m info, HasTI m info, TypeConstraintInfo info)
                 => [(Predicate, info)] -> m ()

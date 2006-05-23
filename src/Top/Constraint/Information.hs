@@ -11,10 +11,10 @@ module Top.Constraint.Information where
 
 import Top.Types
 
-instance TypeConstraintInfo ()
+instance TypeConstraintInfo () where emptyInfo = ()
 instance PolyTypeConstraintInfo ()
 
-instance TypeConstraintInfo String
+instance TypeConstraintInfo String where emptyInfo = ""
 instance PolyTypeConstraintInfo String
 
 class (Show info, Ord info) => TypeConstraintInfo info where
@@ -27,6 +27,7 @@ class (Show info, Ord info) => TypeConstraintInfo info where
    neverDirective       :: (Predicate, info) -> info -> info
    closeDirective       :: (String, info)    -> info -> info
    disjointDirective    :: (String, info) -> (String, info) -> info -> info
+   emptyInfo            :: info
    
    -- default definitions
    equalityTypePair _     = id
