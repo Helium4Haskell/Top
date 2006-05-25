@@ -150,7 +150,7 @@ isAssumePredicate _            = False
 -- resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
 --                => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info
 --                -> [(Predicate, info)] -> [(Predicate, info)] -> m [(Predicate, info)]
-resolve syns classEnv directives prvPrds assPrds = return  (remaining gr)
+resolve syns classEnv directives prvPrds assPrds = return  (trace (graphviz' gr ++ "\n\n") (remaining gr)) 
   where prds     = map (uncurry Prove)  prvPrds ++ map (uncurry Assume) assPrds
         ruleEnv  = class2rule syns classEnv
         (gr, nm) = constructGraphT ruleEnv prds
@@ -174,6 +174,7 @@ class2rule syns classEnv c@(Pred p) = instRules ++ supRules
                        (Just nds)  -> (c, andClasses, "inst") : zip3 (repeat andClasses) instClasses (repeat "and")
                                       where andClasses = And nds
                                             instClasses = map Pred nds
+class2rule _ _ _ = []
 
 ambiguous :: (HasBasic m info, HasTI m info, TypeConstraintInfo info)
                 => [(Predicate, info)] -> m ()
