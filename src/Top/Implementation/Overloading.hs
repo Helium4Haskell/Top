@@ -111,7 +111,6 @@ instance ( MonadState s m
          modifyPredicateMap (\qm -> qm { globalQualifiers = bs, globalGeneralizedQs = as ++ globalGeneralizedQs qm })
          return (generalize monos (map fst (as ++ cs) .=>. tp))
 
-
    -- improveQualifiersFinal -- use Default directives
 
    simplifyQualifiers monos =
@@ -134,38 +133,49 @@ instance ( MonadState s m
 ------------------------------------------------------------------------
 
 
-data Pred info = Pred Predicate
-               | And [Predicate]
-               | Assume Predicate info  
-               | Prove Predicate info
-               deriving (Eq, Ord, Show)
+data Pred = Pred Predicate
+          | And [Predicate]
+          | Assume Predicate Int  
+          | Prove Predicate Int
+          deriving (Eq, Ord, Show)
 
-truePredicate = And []
+truePred :: Pred
+truePred = And []
 
+unPred :: Pred -> Predicate
 unPred (Pred p) = p
 unPred _        = error "Only a (Pred p) can be unPred'ed"
 
-isAssumePredicate (Assume _ _) = True
-isAssumePredicate _            = False
+isAssumePred :: Pred -> Bool
+isAssumePred (Assume _ _) = True
+isAssumePred _            = False
 
--- resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
---                => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info
---                -> [(Predicate, info)] -> [(Predicate, info)] -> m [(Predicate, info)]
-resolve syns classEnv directives prvPrds assPrds = return  (trace (show (map showId prvPrds)) (remaining gr)) 
-  where prds     = map (uncurry Prove)  prvPrds ++ map (uncurry Assume) assPrds
+provePred :: (TypeConstraintInfo info) => (Predicate, info) -> Pred
+provePred (pred, info) = Prove pred (justOrZero (overloadedIdentifier info))
+
+assumePred :: (TypeConstraintInfo info) => (Predicate, info) -> Pred
+assumePred (pred, info) = Assume pred (justOrZero (overloadedIdentifier info))
+
+justOrZero :: Maybe Int -> Int
+justOrZero (Just i) = i
+justOrZero Nothing  = 0
+
+resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
+               => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info
+               -> [(Predicate, info)] -> [(Predicate, info)] -> m [(Predicate, info)]
+resolve syns classEnv directives prvPrds assPrds = return  (trace (graphviz' gr) (remaining gr)) 
+  where prds     = map provePred  prvPrds ++ map assumePred assPrds
         ruleEnv  = class2rule syns classEnv
         (gr, nm) = constructGraphT ruleEnv prds
 
-showId (p, info) = show (overloadedIdentifier info) ++  " -++- " ++ show p
-
--- remaining :: Graph gr => gr Pred b -> [Pred]
+remaining :: Graph gr => gr Pred b -> [(Predicate, info)]
 remaining tree
-  = map (flip (,) emptyInfo . unPred) . filter (\p -> p /= truePredicate && not (isAssumePredicate p)) $ preds
+  = map (flip (,) (error "this info should not be used") . unPred) . filter (\p -> p /= truePred && not (isAssumePred p)) $ preds
   where nds = filter (\n -> (outdeg tree n) == 0) (nodes tree)
         preds = map (fromJust . lab tree) nds
    
 
-class2rule :: OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv (Pred info) String
+class2rule :: OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv Pred String
 class2rule _ _ c@(Prove  p _) = [(c, Pred p, "prv")]
 class2rule _ _ c@(Assume p _) = [(Pred p, c, "ass")]
 class2rule syns classEnv c@(Pred p) = instRules ++ supRules
