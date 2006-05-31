@@ -114,15 +114,15 @@ instance ( MonadState s m
 
    -- improveQualifiersFinal -- use Default directives
 
-   simplifyQualifiers =
+   simplifyQualifiers monos =
       do preds       <- proveQsSubst
          assumptions <- assumeQsSubst
          syns        <- select getTypeSynonyms
          classEnv    <- getClassEnvironment
          directives  <- gets typeClassDirectives
-         prds        <- select (resolve syns classEnv directives preds assumptions)
-        -- let final = filter (not . entail syns classEnv (map fst assumptions) . fst) new
-         modifyPredicateMap (\qm -> qm { globalQualifiers = prds })
+         let (fr, nfr) = partition (freePredicate monos) preds
+         prds        <- select (resolve syns classEnv directives fr assumptions)
+         modifyPredicateMap (\qm -> qm { globalQualifiers = prds ++ nfr }) 
 
    ambiguousQualifiers =
       do ps <- proveQsSubst
@@ -132,6 +132,7 @@ instance ( MonadState s m
 -- Resolving predicates with by constructing a graph, and choose a
 -- solution from the Graph.
 ------------------------------------------------------------------------
+
 
 data Pred info = Pred Predicate
                | And [Predicate]
@@ -150,10 +151,12 @@ isAssumePredicate _            = False
 -- resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
 --                => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info
 --                -> [(Predicate, info)] -> [(Predicate, info)] -> m [(Predicate, info)]
-resolve syns classEnv directives prvPrds assPrds = return  (trace (graphviz' gr ++ "\n\n") (remaining gr)) 
+resolve syns classEnv directives prvPrds assPrds = return  (trace (show (map showId prvPrds)) (remaining gr)) 
   where prds     = map (uncurry Prove)  prvPrds ++ map (uncurry Assume) assPrds
         ruleEnv  = class2rule syns classEnv
         (gr, nm) = constructGraphT ruleEnv prds
+
+showId (p, info) = show (overloadedIdentifier info) ++  " -++- " ++ show p
 
 -- remaining :: Graph gr => gr Pred b -> [Pred]
 remaining tree
@@ -212,6 +215,10 @@ substPredicate :: HasSubst m info => (Predicate, info) -> m (Predicate, info)
 substPredicate (p, info) = 
    do new <- applySubst p
       return (new, info)
+
+freePredicate :: Tps -> (Predicate, info) -> Bool
+freePredicate monos (Predicate _ tp, _) = not (elem tp monos)
+
 
 -- Type class directives
 type TypeClassDirectives info = [TypeClassDirective info]

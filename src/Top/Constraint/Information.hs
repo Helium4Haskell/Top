@@ -27,6 +27,8 @@ class (Show info, Ord info) => TypeConstraintInfo info where
    neverDirective       :: (Predicate, info) -> info -> info
    closeDirective       :: (String, info)    -> info -> info
    disjointDirective    :: (String, info) -> (String, info) -> info -> info
+   overloadedIdentifier :: info -> Maybe Int
+   -- GvdG::  TODO:: To be removed!!!!!
    emptyInfo            :: info
    
    -- default definitions
@@ -39,6 +41,7 @@ class (Show info, Ord info) => TypeConstraintInfo info where
    neverDirective _       = id
    closeDirective _       = id
    disjointDirective _ _  = id
+   overloadedIdentifier _ = Nothing
    
 class TypeConstraintInfo info => PolyTypeConstraintInfo info where
    instantiatedTypeScheme :: Forall (Qualification Predicates Tp) -> info -> info

@@ -39,7 +39,7 @@ class Monad m => HasQual m info | m -> info where
    improveQualifiers        :: Bool -> m [(info, Tp, Tp)]
    improveQualifiersNormal  :: m [(info, Tp, Tp)]
    improveQualifiersFinal   :: m [(info, Tp, Tp)]
-   simplifyQualifiers       :: m ()
+   simplifyQualifiers       :: Tps -> m ()
    ambiguousQualifiers      :: m ()
    
     -- class environment
@@ -59,7 +59,7 @@ class Monad m => HasQual m info | m -> info where
    improveQualifiersFinal =
       return []
    
-   simplifyQualifiers =
+   simplifyQualifiers _ =
       return ()
    
    ambiguousQualifiers =
@@ -82,11 +82,11 @@ instance ( Monad m
    generalizeWithQualifiers monos tp = 
       deQual (generalizeWithQualifiers monos tp)
       
-   improveQualifiers       = deQual . improveQualifiers
-   improveQualifiersNormal = deQual $ improveQualifiersNormal
-   improveQualifiersFinal  = deQual $ improveQualifiersFinal
-   simplifyQualifiers      = deQual $ simplifyQualifiers
-   ambiguousQualifiers     = deQual $ ambiguousQualifiers
+   improveQualifiers        = deQual . improveQualifiers
+   improveQualifiersNormal  = deQual $ improveQualifiersNormal
+   improveQualifiersFinal   = deQual $ improveQualifiersFinal
+   simplifyQualifiers monos = deQual $ simplifyQualifiers monos
+   ambiguousQualifiers      = deQual $ ambiguousQualifiers
    
    setClassEnvironment      = deQual . setClassEnvironment
    getClassEnvironment      = deQual $ getClassEnvironment
@@ -100,16 +100,17 @@ proveQualifiers info = mapM_ (proveQualifier info)
 assumeQualifiers :: HasQual m info => info -> Predicates -> m ()
 assumeQualifiers info = mapM_ (assumeQualifier info)
 
-contextReduction :: (HasSubst m info, HasQual m info) => m ()
-contextReduction = 
+contextReduction :: (HasSubst m info, HasQual m info) => Tps -> m ()
+contextReduction monos = 
    do makeSubstConsistent 
+      monos'   <- applySubst monos
       changeQualifiers applySubst
       improveQualifiersFix True
-      simplifyQualifiers
+      simplifyQualifiers monos'
       
 ambiguities :: (HasSubst m info, HasQual m info) => m ()
 ambiguities = 
-   do contextReduction
+   do contextReduction []
       improveQualifiersFix False
       ambiguousQualifiers
       

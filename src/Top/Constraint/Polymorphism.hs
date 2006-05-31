@@ -80,7 +80,7 @@ instance ( HasBasic m info
 
          Generalize var (m, tp) _ ->
             do -- makeConsistent -- done by contextReduction
-               contextReduction
+               contextReduction m
                m'     <- applySubst m
                tp'    <- applySubst tp
                changeQualifiers applySubst
