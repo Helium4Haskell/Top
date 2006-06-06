@@ -42,7 +42,7 @@ onlySolveConstraints ::
    , HasBasic m info
    , HasSubst m info
    , HasQual m info
-   , TypeConstraintInfo info
+   , TypeConstraintInfo info id
    , Solvable constraint m
    , MonadState s m
    , SolveState s
@@ -64,7 +64,7 @@ solveConstraints ::
    , HasBasic m info
    , HasSubst m info
    , HasQual m info
-   , TypeConstraintInfo info
+   , TypeConstraintInfo info id
    , Solvable constraint m
    , MonadState s m
    , SolveState s
@@ -84,7 +84,7 @@ solveResult ::
    , HasTI m info
    , HasSubst m info
    , HasQual m info
-   , TypeConstraintInfo info
+   , TypeConstraintInfo info id
    ) => 
      m (SolveResult info)            
 solveResult = 

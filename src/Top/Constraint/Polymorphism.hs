@@ -72,7 +72,7 @@ instance ( HasBasic m info
          , HasTI m info
          , HasSubst m info
          , HasQual m info
-         , PolyTypeConstraintInfo info
+         , PolyTypeConstraintInfo info id
          ) => 
            Solvable (PolymorphismConstraint info) m where
    solveConstraint constraint =

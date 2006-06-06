@@ -68,7 +68,7 @@ instance Embedded ClassQual (Simple (OverloadingState info) x m) (OverloadingSta
 instance ( MonadState s m
          , HasBasic m info
          , HasTI    m info
-         , TypeConstraintInfo info
+         , TypeConstraintInfo info id
          , Embedded ClassQual s (OverloadingState info)
          ) =>
            HasQual (Select (OverloadingState info) m) info where
@@ -133,49 +133,50 @@ instance ( MonadState s m
 ------------------------------------------------------------------------
 
 
-data Pred = Pred Predicate
+data Pred a = Pred Predicate
           | And [Predicate]
-          | Assume Predicate Int  
-          | Prove Predicate Int
+          | Assume Predicate a  
+          | Prove Predicate a
           deriving (Eq, Ord, Show)
 
-truePred :: Pred
+truePred :: Pred a
 truePred = And []
 
-unPred :: Pred -> Predicate
+unPred :: Pred a -> Predicate
 unPred (Pred p) = p
 unPred _        = error "Only a (Pred p) can be unPred'ed"
 
-isAssumePred :: Pred -> Bool
+isAssumePred :: Pred a -> Bool
 isAssumePred (Assume _ _) = True
 isAssumePred _            = False
 
-provePred :: (TypeConstraintInfo info) => (Predicate, info) -> Pred
-provePred (pred, info) = Prove pred (justOrZero (overloadedIdentifier info))
+provePred :: (TypeConstraintInfo info id) => (Predicate, info) -> Pred id
+provePred (pred, info) = Prove pred (fromJust (overloadedIdentifier info))
 
-assumePred :: (TypeConstraintInfo info) => (Predicate, info) -> Pred
-assumePred (pred, info) = Assume pred (justOrZero (overloadedIdentifier info))
+assumePred :: (TypeConstraintInfo info id) => (Predicate, info) -> Pred id
+assumePred (pred, info) = Assume pred (fromJust (overloadedIdentifier info))
 
-justOrZero :: Maybe Int -> Int
-justOrZero (Just i) = i
-justOrZero Nothing  = 0
+-- justOrZero :: Maybe a -> Int
+-- justOrZero (Just i) = i
+-- justOrZero Nothing  = error "sdfsdf sdf sdf" 
 
-resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
+resolve :: (HasTI m info, TypeConstraintInfo info id, HasBasic m info)
                => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info
                -> [(Predicate, info)] -> [(Predicate, info)] -> m [(Predicate, info)]
-resolve syns classEnv directives prvPrds assPrds = return  (trace (graphviz' gr) (remaining gr)) 
+-- resolve syns classEnv directives prvPrds assPrds = return  (trace (graphviz' gr) (remaining gr)) 
+resolve syns classEnv directives prvPrds assPrds = return (remaining gr)
   where prds     = map provePred  prvPrds ++ map assumePred assPrds
         ruleEnv  = class2rule syns classEnv
         (gr, nm) = constructGraphT ruleEnv prds
 
-remaining :: Graph gr => gr Pred b -> [(Predicate, info)]
+remaining :: (Graph gr, Ord id) => gr (Pred id) b -> [(Predicate, info)]
 remaining tree
   = map (flip (,) (error "this info should not be used") . unPred) . filter (\p -> p /= truePred && not (isAssumePred p)) $ preds
   where nds = filter (\n -> (outdeg tree n) == 0) (nodes tree)
         preds = map (fromJust . lab tree) nds
    
 
-class2rule :: OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv Pred String
+class2rule :: Ord id => OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv (Pred id) String
 class2rule _ _ c@(Prove  p _) = [(c, Pred p, "prv")]
 class2rule _ _ c@(Assume p _) = [(Pred p, c, "ass")]
 class2rule syns classEnv c@(Pred p) = instRules ++ supRules
@@ -189,7 +190,7 @@ class2rule syns classEnv c@(Pred p) = instRules ++ supRules
                                             instClasses = map Pred nds
 class2rule _ _ _ = []
 
-ambiguous :: (HasBasic m info, HasTI m info, TypeConstraintInfo info)
+ambiguous :: (HasBasic m info, HasTI m info, TypeConstraintInfo info id)
                 => [(Predicate, info)] -> m ()
 ambiguous listStart =
    do skolems <- getSkolems

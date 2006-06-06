@@ -36,7 +36,7 @@ instance Substitutable (EqualityConstraint info) where
    sub |-> (Equality t1 t2 info) = Equality (sub |-> t1) (sub |-> t2) info
    ftv (Equality t1 t2 _)        = ftv t1 `union` ftv t2
    
-instance ( TypeConstraintInfo info
+instance ( TypeConstraintInfo info id
          , HasSubst m info
          , HasTI m info
          ) => 

@@ -32,20 +32,20 @@ type TGS info = And ( Fix (BasicState info) )
                               )
                         )
 
-solveTypeGraph :: (Solvable constraint (TG info), TypeConstraintInfo info) 
+solveTypeGraph :: (Solvable constraint (TG info), TypeConstraintInfo info id) 
                      => TG info () -> SolveOptions -> [constraint] -> TG info (SolveResult info)
 solveTypeGraph m options cs =
    do initialize cs options >> m
       onlySolveConstraints cs
       solveResult
 
-typegraphConstraintSolver :: (TypeConstraintInfo info, Solvable constraint (TG info)) 
+typegraphConstraintSolver :: (TypeConstraintInfo info id, Solvable constraint (TG info)) 
                                 => PathHeuristics info -> ConstraintSolver constraint info
 typegraphConstraintSolver hs = 
    let setHeuristics = deselect (modify (\tgs -> tgs { heuristics = hs }))
    in makeConstraintSolver (solveTypeGraph setHeuristics)
 
-typegraphConstraintSolverDefault :: (TypeConstraintInfo info, Solvable constraint (TG info)) 
+typegraphConstraintSolverDefault :: (TypeConstraintInfo info id, Solvable constraint (TG info)) 
                                        => ConstraintSolver constraint info
 typegraphConstraintSolverDefault = 
    makeConstraintSolver (solveTypeGraph (return ()))
