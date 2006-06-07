@@ -183,7 +183,7 @@ getSkolemSubstitution =
 makeConsistent :: (HasTI m info, HasBasic m info, HasSubst m info) => m ()
 makeConsistent = makeSubstConsistent -- >> checkSkolems
 
-checkSkolems :: (HasTI m info, HasSubst m info, HasBasic m info, TypeConstraintInfo info id) => m ()
+checkSkolems :: (HasTI m info, HasSubst m info, HasBasic m info, TypeConstraintInfo info) => m ()
 checkSkolems = 
    do xs    <- getSkolems
       list1 <- let f (is, info, monos) = 

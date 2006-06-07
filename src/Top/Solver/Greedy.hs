@@ -30,11 +30,11 @@ type GreedyS info = And ( Fix (BasicState info) )
                               )
                         )
 
-solveGreedy :: (Solvable constraint (Greedy info), TypeConstraintInfo info id) =>
+solveGreedy :: (Solvable constraint (Greedy info), TypeConstraintInfo info) =>
                SolveOptions -> [constraint] -> Greedy info (SolveResult info)
 solveGreedy = solveConstraints
 
-greedyConstraintSolver :: (TypeConstraintInfo info id, Solvable constraint (Greedy info)) => ConstraintSolver constraint info
+greedyConstraintSolver :: (TypeConstraintInfo info, Solvable constraint (Greedy info)) => ConstraintSolver constraint info
 greedyConstraintSolver = makeConstraintSolver solveGreedy
 
 --------------------------------
@@ -47,11 +47,11 @@ type GreedySimpleS info = And ( Fix (BasicState info) )
                                     )
                               )
 
-solveSimple :: (Solvable constraint (GreedySimple info), TypeConstraintInfo info id) =>
+solveSimple :: (Solvable constraint (GreedySimple info), TypeConstraintInfo info) =>
                SolveOptions -> [constraint] -> GreedySimple info (SolveResult info)
 solveSimple = solveConstraints
 
-greedySimpleConstraintSolver :: (TypeConstraintInfo info id, Solvable constraint (GreedySimple info)) => ConstraintSolver constraint info
+greedySimpleConstraintSolver :: (TypeConstraintInfo info, Solvable constraint (GreedySimple info)) => ConstraintSolver constraint info
 greedySimpleConstraintSolver = makeConstraintSolver solveSimple
 
 --------------------------------

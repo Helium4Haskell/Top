@@ -34,7 +34,7 @@ class Monad m => HasQual m info | m -> info where
    changeQualifiers         :: (Predicate -> m Predicate) -> m ()
    
    allQualifiers            :: m [Predicate]
-   generalizeWithQualifiers :: Tps -> Tp -> m (Scheme [Predicate])
+   generalizeWithQualifiers :: Tps -> Tp -> info -> m (Scheme [Predicate])
    
    improveQualifiers        :: Bool -> m [(info, Tp, Tp)]
    improveQualifiersNormal  :: m [(info, Tp, Tp)]
@@ -47,8 +47,8 @@ class Monad m => HasQual m info | m -> info where
    getClassEnvironment :: m ClassEnvironment
    
    -- default definitions   
-   generalizeWithQualifiers monos = 
-      return . generalize monos . ([] .=>.)
+   generalizeWithQualifiers monos tp _ = 
+      return . generalize monos . ([] .=>.) $ tp
          
    improveQualifiers normal =
       if normal then improveQualifiersNormal else improveQualifiersFinal
@@ -79,8 +79,8 @@ instance ( Monad m
    changeQualifiers f       = deQual (changeQualifiers (select . f))
    
    allQualifiers = deQual $ allQualifiers
-   generalizeWithQualifiers monos tp = 
-      deQual (generalizeWithQualifiers monos tp)
+   generalizeWithQualifiers monos tp info = 
+      deQual (generalizeWithQualifiers monos tp info)
       
    improveQualifiers        = deQual . improveQualifiers
    improveQualifiersNormal  = deQual $ improveQualifiersNormal

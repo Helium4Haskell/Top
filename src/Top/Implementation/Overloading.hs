@@ -7,7 +7,7 @@
 --   Portability  :  non-portable (requires extensions)
 -----------------------------------------------------------------------------
 
-module Top.Implementation.Overloading where
+module Top.Implementation.Overloading  where
 
 import Top.Types hiding (contextReduction)
 import qualified Top.Types (contextReduction)
@@ -21,20 +21,22 @@ import Top.Monad.Select
 import Top.Util.Embedding
 import qualified Data.Map as M
 import Data.Maybe
-import Data.List (intersperse, (\\), partition)
+import Data.List (intersperse, (\\), partition, find)
 
 import Debug.Trace
 import Top.Implementation.PredGraph.Graph (constructGraph, constructGraphT, RuleEnv, Rule)
-import Data.Graph.Inductive.Graph(nodes,edges, outdeg, lab, Graph)
+import Data.Graph.Inductive.Graph(nodes,edges, out, outdeg, lab, Graph)
+import Data.Graph.Inductive.NodeMap(mkNode_, NodeMap)
 import Data.Graph.Inductive.Graphviz(graphviz')
 
 ------------------------------------------------------------------------
 -- (I)  Algebraic data type
 
 data OverloadingState info = OverloadingState 
-   { classEnvironment    :: ClassEnvironment            -- ^ All known type classes and instances
-   , predicateMap        :: PredicateMap info           -- ^ Type class assertions
-   , typeClassDirectives :: TypeClassDirectives info    -- ^ Directives for type class assertions
+   { classEnvironment      :: ClassEnvironment            -- ^ All known type classes and instances
+   , predicateMap          :: PredicateMap info           -- ^ Type class assertions
+   , typeClassDirectives   :: TypeClassDirectives info    -- ^ Directives for type class assertions
+   , dictionaryEnvironment :: DictionaryEnvironment       -- ^ Dictionaries for constructing evidence
    }
    
 ------------------------------------------------------------------------
@@ -42,15 +44,17 @@ data OverloadingState info = OverloadingState
 
 instance Empty (OverloadingState info) where
    empty = OverloadingState 
-      { classEnvironment    = emptyClassEnvironment
-      , predicateMap        = empty
-      , typeClassDirectives = []
+      { classEnvironment      = emptyClassEnvironment
+      , predicateMap          = empty
+      , typeClassDirectives   = []
+      , dictionaryEnvironment = emptyDictionaryEnvironment
       }
 
 instance Show (OverloadingState info) where
    show s = unlines [ "class environment: " ++ concat (intersperse "," (M.keys (classEnvironment s)))
                     , "directives: " ++ show (typeClassDirectives s)
                     , "predicates: " ++ show (predicateMap s)
+                    , "dict. environment: " ++ show (dictionaryEnvironment s)
                     ] 
 
 instance Show info => SolveState (OverloadingState info) where 
@@ -68,7 +72,7 @@ instance Embedded ClassQual (Simple (OverloadingState info) x m) (OverloadingSta
 instance ( MonadState s m
          , HasBasic m info
          , HasTI    m info
-         , TypeConstraintInfo info id
+         , TypeConstraintInfo info 
          , Embedded ClassQual s (OverloadingState info)
          ) =>
            HasQual (Select (OverloadingState info) m) info where
@@ -101,7 +105,7 @@ instance ( MonadState s m
          let ps = globalQualifiers qmap ++ globalGeneralizedQs qmap ++ globalAssumptions qmap
          return (fst (Top.Types.contextReduction syns classEnv (map fst ps)))
          
-   generalizeWithQualifiers monos tp =
+   generalizeWithQualifiers monos tp info =
       do preds1 <- proveQsSubst
          preds2 <- generalizedQsSubst
          let is       = ftv tp \\ ftv monos
@@ -120,8 +124,9 @@ instance ( MonadState s m
          classEnv    <- getClassEnvironment
          directives  <- gets typeClassDirectives
          let (fr, nfr) = partition (freePredicate monos) preds
-         prds        <- select (resolve syns classEnv directives fr assumptions)
+         (prds, varMap) <- select (resolve syns classEnv directives fr assumptions)
          modifyPredicateMap (\qm -> qm { globalQualifiers = prds ++ nfr }) 
+         modifyVarMap (\vm -> M.unionWith (++) vm varMap)
 
    ambiguousQualifiers =
       do ps <- proveQsSubst
@@ -132,51 +137,92 @@ instance ( MonadState s m
 -- solution from the Graph.
 ------------------------------------------------------------------------
 
+data DictionaryEnvironment = 
+     DEnv { declMap :: M.Map (Int, Int) Predicates
+          , varMap  :: M.Map (Int, Int) [DictionaryTree]
+          }
 
-data Pred a = Pred Predicate
-          | And [Predicate]
-          | Assume Predicate a  
-          | Prove Predicate a
-          deriving (Eq, Ord, Show)
+instance Show DictionaryEnvironment where
+   show denv = 
+      "{ declMap = " ++ show (M.assocs $ declMap denv) ++
+      ", varMap = "  ++ show (M.assocs $ varMap denv) ++ "}"
+       
+emptyDictionaryEnvironment :: DictionaryEnvironment
+emptyDictionaryEnvironment = 
+   DEnv { declMap = M.empty, varMap = M.empty }
 
-truePred :: Pred a
+data DictionaryTree = ByPredicate Predicate
+                    | ByInstance String {- class name -} String {- instance name -} [DictionaryTree]
+                    | BySuperClass String {- sub -} String {- super -} DictionaryTree
+   deriving Show
+
+data Pred   = Pred Predicate
+            | And [Predicate]
+            | Assume Predicate (Int, Int)
+            | Prove Predicate (Int, Int)
+            deriving (Eq, Ord, Show)
+
+truePred :: Pred
 truePred = And []
 
-unPred :: Pred a -> Predicate
+unPred :: Pred -> Predicate
 unPred (Pred p) = p
 unPred _        = error "Only a (Pred p) can be unPred'ed"
 
-isAssumePred :: Pred a -> Bool
+isAssumePred :: Pred -> Bool
 isAssumePred (Assume _ _) = True
 isAssumePred _            = False
 
-provePred :: (TypeConstraintInfo info id) => (Predicate, info) -> Pred id
+provePred :: (TypeConstraintInfo info) => (Predicate, info) -> Pred 
 provePred (pred, info) = Prove pred (fromJust (overloadedIdentifier info))
 
-assumePred :: (TypeConstraintInfo info id) => (Predicate, info) -> Pred id
+assumePred :: (TypeConstraintInfo info) => (Predicate, info) -> Pred
 assumePred (pred, info) = Assume pred (fromJust (overloadedIdentifier info))
 
--- justOrZero :: Maybe a -> Int
--- justOrZero (Just i) = i
--- justOrZero Nothing  = error "sdfsdf sdf sdf" 
-
-resolve :: (HasTI m info, TypeConstraintInfo info id, HasBasic m info)
+resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
                => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info
-               -> [(Predicate, info)] -> [(Predicate, info)] -> m [(Predicate, info)]
--- resolve syns classEnv directives prvPrds assPrds = return  (trace (graphviz' gr) (remaining gr)) 
-resolve syns classEnv directives prvPrds assPrds = return (remaining gr)
-  where prds     = map provePred  prvPrds ++ map assumePred assPrds
+               -> [(Predicate, info)] -> [(Predicate, info)] -> m ([(Predicate, info)], M.Map (Int, Int) [DictionaryTree])
+resolve syns classEnv directives prv ass = return (remaining gr, M.fromListWith (++) dTrees)
+  where prvPrds  = map provePred  prv 
+        assPrds  = map assumePred ass
         ruleEnv  = class2rule syns classEnv
-        (gr, nm) = constructGraphT ruleEnv prds
+        (gr, nm) = constructGraphT ruleEnv (prvPrds ++ assPrds)
+        dTrees   = map (constructDictTree (gr, nm)) prvPrds
 
-remaining :: (Graph gr, Ord id) => gr (Pred id) b -> [(Predicate, info)]
+remaining :: Graph gr => gr Pred b -> [(Predicate, info)]
 remaining tree
   = map (flip (,) (error "this info should not be used") . unPred) . filter (\p -> p /= truePred && not (isAssumePred p)) $ preds
   where nds = filter (\n -> (outdeg tree n) == 0) (nodes tree)
         preds = map (fromJust . lab tree) nds
+
+constructDictTree :: Graph gr => (gr Pred String, NodeMap Pred) -> Pred -> ((Int, Int), [DictionaryTree])
+constructDictTree (gr, nm) (Prove pred i) = (i, [edge nd (unPred p)])
+  where (nd, p) = mkNode_ nm (Pred pred)
+        edge nd pred = let edges = out gr nd 
+                       in case selectEdge edges of 
+                               Just (fnd, tnd, "inst") -> byInst  pred tnd
+                               Just (fnd, tnd, "sup")  -> bySuper pred tnd
+                               Just (fnd, tnd, "ass")  -> ByPredicate pred 
+                               Nothing                 -> ByPredicate pred 
+
+        bySuper (Predicate sub _) to = let  p@(Predicate sup _) = unPred . fromJust $ lab gr to
+                                       in BySuperClass sub sup (edge to p)
+
+        byInst p@(Predicate nm tp) to = case fromJust (lab gr to) of
+                                          And []    -> ByPredicate p
+                                          And preds -> ByInstance nm (show tp)  (map (\(_, nd, _) -> edge nd (unPred . fromJust $ lab gr nd) ) (out gr to))
+                                          Pred pred -> ByInstance nm (show tp)  [(edge to pred)]
+
+        selectEdge edges = listToMaybe . catMaybes $
+                           [ find (\(_, _, s) -> s == "ass") edges
+                           , find (\(_, _, s) -> s == "inst") edges 
+                           , find (\(_, _, s) -> s == "sup") edges 
+                           ]
+
+constructDictTree _ _ = error "Dictionary trees can only be constructed for Proof predicates."
    
 
-class2rule :: Ord id => OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv (Pred id) String
+class2rule :: OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv Pred String
 class2rule _ _ c@(Prove  p _) = [(c, Pred p, "prv")]
 class2rule _ _ c@(Assume p _) = [(Pred p, c, "ass")]
 class2rule syns classEnv c@(Pred p) = instRules ++ supRules
@@ -190,7 +236,7 @@ class2rule syns classEnv c@(Pred p) = instRules ++ supRules
                                             instClasses = map Pred nds
 class2rule _ _ _ = []
 
-ambiguous :: (HasBasic m info, HasTI m info, TypeConstraintInfo info id)
+ambiguous :: (HasBasic m info, HasTI m info, TypeConstraintInfo info)
                 => [(Predicate, info)] -> m ()
 ambiguous listStart =
    do skolems <- getSkolems
@@ -213,6 +259,16 @@ ambiguous listStart =
 modifyPredicateMap :: MonadState (OverloadingState info) m => (PredicateMap info -> PredicateMap info) -> m ()
 modifyPredicateMap f = 
    modify (\s -> s { predicateMap = f (predicateMap s) })
+
+modifyDeclMap :: MonadState (OverloadingState info) m => (M.Map (Int, Int) Predicates -> M.Map (Int, Int) Predicates) -> m ()
+modifyDeclMap f = modifyDictionaryEnvironment (\s -> s { declMap = f (declMap s) }) 
+
+modifyVarMap :: MonadState (OverloadingState info) m => (M.Map (Int, Int) [DictionaryTree] -> M.Map (Int, Int) [DictionaryTree]) -> m ()
+modifyVarMap f = modifyDictionaryEnvironment (\s -> s { varMap = f (varMap s) })
+
+modifyDictionaryEnvironment :: MonadState (OverloadingState info) m => (DictionaryEnvironment -> DictionaryEnvironment) -> m ()
+modifyDictionaryEnvironment f = 
+   modify (\s -> s { dictionaryEnvironment = f (dictionaryEnvironment s) })
 
 proveQsSubst, assumeQsSubst, generalizedQsSubst :: 
    (MonadState s m, Embedded ClassQual s (OverloadingState info) {-, MonadState s m, HasSubst m info -}) 

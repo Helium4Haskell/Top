@@ -51,7 +51,7 @@ instance Substitutable (ExtraConstraint info) where
          Assume p _                -> ftv p
 
 instance ( HasQual m info
-         , PolyTypeConstraintInfo info id
+         , PolyTypeConstraintInfo info
          ) => 
            Solvable (ExtraConstraint info) m 
    where

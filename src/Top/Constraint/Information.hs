@@ -11,13 +11,13 @@ module Top.Constraint.Information where
 
 import Top.Types
 
-instance TypeConstraintInfo () () where emptyInfo = ()
-instance PolyTypeConstraintInfo () ()
+instance TypeConstraintInfo ()
+instance PolyTypeConstraintInfo ()
 
-instance TypeConstraintInfo String String where emptyInfo = ""
-instance PolyTypeConstraintInfo String String
+instance TypeConstraintInfo String
+instance PolyTypeConstraintInfo String
 
-class (Show info, Ord info, Ord id) => TypeConstraintInfo info id | info -> id where
+class (Show info, Ord info) => TypeConstraintInfo info where
    equalityTypePair     :: (Tp, Tp)  -> info -> info
    ambiguousPredicate   :: Predicate -> info -> info
    unresolvedPredicate  :: Predicate -> info -> info
@@ -27,9 +27,7 @@ class (Show info, Ord info, Ord id) => TypeConstraintInfo info id | info -> id w
    neverDirective       :: (Predicate, info) -> info -> info
    closeDirective       :: (String, info)    -> info -> info
    disjointDirective    :: (String, info) -> (String, info) -> info -> info
-   overloadedIdentifier :: info -> Maybe id
-   -- GvdG::  TODO:: To be removed!!!!!
-   emptyInfo            :: info
+   overloadedIdentifier :: info -> Maybe (Int, Int)
    
    -- default definitions
    equalityTypePair _     = id
@@ -43,7 +41,7 @@ class (Show info, Ord info, Ord id) => TypeConstraintInfo info id | info -> id w
    disjointDirective _ _  = id
    overloadedIdentifier _ = Nothing
    
-class TypeConstraintInfo info id => PolyTypeConstraintInfo info id where
+class TypeConstraintInfo info => PolyTypeConstraintInfo info where
    instantiatedTypeScheme :: Forall (Qualification Predicates Tp) -> info -> info
    skolemizedTypeScheme   :: (Tps, Forall (Qualification Predicates Tp)) -> info -> info
 

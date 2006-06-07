@@ -72,19 +72,19 @@ instance ( HasBasic m info
          , HasTI m info
          , HasSubst m info
          , HasQual m info
-         , PolyTypeConstraintInfo info id
+         , PolyTypeConstraintInfo info
          ) => 
            Solvable (PolymorphismConstraint info) m where
    solveConstraint constraint =
       case constraint of
 
-         Generalize var (m, tp) _ ->
+         Generalize var (m, tp) info ->
             do -- makeConsistent -- done by contextReduction
                contextReduction m
                m'     <- applySubst m
                tp'    <- applySubst tp
                changeQualifiers applySubst
-               scheme <- generalizeWithQualifiers m' tp'
+               scheme <- generalizeWithQualifiers m' tp' info
                storeTypeScheme var scheme
                      
          Instantiate tp sigma info ->
