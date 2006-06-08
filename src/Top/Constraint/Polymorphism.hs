@@ -103,7 +103,7 @@ instance ( HasBasic m info
                let (ps, stp) = split qtp
                assumeQualifiers (equalityTypePair (tp, tp) newInfo) ps
                pushConstraint $ liftConstraint
-                  (tp .==. stp $ newInfo) 
+                  (tp .==. stp $ newInfo)                
                   
          Implicit t1 (monos, t2) info ->
             do sv <- getUnique

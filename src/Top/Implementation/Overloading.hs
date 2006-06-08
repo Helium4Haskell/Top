@@ -36,7 +36,7 @@ data OverloadingState info = OverloadingState
    { classEnvironment      :: ClassEnvironment            -- ^ All known type classes and instances
    , predicateMap          :: PredicateMap info           -- ^ Type class assertions
    , typeClassDirectives   :: TypeClassDirectives info    -- ^ Directives for type class assertions
-   , dictionaryEnvironment :: DictionaryEnvironment       -- ^ Dictionaries for constructing evidence
+   , dictionaryEnvironment :: DictionaryEnvironment2       -- ^ Dictionaries for constructing evidence
    }
    
 ------------------------------------------------------------------------
@@ -82,12 +82,16 @@ instance ( MonadState s m
       
    getClassEnvironment =
       gets classEnvironment
+
+   getDictionaryEnvironment =
+      gets dictionaryEnvironment
       
    proveQualifier info p =
       modifyPredicateMap (\qm -> qm { globalQualifiers = (p, info) : globalQualifiers qm })
 
    assumeQualifier info p =
-      modifyPredicateMap (\qm -> qm { globalAssumptions = (p, info) : globalAssumptions qm })
+      do modifyPredicateMap (\qm -> qm { globalAssumptions = (p, info) : globalAssumptions qm })
+         addDeclDictionaries info [p]
 
    changeQualifiers f =
       do let g = mapM (\(p, info) -> f p >>= \new -> return (new, info) )
@@ -112,8 +116,10 @@ instance ( MonadState s m
              p        = any (`elem` is) . ftv . fst
              (as, bs) = partition p preds1
              cs       = filter    p preds2
+             ps       = map fst (as ++ cs)
          modifyPredicateMap (\qm -> qm { globalQualifiers = bs, globalGeneralizedQs = as ++ globalGeneralizedQs qm })
-         return (generalize monos (map fst (as ++ cs) .=>. tp))
+         addDeclDictionaries info ps
+         return (generalize monos (ps .=>. tp))
 
    -- improveQualifiersFinal -- use Default directives
 
@@ -136,25 +142,6 @@ instance ( MonadState s m
 -- Resolving predicates with by constructing a graph, and choose a
 -- solution from the Graph.
 ------------------------------------------------------------------------
-
-data DictionaryEnvironment = 
-     DEnv { declMap :: M.Map (Int, Int) Predicates
-          , varMap  :: M.Map (Int, Int) [DictionaryTree]
-          }
-
-instance Show DictionaryEnvironment where
-   show denv = 
-      "{ declMap = " ++ show (M.assocs $ declMap denv) ++
-      ", varMap = "  ++ show (M.assocs $ varMap denv) ++ "}"
-       
-emptyDictionaryEnvironment :: DictionaryEnvironment
-emptyDictionaryEnvironment = 
-   DEnv { declMap = M.empty, varMap = M.empty }
-
-data DictionaryTree = ByPredicate Predicate
-                    | ByInstance String {- class name -} String {- instance name -} [DictionaryTree]
-                    | BySuperClass String {- sub -} String {- super -} DictionaryTree
-   deriving Show
 
 data Pred   = Pred Predicate
             | And [Predicate]
@@ -206,12 +193,13 @@ constructDictTree (gr, nm) (Prove pred i) = (i, [edge nd (unPred p)])
                                Nothing                 -> ByPredicate pred 
 
         bySuper (Predicate sub _) to = let  p@(Predicate sup _) = unPred . fromJust $ lab gr to
-                                       in BySuperClass sub sup (edge to p)
+                                       in BySuperClass sup sub (edge to p)
 
-        byInst p@(Predicate nm tp) to = case fromJust (lab gr to) of
-                                          And []    -> ByPredicate p
-                                          And preds -> ByInstance nm (show tp)  (map (\(_, nd, _) -> edge nd (unPred . fromJust $ lab gr nd) ) (out gr to))
-                                          Pred pred -> ByInstance nm (show tp)  [(edge to pred)]
+        byInst p@(Predicate nm tp) to = let (TCon instName, _) = leftSpine tp
+                                        in case fromJust (lab gr to) of
+                                               And []    -> ByPredicate p
+                                               And preds -> ByInstance nm instName (map (\(_, nd, _) -> edge nd (unPred . fromJust $ lab gr nd) ) (out gr to))
+                                               Pred pred -> ByInstance nm instName [(edge to pred)]
 
         selectEdge edges = listToMaybe . catMaybes $
                            [ find (\(_, _, s) -> s == "ass") edges
@@ -256,17 +244,23 @@ ambiguous listStart =
 
       mapM_ f listStart
 
-modifyPredicateMap :: MonadState (OverloadingState info) m => (PredicateMap info -> PredicateMap info) -> m ()
-modifyPredicateMap f = 
-   modify (\s -> s { predicateMap = f (predicateMap s) })
 
-modifyDeclMap :: MonadState (OverloadingState info) m => (M.Map (Int, Int) Predicates -> M.Map (Int, Int) Predicates) -> m ()
-modifyDeclMap f = modifyDictionaryEnvironment (\s -> s { declMap = f (declMap s) }) 
+
+addDeclDictionaries :: (MonadState (OverloadingState info) m, TypeConstraintInfo info) => info -> [Predicate] -> m ()
+addDeclDictionaries info ps = 
+  do let id = overloadedIdentifier info
+     if isJust id
+      then modifyDictionaryEnvironment (\s -> s { declMap = M.insertWith (++) (fromJust id) ps (declMap s) } )
+      else return ()
 
 modifyVarMap :: MonadState (OverloadingState info) m => (M.Map (Int, Int) [DictionaryTree] -> M.Map (Int, Int) [DictionaryTree]) -> m ()
 modifyVarMap f = modifyDictionaryEnvironment (\s -> s { varMap = f (varMap s) })
 
-modifyDictionaryEnvironment :: MonadState (OverloadingState info) m => (DictionaryEnvironment -> DictionaryEnvironment) -> m ()
+modifyPredicateMap :: MonadState (OverloadingState info) m => (PredicateMap info -> PredicateMap info) -> m ()
+modifyPredicateMap f = 
+   modify (\s -> s { predicateMap = f (predicateMap s) })
+
+modifyDictionaryEnvironment :: MonadState (OverloadingState info) m => (DictionaryEnvironment2 -> DictionaryEnvironment2) -> m ()
 modifyDictionaryEnvironment f = 
    modify (\s -> s { dictionaryEnvironment = f (dictionaryEnvironment s) })
 

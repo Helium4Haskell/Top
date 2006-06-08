@@ -66,6 +66,47 @@ insertInstance className inst env =
         Nothing -> M.insert className ([], [inst]) env
         Just (parents, insts) -> M.insert className (parents, inst:insts) env
 
+----------------------------------------------------------------------  
+-- * Dictionary environments and instances
+
+data DictionaryEnvironment2 = 
+     DEnv { declMap :: M.Map (Int, Int) Predicates
+          , varMap  :: M.Map (Int, Int) [DictionaryTree]
+          }
+
+instance Substitutable DictionaryEnvironment2 where
+   sub |->  de = DEnv { declMap = M.map  ((|->) sub) (declMap de)
+                      , varMap  = M.map   ((|->) sub) (varMap de) }
+   ftv _      =[]
+
+instance Show DictionaryEnvironment2 where
+   show denv = 
+      "{ declMap = " ++ show (M.assocs $ declMap denv) ++
+      ", varMap = "  ++ show (M.assocs $ varMap denv) ++ "}"
+       
+emptyDictionaryEnvironment :: DictionaryEnvironment2
+emptyDictionaryEnvironment = 
+   DEnv { declMap = M.empty, varMap = M.empty }
+
+combineDictEnvs :: DictionaryEnvironment2 -> DictionaryEnvironment2 -> DictionaryEnvironment2
+combineDictEnvs de1 de2 = DEnv { declMap = M.unionWith (++) (declMap de1) (declMap de2)
+                               , varMap  = M.unionWith (++) (varMap  de1) (varMap  de2)
+                               }
+
+instance Substitutable DictionaryTree where
+   sub |-> (ByPredicate p) = ByPredicate (sub |-> p)
+   sub |-> (ByInstance cName iName dt) = ByInstance cName iName (sub |-> dt)
+   sub |-> (BySuperClass pName cName dt) = BySuperClass pName cName (sub |-> dt)
+   ftv     (ByPredicate p) = ftv p
+   ftv     (ByInstance _ _ dt) = concatMap ftv dt
+   ftv     (BySuperClass _ _ dt) = ftv dt
+
+
+data DictionaryTree = ByPredicate Predicate
+                    | ByInstance String {- class name -} String {- instance name -} [DictionaryTree]
+                    | BySuperClass String {- sub -} String {- super -} DictionaryTree
+                    deriving Show
+
 ---------------------------------------------------------------------- 
 -- * Class environment
 

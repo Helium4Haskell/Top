@@ -18,6 +18,7 @@ import Top.Interface.TypeInference
 import Top.Interface.Substitution
 import Top.Interface.Qualification
 import Top.Implementation.General
+import Top.Implementation.Overloading ( dictionaryEnvironment  )
 import Top.Util.Option
 import Top.Monad.StateFix
 import Top.Constraint
@@ -93,7 +94,8 @@ solveResult =
       qs          <- allQualifiers
       sub         <- fixpointSubst
       ts          <- allTypeSchemes        
-      return (SolveResult uniqueAtEnd sub ts qs errs)
+      de          <- getDictionaryEnvironment
+      return (SolveResult uniqueAtEnd sub ts qs errs (sub |-> de)) -- This is a hack, to be removed
 
 ----------------------------------------------------------------------
 -- Solve type constraints
@@ -104,17 +106,18 @@ data SolveResult info =
                , typeschemesFromResult  :: M.Map Int (Scheme Predicates)
                , qualifiersFromResult   :: Predicates
                , errorsFromResult       :: [(info, ErrorLabel)]
+               , dictEnvironment        :: DictionaryEnvironment2
                }
 
 instance Empty (SolveResult info) where 
    empty = emptyResult 0
 
 emptyResult :: Int -> SolveResult info
-emptyResult unique = SolveResult unique emptyFPS M.empty empty []
+emptyResult unique = SolveResult unique emptyFPS M.empty empty [] emptyDictionaryEnvironment
 
 combineResults :: SolveResult info -> SolveResult info -> SolveResult info
-combineResults (SolveResult _ s1 ts1 qs1 er1) (SolveResult unique s2 ts2 qs2 er2) = 
-   SolveResult unique (disjointFPS s1 s2) (ts1 `M.union` ts2) (qs1 ++ qs2) (er1++er2)
+combineResults (SolveResult _ s1 ts1 qs1 er1 de1) (SolveResult unique s2 ts2 qs2 er2 de2) = 
+   SolveResult unique (disjointFPS s1 s2) (ts1 `M.union` ts2) (qs1 ++ qs2) (er1++er2) (combineDictEnvs de1 de2)
 
 --------------------------------------------------------------------------------  
 

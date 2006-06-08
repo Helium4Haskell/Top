@@ -45,6 +45,10 @@ class Monad m => HasQual m info | m -> info where
     -- class environment
    setClassEnvironment :: ClassEnvironment -> m ()
    getClassEnvironment :: m ClassEnvironment
+
+
+    -- class environment
+   getDictionaryEnvironment :: m DictionaryEnvironment2
    
    -- default definitions   
    generalizeWithQualifiers monos tp _ = 
@@ -90,6 +94,7 @@ instance ( Monad m
    
    setClassEnvironment      = deQual . setClassEnvironment
    getClassEnvironment      = deQual $ getClassEnvironment
+   getDictionaryEnvironment = deQual $ getDictionaryEnvironment
       
 ------------------------------------------------------------------------
 -- (IV)  Additional functions
