@@ -68,39 +68,36 @@ insertInstance className inst env =
 
 ----------------------------------------------------------------------  
 -- * Dictionary environments and instances
+-- 
+-- The type of the final Dictionary Environment in SolveResult
+data DictionaryEnvironment = 
+     DE { declMap :: M.Map (Int, Int) Predicates
+        , varMap  :: M.Map (Int, Int) [DictionaryTree]
+        }
 
+emptyDictionaryEnvironment :: DictionaryEnvironment
+emptyDictionaryEnvironment = 
+   DE { declMap = M.empty, varMap = M.empty }
+
+combineDictEnvs :: DictionaryEnvironment -> DictionaryEnvironment -> DictionaryEnvironment
+combineDictEnvs de1 de2 = DE { declMap = M.unionWith (++) (declMap de1) (declMap de2)
+                             , varMap  = M.unionWith (++) (varMap  de1) (varMap  de2)
+                             }
+
+--  The type of the Dictionary Environment while constructing it
 data DictionaryEnvironment2 = 
-     DEnv { declMap :: M.Map (Int, Int) Predicates
-          , varMap  :: M.Map (Int, Int) [DictionaryTree]
+     DEnv { decls :: [ ( (Int, Int), Predicates ) ]
+          , vars  :: [ ( (Int, Int), [DictionaryTree] ) ]
           }
 
-instance Substitutable DictionaryEnvironment2 where
-   sub |->  de = DEnv { declMap = M.map  ((|->) sub) (declMap de)
-                      , varMap  = M.map   ((|->) sub) (varMap de) }
-   ftv _      =[]
+emptyDictionaryEnvironment2 :: DictionaryEnvironment2
+emptyDictionaryEnvironment2 = 
+   DEnv { decls = [], vars = [] }
 
 instance Show DictionaryEnvironment2 where
    show denv = 
-      "{ declMap = " ++ show (M.assocs $ declMap denv) ++
-      ", varMap = "  ++ show (M.assocs $ varMap denv) ++ "}"
-       
-emptyDictionaryEnvironment :: DictionaryEnvironment2
-emptyDictionaryEnvironment = 
-   DEnv { declMap = M.empty, varMap = M.empty }
-
-combineDictEnvs :: DictionaryEnvironment2 -> DictionaryEnvironment2 -> DictionaryEnvironment2
-combineDictEnvs de1 de2 = DEnv { declMap = M.unionWith (++) (declMap de1) (declMap de2)
-                               , varMap  = M.unionWith (++) (varMap  de1) (varMap  de2)
-                               }
-
-instance Substitutable DictionaryTree where
-   sub |-> (ByPredicate p) = ByPredicate (sub |-> p)
-   sub |-> (ByInstance cName iName dt) = ByInstance cName iName (sub |-> dt)
-   sub |-> (BySuperClass pName cName dt) = BySuperClass pName cName (sub |-> dt)
-   ftv     (ByPredicate p) = ftv p
-   ftv     (ByInstance _ _ dt) = concatMap ftv dt
-   ftv     (BySuperClass _ _ dt) = ftv dt
-
+      "{ declMap = " ++ show (decls denv) ++
+      ", varMap = "  ++ show (vars denv) ++ "}"
 
 data DictionaryTree = ByPredicate Predicate
                     | ByInstance String {- class name -} String {- instance name -} [DictionaryTree]

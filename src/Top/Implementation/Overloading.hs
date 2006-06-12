@@ -47,7 +47,7 @@ instance Empty (OverloadingState info) where
       { classEnvironment      = emptyClassEnvironment
       , predicateMap          = empty
       , typeClassDirectives   = []
-      , dictionaryEnvironment = emptyDictionaryEnvironment
+      , dictionaryEnvironment = emptyDictionaryEnvironment2
       }
 
 instance Show (OverloadingState info) where
@@ -101,6 +101,10 @@ instance ( MonadState s m
          modifyPredicateMap (\qm -> qm { globalQualifiers    = as 
                                        , globalGeneralizedQs = bs
                                        , globalAssumptions   = cs })
+         ds <- gets (decls . dictionaryEnvironment) >>= mapM (applyMap f)
+         modifyDeclMap (const ds)
+         vs <- gets (vars . dictionaryEnvironment) >>= mapM (applyMap (applyDictionaryTree f))
+         modifyVarMap (const vs)
 
    allQualifiers = 
       do syns     <- select getTypeSynonyms
@@ -132,7 +136,7 @@ instance ( MonadState s m
          let (fr, nfr) = partition (freePredicate monos) preds
          (prds, varMap) <- select (resolve syns classEnv directives fr assumptions)
          modifyPredicateMap (\qm -> qm { globalQualifiers = prds ++ nfr }) 
-         modifyVarMap (\vm -> M.unionWith (++) vm varMap)
+         modifyVarMap (\vm -> vm ++ varMap)
 
    ambiguousQualifiers =
       do ps <- proveQsSubst
@@ -168,8 +172,8 @@ assumePred (pred, info) = Assume pred (fromJust (overloadedIdentifier info))
 
 resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
                => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info
-               -> [(Predicate, info)] -> [(Predicate, info)] -> m ([(Predicate, info)], M.Map (Int, Int) [DictionaryTree])
-resolve syns classEnv directives prv ass = return (remaining gr, M.fromListWith (++) dTrees)
+               -> [(Predicate, info)] -> [(Predicate, info)] -> m ([(Predicate, info)], [((Int, Int), [DictionaryTree])])
+resolve syns classEnv directives prv ass = return (remaining gr, dTrees)
   where prvPrds  = map provePred  prv 
         assPrds  = map assumePred ass
         ruleEnv  = class2rule syns classEnv
@@ -246,15 +250,36 @@ ambiguous listStart =
 
 
 
-addDeclDictionaries :: (MonadState (OverloadingState info) m, TypeConstraintInfo info) => info -> [Predicate] -> m ()
+addDeclDictionaries :: (MonadState (OverloadingState info) m, TypeConstraintInfo info) => info -> Predicates -> m ()
 addDeclDictionaries info ps = 
   do let id = overloadedIdentifier info
      if isJust id
-      then modifyDictionaryEnvironment (\s -> s { declMap = M.insertWith (++) (fromJust id) ps (declMap s) } )
+      then modifyDeclMap (\m -> (fromJust id, ps) : m )
       else return ()
 
-modifyVarMap :: MonadState (OverloadingState info) m => (M.Map (Int, Int) [DictionaryTree] -> M.Map (Int, Int) [DictionaryTree]) -> m ()
-modifyVarMap f = modifyDictionaryEnvironment (\s -> s { varMap = f (varMap s) })
+
+applyMap f (ix, ps) = 
+              do new <- mapM f ps 
+                 return (ix, new)
+
+applyDictionaryTree f (ByPredicate p) = 
+                            do pnew <- f p
+                               return (ByPredicate pnew)
+
+applyDictionaryTree f (ByInstance cName iname dTrees) =
+                            do new <- mapM (applyDictionaryTree f) dTrees
+                               return (ByInstance cName iname new)
+
+applyDictionaryTree f (BySuperClass subClass supClass dTree) =
+                            do new <- applyDictionaryTree f dTree
+                               return (BySuperClass subClass supClass new)
+                    
+
+modifyDeclMap :: MonadState (OverloadingState info) m => ([((Int, Int), Predicates)] -> [((Int, Int), Predicates)]) -> m ()
+modifyDeclMap f = modifyDictionaryEnvironment (\s -> s { decls = f (decls s) })
+
+modifyVarMap :: MonadState (OverloadingState info) m => ([((Int, Int), [DictionaryTree])] -> [((Int, Int), [DictionaryTree])]) -> m ()
+modifyVarMap f = modifyDictionaryEnvironment (\s -> s { vars = f (vars s) })
 
 modifyPredicateMap :: MonadState (OverloadingState info) m => (PredicateMap info -> PredicateMap info) -> m ()
 modifyPredicateMap f = 

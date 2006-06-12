@@ -95,7 +95,10 @@ solveResult =
       sub         <- fixpointSubst
       ts          <- allTypeSchemes        
       de          <- getDictionaryEnvironment
-      return (SolveResult uniqueAtEnd sub ts qs errs (sub |-> de)) -- This is a hack, to be removed
+      let fde     =  DE { declMap = M.fromListWith (++) (decls de) 
+                        , varMap  = M.fromListWith (++) (vars  de)
+                        }
+      return (SolveResult uniqueAtEnd sub ts qs errs fde) -- This is a hack, to be removed
 
 ----------------------------------------------------------------------
 -- Solve type constraints
@@ -106,7 +109,7 @@ data SolveResult info =
                , typeschemesFromResult  :: M.Map Int (Scheme Predicates)
                , qualifiersFromResult   :: Predicates
                , errorsFromResult       :: [(info, ErrorLabel)]
-               , dictEnvironment        :: DictionaryEnvironment2
+               , dictEnvironment        :: DictionaryEnvironment
                }
 
 instance Empty (SolveResult info) where 
