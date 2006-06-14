@@ -28,6 +28,7 @@ class (Show info, Ord info) => TypeConstraintInfo info where
    closeDirective       :: (String, info)    -> info -> info
    disjointDirective    :: (String, info) -> (String, info) -> info -> info
    overloadedIdentifier :: info -> Maybe (Int, Int)
+   implicitMono         :: info -> Maybe (String, (Int, Int))
    
    -- default definitions
    equalityTypePair _     = id
@@ -40,6 +41,7 @@ class (Show info, Ord info) => TypeConstraintInfo info where
    closeDirective _       = id
    disjointDirective _ _  = id
    overloadedIdentifier _ = Nothing
+   implicitMono         _ = Nothing
    
 class TypeConstraintInfo info => PolyTypeConstraintInfo info where
    instantiatedTypeScheme :: Forall (Qualification Predicates Tp) -> info -> info

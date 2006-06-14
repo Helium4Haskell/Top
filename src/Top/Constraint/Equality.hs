@@ -12,9 +12,12 @@ module Top.Constraint.Equality where
 import Top.Types
 import Top.Constraint
 import Top.Constraint.Information
+import Top.Interface.Qualification
 import Top.Interface.Substitution
 import Top.Interface.TypeInference
 import Data.List (union)
+import Data.Maybe
+import Debug.Trace
 
 data EqualityConstraint info
    = Equality Tp Tp info
@@ -38,11 +41,15 @@ instance Substitutable (EqualityConstraint info) where
    
 instance ( TypeConstraintInfo info 
          , HasSubst m info
+         , HasQual m info
          , HasTI m info
          ) => 
            Solvable (EqualityConstraint info) m
    where
       solveConstraint (Equality t1 t2 info) =
+         if (isJust . implicitMono $ info) 
+          then do addEqualMono (fromJust . implicitMono $ info)                
+          else id
          unifyTerms (equalityTypePair (t1, t2) info) t1 t2
          
       checkCondition (Equality t1 t2 _) =

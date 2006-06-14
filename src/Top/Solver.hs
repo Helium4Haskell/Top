@@ -95,10 +95,11 @@ solveResult =
       sub         <- fixpointSubst
       ts          <- allTypeSchemes        
       de          <- getDictionaryEnvironment
+      eqMonos     <- getEqualMonos  
       let fde     =  DE { declMap = M.fromListWith (++) (decls de) 
                         , varMap  = M.fromListWith (++) (vars  de)
                         }
-      return (SolveResult uniqueAtEnd sub ts qs errs fde) -- This is a hack, to be removed
+      return (SolveResult uniqueAtEnd sub ts qs errs fde) 
 
 ----------------------------------------------------------------------
 -- Solve type constraints

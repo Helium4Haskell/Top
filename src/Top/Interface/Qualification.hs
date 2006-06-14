@@ -34,24 +34,27 @@ class Monad m => HasQual m info | m -> info where
    changeQualifiers         :: (Predicate -> m Predicate) -> m ()
    
    allQualifiers            :: m [Predicate]
-   generalizeWithQualifiers :: Tps -> Tp -> info -> m (Scheme [Predicate])
+   generalizeWithQualifiers :: Tps -> Tp -> Tp -> info -> m (Scheme [Predicate])
    
    improveQualifiers        :: Bool -> m [(info, Tp, Tp)]
    improveQualifiersNormal  :: m [(info, Tp, Tp)]
    improveQualifiersFinal   :: m [(info, Tp, Tp)]
    simplifyQualifiers       :: Tps -> m ()
    ambiguousQualifiers      :: m ()
-   
+
+     -- equalMono's
+   addEqualMono        :: (String, (Int, Int)) -> m ()
+   getEqualMonos       :: m [(String, (Int, Int))] 
+
     -- class environment
    setClassEnvironment :: ClassEnvironment -> m ()
    getClassEnvironment :: m ClassEnvironment
-
 
     -- class environment
    getDictionaryEnvironment :: m DictionaryEnvironment2
    
    -- default definitions   
-   generalizeWithQualifiers monos tp _ = 
+   generalizeWithQualifiers monos tp _ _ = 
       return . generalize monos . ([] .=>.) $ tp
          
    improveQualifiers normal =
@@ -83,8 +86,12 @@ instance ( Monad m
    changeQualifiers f       = deQual (changeQualifiers (select . f))
    
    allQualifiers = deQual $ allQualifiers
-   generalizeWithQualifiers monos tp info = 
-      deQual (generalizeWithQualifiers monos tp info)
+   generalizeWithQualifiers monos tp otp info = 
+      deQual (generalizeWithQualifiers monos tp otp info)
+
+   -- equalMono's
+   addEqualMono     p    = deQual . addEqualMono $ p
+   getEqualMonos         = deQual $ getEqualMonos
       
    improveQualifiers        = deQual . improveQualifiers
    improveQualifiersNormal  = deQual $ improveQualifiersNormal

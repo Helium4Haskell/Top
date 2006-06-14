@@ -84,7 +84,7 @@ instance ( HasBasic m info
                m'     <- applySubst m
                tp'    <- applySubst tp
                changeQualifiers applySubst
-               scheme <- generalizeWithQualifiers m' tp' info
+               scheme <- generalizeWithQualifiers m' tp' tp info
                storeTypeScheme var scheme
                      
          Instantiate tp sigma info ->

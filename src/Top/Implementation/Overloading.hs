@@ -34,6 +34,7 @@ import Data.Graph.Inductive.Graphviz(graphviz')
 
 data OverloadingState info = OverloadingState 
    { classEnvironment      :: ClassEnvironment            -- ^ All known type classes and instances
+   , equalMonos            :: [(String,  (Int, Int))]
    , predicateMap          :: PredicateMap info           -- ^ Type class assertions
    , typeClassDirectives   :: TypeClassDirectives info    -- ^ Directives for type class assertions
    , dictionaryEnvironment :: DictionaryEnvironment2       -- ^ Dictionaries for constructing evidence
@@ -46,6 +47,7 @@ instance Empty (OverloadingState info) where
    empty = OverloadingState 
       { classEnvironment      = emptyClassEnvironment
       , predicateMap          = empty
+      , equalMonos            = []
       , typeClassDirectives   = []
       , dictionaryEnvironment = emptyDictionaryEnvironment2
       }
@@ -85,6 +87,13 @@ instance ( MonadState s m
 
    getDictionaryEnvironment =
       gets dictionaryEnvironment
+
+   -- equalMono's
+   addEqualMono p =
+      do modify (\s -> s { equalMonos = p : equalMonos s })
+
+   getEqualMonos = 
+      gets equalMonos
       
    proveQualifier info p =
       modifyPredicateMap (\qm -> qm { globalQualifiers = (p, info) : globalQualifiers qm })
@@ -113,7 +122,7 @@ instance ( MonadState s m
          let ps = globalQualifiers qmap ++ globalGeneralizedQs qmap ++ globalAssumptions qmap
          return (fst (Top.Types.contextReduction syns classEnv (map fst ps)))
          
-   generalizeWithQualifiers monos tp info =
+   generalizeWithQualifiers monos tp otp info =
       do preds1 <- proveQsSubst
          preds2 <- generalizedQsSubst
          let is       = ftv tp \\ ftv monos
@@ -123,6 +132,9 @@ instance ( MonadState s m
              ps       = map fst (as ++ cs)
          modifyPredicateMap (\qm -> qm { globalQualifiers = bs, globalGeneralizedQs = as ++ globalGeneralizedQs qm })
          addDeclDictionaries info ps
+         --eqMonos <- getEqualMonos 
+         --varMap  <- checkImplicitMonos eqMonos otp ps
+         --modifyVarMap (\vm -> vm ++ varMap)
          return (generalize monos (ps .=>. tp))
 
    -- improveQualifiersFinal -- use Default directives
@@ -170,15 +182,24 @@ provePred (pred, info) = Prove pred (fromJust (overloadedIdentifier info))
 assumePred :: (TypeConstraintInfo info) => (Predicate, info) -> Pred
 assumePred (pred, info) = Assume pred (fromJust (overloadedIdentifier info))
 
+checkImplicitMonos :: Monad m => [(Int, (Int, Int))] -> Tp -> Predicates -> m [((Int, Int), [DictionaryTree])]
+checkImplicitMonos asl (TVar i) ps = return ( map (\t -> (snd t, map ByPredicate ps)) (filter (((==) i) . fst) asl))
+
 resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
                => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info
                -> [(Predicate, info)] -> [(Predicate, info)] -> m ([(Predicate, info)], [((Int, Int), [DictionaryTree])])
 resolve syns classEnv directives prv ass = return (remaining gr, dTrees)
-  where prvPrds  = map provePred  prv 
-        assPrds  = map assumePred ass
+  where prvPrds  = map provePred  (expandPredicates syns prv)
+        assPrds  = map assumePred (expandPredicates syns ass)
         ruleEnv  = class2rule syns classEnv
         (gr, nm) = constructGraphT ruleEnv (prvPrds ++ assPrds)
         dTrees   = map (constructDictTree (gr, nm)) prvPrds
+
+expandPredicates :: OrderedTypeSynonyms -> [(Predicate, info)] -> [(Predicate, info)]
+expandPredicates synonyms = map (expandPredicate synonyms)
+
+expandPredicate :: OrderedTypeSynonyms -> (Predicate, info) -> (Predicate, info)
+expandPredicate (_, synonyms) (Predicate className tp, i) = (Predicate className (expandType synonyms tp), i)
 
 remaining :: Graph gr => gr Pred b -> [(Predicate, info)]
 remaining tree
