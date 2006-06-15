@@ -17,7 +17,6 @@ import Top.Interface.Substitution
 import Top.Interface.TypeInference
 import Data.List (union)
 import Data.Maybe
-import Debug.Trace
 
 data EqualityConstraint info
    = Equality Tp Tp info
@@ -47,10 +46,10 @@ instance ( TypeConstraintInfo info
            Solvable (EqualityConstraint info) m
    where
       solveConstraint (Equality t1 t2 info) =
-         if (isJust . implicitMono $ info) 
-          then do addEqualMono (fromJust . implicitMono $ info)                
-          else id
-         unifyTerms (equalityTypePair (t1, t2) info) t1 t2
+         do unifyTerms (equalityTypePair (t1, t2) info) t1 t2
+            if (isJust . implicitMono $ info) 
+             then do addEqualMono (fromJust . implicitMono $ info)                
+             else return ()
          
       checkCondition (Equality t1 t2 _) =
          do t1' <- applySubst t1
