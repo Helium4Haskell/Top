@@ -34,7 +34,7 @@ import Data.Graph.Inductive.Graphviz(graphviz')
 
 data OverloadingState info = OverloadingState 
    { classEnvironment      :: ClassEnvironment            -- ^ All known type classes and instances
-   , equalMonos            :: [(String,  (Int, Int))]
+   , equalMonos            :: [(Int,  (Int, Int))]
    , predicateMap          :: PredicateMap info           -- ^ Type class assertions
    , typeClassDirectives   :: TypeClassDirectives info    -- ^ Directives for type class assertions
    , dictionaryEnvironment :: DictionaryEnvironment2       -- ^ Dictionaries for constructing evidence
@@ -122,7 +122,7 @@ instance ( MonadState s m
          let ps = globalQualifiers qmap ++ globalGeneralizedQs qmap ++ globalAssumptions qmap
          return (fst (Top.Types.contextReduction syns classEnv (map fst ps)))
          
-   generalizeWithQualifiers monos tp otp info =
+   generalizeWithQualifiers monos tp info =
       do preds1 <- proveQsSubst
          preds2 <- generalizedQsSubst
          let is       = ftv tp \\ ftv monos
@@ -132,9 +132,6 @@ instance ( MonadState s m
              ps       = map fst (as ++ cs)
          modifyPredicateMap (\qm -> qm { globalQualifiers = bs, globalGeneralizedQs = as ++ globalGeneralizedQs qm })
          addDeclDictionaries info ps
-         --eqMonos <- getEqualMonos 
-         --varMap  <- checkImplicitMonos eqMonos otp ps
-         --modifyVarMap (\vm -> vm ++ varMap)
          return (generalize monos (ps .=>. tp))
 
    -- improveQualifiersFinal -- use Default directives
@@ -182,8 +179,12 @@ provePred (pred, info) = Prove pred (fromJust (overloadedIdentifier info))
 assumePred :: (TypeConstraintInfo info) => (Predicate, info) -> Pred
 assumePred (pred, info) = Assume pred (fromJust (overloadedIdentifier info))
 
-checkImplicitMonos :: Monad m => [(Int, (Int, Int))] -> Tp -> Predicates -> m [((Int, Int), [DictionaryTree])]
-checkImplicitMonos asl (TVar i) ps = return ( map (\t -> (snd t, map ByPredicate ps)) (filter (((==) i) . fst) asl))
+getMonoVars tsmap = do eqMonos <- getEqualMonos 
+                       let f (i, pos) = case M.lookup i tsmap of 
+                                         Nothing                                -> []
+                                         Just  (Quantification (_, _, (Qualification ([], _)))) -> []
+                                         Just  (Quantification (_, _, (Qualification (ps, _)))) -> [(pos, map ByPredicate ps)]
+                       return (concatMap f eqMonos)
 
 resolve :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
                => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info

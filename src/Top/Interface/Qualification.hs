@@ -34,7 +34,7 @@ class Monad m => HasQual m info | m -> info where
    changeQualifiers         :: (Predicate -> m Predicate) -> m ()
    
    allQualifiers            :: m [Predicate]
-   generalizeWithQualifiers :: Tps -> Tp -> Tp -> info -> m (Scheme [Predicate])
+   generalizeWithQualifiers :: Tps -> Tp -> info -> m (Scheme [Predicate])
    
    improveQualifiers        :: Bool -> m [(info, Tp, Tp)]
    improveQualifiersNormal  :: m [(info, Tp, Tp)]
@@ -43,8 +43,8 @@ class Monad m => HasQual m info | m -> info where
    ambiguousQualifiers      :: m ()
 
      -- equalMono's
-   addEqualMono        :: (String, (Int, Int)) -> m ()
-   getEqualMonos       :: m [(String, (Int, Int))] 
+   addEqualMono        :: (Int, (Int, Int)) -> m ()
+   getEqualMonos       :: m [(Int, (Int, Int))] 
 
     -- class environment
    setClassEnvironment :: ClassEnvironment -> m ()
@@ -54,7 +54,7 @@ class Monad m => HasQual m info | m -> info where
    getDictionaryEnvironment :: m DictionaryEnvironment2
    
    -- default definitions   
-   generalizeWithQualifiers monos tp _ _ = 
+   generalizeWithQualifiers monos tp _ = 
       return . generalize monos . ([] .=>.) $ tp
          
    improveQualifiers normal =
@@ -86,8 +86,8 @@ instance ( Monad m
    changeQualifiers f       = deQual (changeQualifiers (select . f))
    
    allQualifiers = deQual $ allQualifiers
-   generalizeWithQualifiers monos tp otp info = 
-      deQual (generalizeWithQualifiers monos tp otp info)
+   generalizeWithQualifiers monos tp info = 
+      deQual (generalizeWithQualifiers monos tp info)
 
    -- equalMono's
    addEqualMono     p    = deQual . addEqualMono $ p

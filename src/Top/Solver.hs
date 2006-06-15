@@ -18,7 +18,7 @@ import Top.Interface.TypeInference
 import Top.Interface.Substitution
 import Top.Interface.Qualification
 import Top.Implementation.General
-import Top.Implementation.Overloading ( dictionaryEnvironment  )
+import Top.Implementation.Overloading ( dictionaryEnvironment, getMonoVars  )
 import Top.Util.Option
 import Top.Monad.StateFix
 import Top.Constraint
@@ -95,9 +95,9 @@ solveResult =
       sub         <- fixpointSubst
       ts          <- allTypeSchemes        
       de          <- getDictionaryEnvironment
-      eqMonos     <- getEqualMonos  
+      monoVars    <- getMonoVars ts  
       let fde     =  DE { declMap = M.fromListWith (++) (decls de) 
-                        , varMap  = M.fromListWith (++) (vars  de)
+                        , varMap  = M.fromListWith (++) (vars  de ++ monoVars)
                         }
       return (SolveResult uniqueAtEnd sub ts qs errs fde) 
 

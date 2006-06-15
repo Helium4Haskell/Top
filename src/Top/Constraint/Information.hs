@@ -28,7 +28,7 @@ class (Show info, Ord info) => TypeConstraintInfo info where
    closeDirective       :: (String, info)    -> info -> info
    disjointDirective    :: (String, info) -> (String, info) -> info -> info
    overloadedIdentifier :: info -> Maybe (Int, Int)
-   implicitMono         :: info -> Maybe (String, (Int, Int))
+   implicitMono         :: info -> Maybe (Int, (Int, Int))
    
    -- default definitions
    equalityTypePair _     = id
