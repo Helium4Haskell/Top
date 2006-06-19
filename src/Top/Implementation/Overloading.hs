@@ -156,28 +156,46 @@ instance ( MonadState s m
 -- solution from the Graph.
 ------------------------------------------------------------------------
 
-data Pred   = Pred Predicate
-            | And [Predicate]
-            | Assume Predicate (Int, Int)
-            | Prove Predicate (Int, Int)
-            deriving (Eq, Ord, Show)
+data Pred info = Pred   (Predicate, info)
+               | And    [(Predicate, info)] 
+               | Assume (Predicate, info) (Int, Int)
+               | Prove  (Predicate, info) (Int, Int)
+               deriving Show
 
-truePred :: Pred
+instance Eq (Pred info) where
+  Pred   (p, _)     == Pred   (p', _)      = p == p'
+  And    ps         == And    ps'          = map fst ps == map fst ps'
+  Assume (p, _) pos == Assume (p', _) pos' = p == p' && pos == pos'
+  Prove  (p, _) pos == Prove  (p', _) pos' = p == p' && pos == pos'
+  _                 == _                   = False
+
+instance Ord (Pred info) where
+  compare (Pred   (p, _)    )  (Pred   (p', _)     ) = compare p  p'
+  compare (And    ps        )  (And    ps'         ) = compare (map fst ps)  (map fst ps')
+  compare (Assume (p, _) pos)  (Assume (p', _) pos') = compare (compare p  p') (compare pos  pos')
+  compare (Prove  (p, _) pos)  (Prove  (p', _) pos') = compare (compare p  p') (compare pos  pos')
+  compare (Pred   _         )  _                     = GT
+  compare (And    _         )  (Assume _ _         ) = GT
+  compare _                    (Prove  _ _         ) = GT
+  compare _                     _                    = LT
+  -- Assume - ANs
+
+truePred :: Pred info
 truePred = And []
 
-unPred :: Pred -> Predicate
+unPred :: Pred info -> (Predicate, info)
 unPred (Pred p) = p
 unPred _        = error "Only a (Pred p) can be unPred'ed"
 
-isAssumePred :: Pred -> Bool
+isAssumePred :: Pred info -> Bool
 isAssumePred (Assume _ _) = True
 isAssumePred _            = False
 
-provePred :: (TypeConstraintInfo info) => (Predicate, info) -> Pred 
-provePred (pred, info) = Prove pred (fromJust (overloadedIdentifier info))
+provePred :: (TypeConstraintInfo info) => (Predicate, info) -> Pred info
+provePred (pred, info) = Prove (pred, info) (fromJust (overloadedIdentifier info))
 
-assumePred :: (TypeConstraintInfo info) => (Predicate, info) -> Pred
-assumePred (pred, info) = Assume pred (fromJust (overloadedIdentifier info))
+assumePred :: (TypeConstraintInfo info) => (Predicate, info) -> Pred info
+assumePred (pred, info) = Assume (pred, info) (fromJust (overloadedIdentifier info))
 
 getMonoVars tsmap = do eqMonos <- getEqualMonos 
                        let f (i, pos) = case M.lookup i tsmap of 
@@ -202,30 +220,30 @@ expandPredicates synonyms = map (expandPredicate synonyms)
 expandPredicate :: OrderedTypeSynonyms -> (Predicate, info) -> (Predicate, info)
 expandPredicate (_, synonyms) (Predicate className tp, i) = (Predicate className (expandType synonyms tp), i)
 
-remaining :: Graph gr => gr Pred b -> [(Predicate, info)]
+remaining :: Graph gr => gr (Pred info) b -> [(Predicate, info)]
 remaining tree
-  = map (flip (,) (error "this info should not be used") . unPred) . filter (\p -> p /= truePred && not (isAssumePred p)) $ preds
+  = map unPred . filter (\p -> p /= truePred && not (isAssumePred p)) $ preds
   where nds = filter (\n -> (outdeg tree n) == 0) (nodes tree)
         preds = map (fromJust . lab tree) nds
 
-constructDictTree :: Graph gr => (gr Pred String, NodeMap Pred) -> Pred -> ((Int, Int), [DictionaryTree])
-constructDictTree (gr, nm) (Prove pred i) = (i, [edge nd (unPred p)])
-  where (nd, p) = mkNode_ nm (Pred pred)
-        edge nd pred = let edges = out gr nd 
+constructDictTree :: Graph gr => (gr (Pred info) String, NodeMap (Pred info)) -> (Pred info) -> ((Int, Int), [DictionaryTree])
+constructDictTree (gr, nm) (Prove pr i) = (i, [edge nd (fst $ unPred p)])
+  where (nd, p) = mkNode_ nm (Pred pr)
+        edge nd pred = let edges = trace ("Node: " ++ (show pred) ++ " , NodeMap: " ++ (show . M.assocs $ nd) ) (out gr nd)
                        in case selectEdge edges of 
                                Just (fnd, tnd, "inst") -> byInst  pred tnd
                                Just (fnd, tnd, "sup")  -> bySuper pred tnd
                                Just (fnd, tnd, "ass")  -> ByPredicate pred 
                                Nothing                 -> ByPredicate pred 
 
-        bySuper (Predicate sub _) to = let  p@(Predicate sup _) = unPred . fromJust $ lab gr to
+        bySuper (Predicate sub _) to = let  p@(Predicate sup _) = fst . unPred . fromJust $ lab gr to
                                        in BySuperClass sup sub (edge to p)
 
         byInst p@(Predicate nm tp) to = let (TCon instName, _) = leftSpine tp
                                         in case fromJust (lab gr to) of
                                                And []    -> ByPredicate p
-                                               And preds -> ByInstance nm instName (map (\(_, nd, _) -> edge nd (unPred . fromJust $ lab gr nd) ) (out gr to))
-                                               Pred pred -> ByInstance nm instName [(edge to pred)]
+                                               And preds -> ByInstance nm instName (map (\(_, nd, _) -> edge nd (fst . unPred . fromJust $ lab gr nd) ) (out gr to))
+                                               Pred (pred, _) -> ByInstance nm instName [(edge to pred)]
 
         selectEdge edges = listToMaybe . catMaybes $
                            [ find (\(_, _, s) -> s == "ass") edges
@@ -236,18 +254,18 @@ constructDictTree (gr, nm) (Prove pred i) = (i, [edge nd (unPred p)])
 constructDictTree _ _ = error "Dictionary trees can only be constructed for Proof predicates."
    
 
-class2rule :: OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv Pred String
+class2rule ::TypeConstraintInfo info => OrderedTypeSynonyms -> ClassEnvironment -> RuleEnv (Pred info) String
 class2rule _ _ c@(Prove  p _) = [(c, Pred p, "prv")]
 class2rule _ _ c@(Assume p _) = [(Pred p, c, "ass")]
-class2rule syns classEnv c@(Pred p) = instRules ++ supRules
- where superClasses = map Pred (bySuperclass' classEnv p)
+class2rule syns classEnv c@(Pred (p, i)) = supRules ++ instRules
+ where superClasses = map (\p -> Pred (p, i)) (bySuperclass' classEnv p)
        supRules     = zip3 superClasses (repeat c) (repeat "sup")
        instRules    = case byInstance syns classEnv p of
                        Nothing -> []
-                       (Just [nd]) -> [(c, Pred nd, "inst")]
+                       (Just [nd]) -> [(c, Pred (nd, i), "inst")]
                        (Just nds)  -> (c, andClasses, "inst") : zip3 (repeat andClasses) instClasses (repeat "and")
-                                      where andClasses = And nds
-                                            instClasses = map Pred nds
+                                      where andClasses = And (map (\n -> (n, i)) nds)
+                                            instClasses = map (\p -> Pred (p, i)) nds
 class2rule _ _ _ = []
 
 ambiguous :: (HasBasic m info, HasTI m info, TypeConstraintInfo info)
