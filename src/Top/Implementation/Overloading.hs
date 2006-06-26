@@ -172,13 +172,16 @@ instance Eq (Pred info) where
 instance Ord (Pred info) where
   compare (Pred   (p, _)    )  (Pred   (p', _)     ) = compare p  p'
   compare (And    ps        )  (And    ps'         ) = compare (map fst ps)  (map fst ps')
-  compare (Assume (p, _) pos)  (Assume (p', _) pos') = compare (compare p  p') (compare pos  pos')
-  compare (Prove  (p, _) pos)  (Prove  (p', _) pos') = compare (compare p  p') (compare pos  pos')
+  compare (Assume (p, _) pos)  (Assume (p', _) pos') = (compare p  p') `compareOrdering` (compare pos  pos')
+  compare (Prove  (p, _) pos)  (Prove  (p', _) pos') = (compare p  p') `compareOrdering` (compare pos  pos')
   compare (Pred   _         )  _                     = GT
   compare (And    _         )  (Assume _ _         ) = GT
   compare _                    (Prove  _ _         ) = GT
   compare _                     _                    = LT
-  -- Assume - ANs
+
+compareOrdering :: Ordering -> Ordering -> Ordering
+compareOrdering l r | l == EQ = r
+compareOrdering l _ | otherwise = l
 
 truePred :: Pred info
 truePred = And []
@@ -229,7 +232,7 @@ remaining tree
 constructDictTree :: Graph gr => (gr (Pred info) String, NodeMap (Pred info)) -> (Pred info) -> ((Int, Int), [DictionaryTree])
 constructDictTree (gr, nm) (Prove pr i) = (i, [edge nd (fst $ unPred p)])
   where (nd, p) = mkNode_ nm (Pred pr)
-        edge nd pred = let edges = trace ("Node: " ++ (show pred) ++ " , NodeMap: " ++ (show . M.assocs $ nd) ) (out gr nd)
+        edge nd pred = let edges = (out gr nd)
                        in case selectEdge edges of 
                                Just (fnd, tnd, "inst") -> byInst  pred tnd
                                Just (fnd, tnd, "sup")  -> bySuper pred tnd
