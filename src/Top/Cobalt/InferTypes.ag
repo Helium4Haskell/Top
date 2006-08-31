@@ -35,9 +35,9 @@ SEM TypeRule
 SEM Judgement
   | Judgement
        lhs.cset = [ SumLeft $ Equality inh (TCon "Gamma") "(Gamma)" | inh <- @inhs.tps ]
-                  ++ [SumLeft $ Equality @expression.tp (TCon "Expr") "(Expr)"]
+                  ++ [SumLeft $ Equality @expression.tp (TCon "Expr") "(Expr)"] ++
                   [ SumLeft $ Equality syn (TCon "Type") "(Type)" | syn <- @syns.tps ]
-                  ] ++ 
+                  ++ 
                   @inhs.cset ++ @expression.cset ++ @syns.cset
 
 ATTR ConstraintTerms [ | | tps : Tps]

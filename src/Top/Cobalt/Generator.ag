@@ -1,5 +1,5 @@
 -- compile with:
---    ag -cfs --self --module=Top.TypeRules.Generator Generator.ag
+--    ag -cfs --self --module=Top.Cobalt.Generator Generator.ag
 
 -- Basic data structures
 INCLUDE "AGSyntax.ag"
@@ -7,22 +7,36 @@ INCLUDE "Syntax.ag"
 
 {
 -- Returns the elements in xs which occur more than once.  
-duplicates :: [a] -> [a]
+duplicates :: (Ord a) => [a] -> [a]
 duplicates xs = map head (filter (\ys -> length ys > 1) (group (sort xs)))
 
--- Maps alternatives to lists of attributes.
-type AttributesMap  = FiniteMap String{-alt or nt-} ([String{-inhs-}],[String{-syns-}])
-type JudgementsAL   = [(String,([String],[String]))]
-type ArgTypesMap = FiniteMap String{-alt-} [String]{-types of the arguments for this alternative-}
-type VarAL = [(String, String)]
+-- Much of the information is collected as an StrAL a, and then converted to a StrMap a for speed.
+type StrAL a  = [(String, a)]
+type StrMap a = FiniteMap String a
+
+-- Usually, information is kept for inherited (1st entry) and synthesized (2nd) attributes.
+type InhSyn a = ([a], [a])
+
+type JudgementsAL = StrAL (InhSyn String) -- For each judgement the lists of types of the attributes (inh,syns).
+type AltArgTypesAL= StrAL [String] -- For each alternative, the list of types for the fields it contains
+type AltNts       = StrAL String -- Lists each alternative for a non-terminal with its corresponding non-terminal  
+type AltTypesAL   = StrAL TpScheme -- Each alternative paired with its type scheme 
+
+type VarAL        = StrAL String -- Used?
+
+-- For more efficient access, after construction.
+type AltArgTypesMap = StrMap [String] -- see AL variant
+type JudgementsMap  = StrMap (InhSyn String) -- see AL variant
+type FunctionEnvironment = StrMap TpScheme -- For each function id, returns its type scheme
 }
 
--- Attribute definitions for these data types
-ATTR TypeSystem -> AGData [ | | altargtypes USE { ++ } { [] } : {[(String, [String])]} ]
-ATTR TypeSystem -> AGData [ | | altnts USE { ++ } { [] } : {[(String, String)]} ]
-ATTR TypeSystem -> AGData [ | | alttypes USE { ++ } { [] } : {[(String, TpScheme)]} ]
+-- Attribute definitions for AGData and the Judgement declarations as they are collected in 
+-- synthesized fashion. These are later passed to the rules, usually in the form of a finite map.
+ATTR TypeSystem -> AGData [ | | altArgTypes USE { ++ } { [] } : AltArgTypesAL ]
+ATTR TypeSystem -> AGData [ | | altNts USE { ++ } { [] } : AltNts ]
+ATTR TypeSystem -> AGData [ | | altTypes USE { ++ } { [] } : AltTypesAL ]
 ATTR TypeSystem -> JudgementDecl [ types : {[String]} | | ] 
-ATTR TypeSystem -> JudgementDecl [ | | judgements USE { ++ } { [] } : {JudgementsAL} ] 
+ATTR TypeSystem -> JudgementDecl [ | | judgements USE { ++ } { [] } : JudgementsAL ] 
 ATTR TypeSystem -> JudgementDecl [ | | staticErrors USE { ++ } { [] } : StaticMessages ] 
 
 -- The following attribute contains all information that a term needs to retrieve the list of attributes
@@ -31,7 +45,7 @@ ATTR TypeSystem -> JudgementDecl [ | | staticErrors USE { ++ } { [] } : StaticMe
 -- The final attribute gives us the list of arguments.
 ATTR TypeSystem -> Term [ judgementsMap : JudgementsMap | | ]
 ATTR TypeSystem -> Term [ functions : FunctionEnvironment | | ]
-ATTR TypeSystem -> Term [ argTypesMap : ArgTypesMap | | ]
+ATTR TypeSystem -> Term [ altArgTypesMap : AltArgTypesMap | | ]
 
 ATTR TypeRule -> Term [ | | allVariables USE { ++ } { [] } : {[String]} ]
 ATTR TypeSystem -> Term [ agdatas:AGDatas | | ]
@@ -45,7 +59,7 @@ ATTR TypeRule -> Term [ rulename:String | | ]
 ATTR TypeRule -> Judgement [ | | usedVars USE { ++ } { [] } : {[String]} ]
 ATTR TypeRule -> Judgement [ | | declaredVars USE { ++ } { [] } : {[String]} ]
 ATTR DeductionRule Judgements Judgement [ | | premiseAttrs USE { ++ } { [] } : PremiseAttrs ]
-ATTR DeductionRule [ | | conclusionAttr:ConclusionAttr ]                 
+ATTR DeductionRule [ | | conclusionAttr : {Maybe ConclusionAttr} ]                 
 
 ATTR TypeSystem -> Term [ nts : {[String]} | | ]
 
@@ -64,9 +78,8 @@ a. type information about all the functions and alternatives that have been pass
 b. for each alternative a list of inherited and synthesized attributes.
 -}
 INCLUDE "Analyze.ag"
-
---INCLUDE "InferTypes.ag"
---INCLUDE "CodeGen.ag"
+INCLUDE "InferTypes.ag"
+INCLUDE "CodeGen.ag"
 
 imports {
 import Top.Cobalt.ParseRules
@@ -75,6 +88,8 @@ import Top.Cobalt.AGSyntax
 import Top.Cobalt.Syntax
 import Top.Cobalt.Escape
 import Top.Types
+import Top.Types.Quantification
+import Top.Types.Qualification
 import Data.List
 import Data.Maybe
 import Data.FiniteMap
@@ -90,9 +105,6 @@ ATTR TypeSystem
    ]
 
 {
-
-type FunctionEnvironment = FiniteMap String TpScheme
-
 
 showConstraintTerm :: VarAL -> ConstraintTerm -> String
 showConstraintTerm vm (ConstraintTerm term) = showTerm vm term 
@@ -112,10 +124,10 @@ rangeAL :: [(a,b)] -> [b]
 rangeAL = map snd
 
 -- No maybe here. Simply omit the a's for which we can not map through b to a c.
-joinAL :: [(a,b)] -> [(b,c)] -> [(a,c)]
+joinAL :: (Eq b) => [(a,b)] -> [(b,c)] -> [(a,c)]
 joinAL [] as2     = []
 joinAL ((x,y):xs) as2 = 
-  case lookup y of
+  case lookup y as2 of
     Nothing -> rest
     Just z  -> (x,z):rest
    where
@@ -148,7 +160,7 @@ generator gamma classEnv system =
        reportErrors = putStrLn . unlines . map show
    in case staticErrors of 
          []   -> case staticWarnings of
-                    [] -> putStrLn 
+                    [] -> putStrLn "Compilation succesful"
                     errs -> reportErrors errs
          errs -> reportErrors errs
 			 				 

@@ -7,6 +7,8 @@ import Top.Cobalt.AGSyntax
 import Top.Cobalt.Syntax
 import Top.Cobalt.Escape
 import Top.Types
+import Top.Types.Quantification
+import Top.Types.Qualification
 import Data.List
 import Data.Maybe
 import Data.FiniteMap
@@ -14,18 +16,38 @@ import Data.FiniteMap
 import Top.Cobalt.AGSyntax
 import Top.Cobalt.ShowAG
 
+import Top.Constraints.Equality
+import Top.Constraints.Polymorphism
+import Top.Solvers.GreedySolver
+import Top.Solvers.SolveConstraints
+import Top.Constraints.TypeConstraintInfo
+import Top.Constraints.Constraints
+import Top.Qualifiers.TypeClasses
+import Top.States.BasicState (ErrorLabel)
+import Debug.Trace
+
 -- Returns the elements in xs which occur more than once.  
-duplicates :: [a] -> [a]
+duplicates :: (Ord a) => [a] -> [a]
 duplicates xs = map head (filter (\ys -> length ys > 1) (group (sort xs)))
 
--- Maps alternatives to lists of attributes.
-type AttributesMap  = FiniteMap String{-alt or nt-} ([String{-inhs-}],[String{-syns-}])
-type JudgementsAL   = [(String,([String],[String]))]
-type ArgTypesMap = FiniteMap String{-alt-} [String]{-types of the arguments for this alternative-}
-type VarAL = [(String, String)]
+-- Much of the information is collected as an StrAL a, and then converted to a StrMap a for speed.
+type StrAL a  = [(String, a)]
+type StrMap a = FiniteMap String a
 
+-- Usually, information is kept for inherited (1st entry) and synthesized (2nd) attributes.
+type InhSyn a = ([a], [a])
 
-type FunctionEnvironment = FiniteMap String TpScheme
+type JudgementsAL = StrAL (InhSyn String) -- For each judgement the lists of types of the attributes (inh,syns).
+type AltArgTypesAL= StrAL [String] -- For each alternative, the list of types for the fields it contains
+type AltNts       = StrAL String -- Lists each alternative for a non-terminal with its corresponding non-terminal  
+type AltTypesAL   = StrAL TpScheme -- Each alternative paired with its type scheme 
+
+type VarAL        = StrAL String -- Used?
+
+-- For more efficient access, after construction.
+type AltArgTypesMap = StrMap [String] -- see AL variant
+type JudgementsMap  = StrMap (InhSyn String) -- see AL variant
+type FunctionEnvironment = StrMap TpScheme -- For each function id, returns its type scheme
 
 
 showConstraintTerm :: VarAL -> ConstraintTerm -> String
@@ -46,10 +68,10 @@ rangeAL :: [(a,b)] -> [b]
 rangeAL = map snd
 
 -- No maybe here. Simply omit the a's for which we can not map through b to a c.
-joinAL :: [(a,b)] -> [(b,c)] -> [(a,c)]
+joinAL :: (Eq b) => [(a,b)] -> [(b,c)] -> [(a,c)]
 joinAL [] as2     = []
 joinAL ((x,y):xs) as2 = 
-  case lookup y of
+  case lookup y as2 of
     Nothing -> rest
     Just z  -> (x,z):rest
    where
@@ -82,7 +104,7 @@ generator gamma classEnv system =
        reportErrors = putStrLn . unlines . map show
    in case staticErrors of 
          []   -> case staticWarnings of
-                    [] -> putStrLn 
+                    [] -> putStrLn "Compilation succesful"
                     errs -> reportErrors errs
          errs -> reportErrors errs
 			 				 
@@ -102,7 +124,7 @@ data StaticMessage = FunctionNotDefined         String{-rulename-} String
                    | NoJudgementForType         String{-rulename-} String{-type-}
                    | DuplicateAlternative       String
                    | UnknownAlternative         String{-rulename-} String
-                   | WrongNumberOfArguments     String{-rulename-} String
+                   | WrongNumberOfArguments     String{-rulename-} Term
                    | WrongNumberOfAttributes    String{-rulename-} String{-where-}
                    | InternalError              String{-rulename-} String{-what happened-}
                    
@@ -110,7 +132,7 @@ data StaticMessage = FunctionNotDefined         String{-rulename-} String
                    | MetaVarNotUsed             String{-rulename-} String
      deriving Show
 
-type PremiseAttrs   = [PremiseAttr]
+type PremiseAttrs   = [Maybe PremiseAttr]
 data PremiseAttr    = PremiseAttr 
    { preMeta           :: String 
    , preMetaType       :: String
@@ -120,37 +142,40 @@ data PremiseAttr    = PremiseAttr
 data ConclusionAttr = ConclusionAttr
    { conAlternative       :: String   -- name of the alternative
    , metaVarAL            :: VarAL    -- maps each metavar (that has a type referring to an AG datatype) to its type
-   , conInhVars           :: [String] -- implicitly declared variables from the inherited attr section
+   , conInhVars           :: [Term]   -- implicitly declared variables from the inherited attr section
 --   , declaredInConclusion :: [String] -- Variables declared by this construct: the inhs and the meta vars in this case
    }
 
 
-checkPremise :: String -> JudgementDeclMap -> VarAL -> Judgement -> Escape [StaticError] PremiseAttr
+checkPremise :: String -> JudgementsMap -> VarAL -> Judgement -> Escape StaticMessages PremiseAttr
 checkPremise rulename judgementdeclmap metavarAL (Judgement inhs expr syns) = 
    do{ var <- check (matchTermVar expr) [MustBeVar rulename expr]
      ; tp <- check (lookup var metavarAL) [MetaVarNotDefined rulename var]
      ; (declinhs, declsyns) <- 
-         check (lookupFM var judgementdeclmap) [NoJudgementForType rulename tp]  -- retrieve info on judgement for this type
+         check (lookupFM judgementdeclmap var) [NoJudgementForType rulename tp]  -- retrieve info on judgement for this type
      ; let termVars = filter (isJust . matchTermVar) syns
-     ; continueIf (length declinhs == length inhs) [WrongNumberOfAttributes rulename "premise " ++ var ++", inhs"] +++
-       continueIf (length declsyns == length syns) [WrongNumberOfAttributes rulename "premise " ++ var ++ ", syns"] +++
+     ; continueIf (length declinhs == length inhs) [WrongNumberOfAttributes rulename ("premise " ++ var ++", inhs")] +++
+       continueIf (length declsyns == length syns) [WrongNumberOfAttributes rulename ("premise " ++ var ++ ", syns")] +++
        continueIf (length termVars == length syns) (map (MustBeVar rulename) (filter (not . isJust . matchTermVar) syns))
      ; return (PremiseAttr var tp)
      }
 
-checkConclusion :: String -> JudgementDeclMap -> ArgTypesMap -> Judgement -> Escape [StaticError] ConclusionAttr 
+checkConclusion :: String -> JudgementsMap -> AltArgTypesMap -> [String] -> Judgement -> Escape StaticMessages ConclusionAttr 
 checkConclusion rulename judgementdeclmap argtypesmap nts (Judgement inhs expr syns) =
-   do{ (con, args) <- check (matchSimpleTermApp expr) [MustBeSimpleApp rulename expr]
+   do{ (con, args) <- check (matchSimpleTermApp expr) [MustBeSimpleApp rulename expr]                -- is expr of the form C var1 ... varm ?
      ; (declinhs, declsyns) <- 
-         check (lookupFM con judgementsdeclmap) [UnknownAlternative rulename con]
-     ; argTypes <- check (lookupFM con argtypesmap) [InternalError rulename "while doing lookup for argument type of conclusion"]     
+         check (lookupFM judgementdeclmap con) [UnknownAlternative rulename con]                                               -- is C known?
+     ; argTypes <- check (lookupFM argtypesmap con) [InternalError rulename "while doing lookup for argument type of conclusion"]
+                                                                                                                       -- Should not go wrong
      ; let termVars = filter (isJust . matchTermVar) inhs
-     ; continueIf (length declinhs == length inhs) [WrongNumberOfAttributes rulename "conclusion,inhs"] +++
-       continueIf (length declsyns == length syns) [WrongNumberOfAttributes rulename "conclusion,syns"] +++
-       continueIf (length args == length argTypes) [WrongNumberOfArguments rulename expr] +++
-       continueIf (length termVars == length inhs) (map (MustBeVar rulename) (filter (not . isJust . matchTermVar) inhs))
+     ; continueIf (length declinhs == length inhs) [WrongNumberOfAttributes rulename "conclusion,inhs"] +++  -- Compare declared and given number of inherited attributes
+       continueIf (length declsyns == length syns) [WrongNumberOfAttributes rulename "conclusion,syns"] +++  -- Compare declared and given number of synthesized attributes
+       continueIf (length args == length argTypes) [WrongNumberOfArguments rulename expr] +++  -- Compare declared and given number of arguments to C
+       continueIf (length termVars == length inhs) (map (MustBeVar rulename) (filter (not . isJust . matchTermVar) inhs)) -- All inhs should be simple variables.
      ; return (ConclusionAttr con (metaFilter nts (zip args argTypes)) termVars)
      }
+
+-- Helper functions
 
 metaFilter :: [String] -> [(String,String)] -> [(String,String)] 
 metaFilter metatypes = filter (\(var,tp) -> tp `elem` metatypes)
@@ -181,6 +206,28 @@ matchSimpleTermApp _                  = Nothing
 
 -- Bastiaan
 values = eltsFM
+
+
+type TypeErrors = [TypeError]
+type TypeError  = (CInfo, ErrorLabel)
+type CSet  = [MyCon]
+type MyCon = ConstraintSum EqualityConstraint (PolymorphismConstraint Predicates) CInfo
+type CInfo = String
+instance TypeConstraintInfo CInfo
+instance PolyTypeConstraintInfo Predicates CInfo
+
+
+implicitAttrs :: AGAttrs
+implicitAttrs = 
+   [ AGAttr "Expr" Inherited "gamma" "Gamma"
+   , AGAttr "Expr" Synthesized "tp" "Type"
+   ]
+
+explicitAttrs :: AGAttrs
+explicitAttrs = 
+   [ AGAttr "Expr" Chained "unique" "Int"
+   , AGAttr "Expr" Synthesized "cset" "[Constraint]"
+   ] 
 
 -- AGAttr ------------------------------------------------------
 -- semantic domain
@@ -251,13 +298,13 @@ sem_AGCode_AGCode :: (T_AGDatas) ->
                      (T_AGCode)
 sem_AGCode_AGCode (agdatas_) (agattrs_) (agsems_) =
     let _lhsOself :: (AGCode)
-        _agdatasIaltargtypes :: ([(String, [String])])
-        _agdatasIaltnts :: ([(String, String)])
-        _agdatasIalttypes :: ([(String, TpScheme)])
+        _agdatasIaltArgTypes :: (AltArgTypesAL)
+        _agdatasIaltNts :: (AltNts)
+        _agdatasIaltTypes :: (AltTypesAL)
         _agdatasIself :: (AGDatas)
         _agattrsIself :: (AGAttrs)
         _agsemsIself :: (AGSems)
-        ( _agdatasIaltargtypes,_agdatasIaltnts,_agdatasIalttypes,_agdatasIself) =
+        ( _agdatasIaltArgTypes,_agdatasIaltNts,_agdatasIaltTypes,_agdatasIself) =
             (agdatas_ )
         ( _agattrsIself) =
             (agattrs_ )
@@ -270,7 +317,7 @@ sem_AGCode_AGCode (agdatas_) (agattrs_) (agsems_) =
     in  ( _lhsOself)
 -- AGData ------------------------------------------------------
 -- semantic domain
-type T_AGData = ( ([(String, [String])]),([(String, String)]),([(String, TpScheme)]),(AGData))
+type T_AGData = ( (AltArgTypesAL),(AltNts),(AltTypesAL),(AGData))
 -- cata
 sem_AGData :: (AGData) ->
               (T_AGData)
@@ -281,26 +328,26 @@ sem_AGData_AGData :: (String) ->
                      ([(String, String)]) ->
                      (T_AGData)
 sem_AGData_AGData (nonterminal_) (alternative_) (children_) =
-    let _lhsOaltargtypes :: ([(String, [String])])
-        _lhsOaltnts :: ([(String, String)])
-        _lhsOalttypes :: ([(String, TpScheme)])
+    let _lhsOaltArgTypes :: (AltArgTypesAL)
+        _lhsOaltNts :: (AltNts)
+        _lhsOaltTypes :: (AltTypesAL)
         _lhsOself :: (AGData)
         (_altTp@_) =
             foldr (.->.) (TCon nonterminal_) (map (TCon . snd) children_)
-        (_lhsOaltnts@_) =
+        (_lhsOaltNts@_) =
             [(alternative_, nonterminal_)]
-        (_lhsOaltargtypes@_) =
+        (_lhsOaltArgTypes@_) =
             [(alternative_, map snd children_)]
-        (_lhsOalttypes@_) =
+        (_lhsOaltTypes@_) =
             [(alternative_, toTpScheme _altTp )]
         (_self@_) =
             AGData nonterminal_ alternative_ children_
         (_lhsOself@_) =
             _self
-    in  ( _lhsOaltargtypes,_lhsOaltnts,_lhsOalttypes,_lhsOself)
+    in  ( _lhsOaltArgTypes,_lhsOaltNts,_lhsOaltTypes,_lhsOself)
 -- AGDatas -----------------------------------------------------
 -- semantic domain
-type T_AGDatas = ( ([(String, [String])]),([(String, String)]),([(String, TpScheme)]),(AGDatas))
+type T_AGDatas = ( (AltArgTypesAL),(AltNts),(AltTypesAL),(AGDatas))
 -- cata
 sem_AGDatas :: (AGDatas) ->
                (T_AGDatas)
@@ -310,50 +357,50 @@ sem_AGDatas_Cons :: (T_AGData) ->
                     (T_AGDatas) ->
                     (T_AGDatas)
 sem_AGDatas_Cons (hd_) (tl_) =
-    let _lhsOaltargtypes :: ([(String, [String])])
-        _lhsOaltnts :: ([(String, String)])
-        _lhsOalttypes :: ([(String, TpScheme)])
+    let _lhsOaltArgTypes :: (AltArgTypesAL)
+        _lhsOaltNts :: (AltNts)
+        _lhsOaltTypes :: (AltTypesAL)
         _lhsOself :: (AGDatas)
-        _hdIaltargtypes :: ([(String, [String])])
-        _hdIaltnts :: ([(String, String)])
-        _hdIalttypes :: ([(String, TpScheme)])
+        _hdIaltArgTypes :: (AltArgTypesAL)
+        _hdIaltNts :: (AltNts)
+        _hdIaltTypes :: (AltTypesAL)
         _hdIself :: (AGData)
-        _tlIaltargtypes :: ([(String, [String])])
-        _tlIaltnts :: ([(String, String)])
-        _tlIalttypes :: ([(String, TpScheme)])
+        _tlIaltArgTypes :: (AltArgTypesAL)
+        _tlIaltNts :: (AltNts)
+        _tlIaltTypes :: (AltTypesAL)
         _tlIself :: (AGDatas)
-        ( _hdIaltargtypes,_hdIaltnts,_hdIalttypes,_hdIself) =
+        ( _hdIaltArgTypes,_hdIaltNts,_hdIaltTypes,_hdIself) =
             (hd_ )
-        ( _tlIaltargtypes,_tlIaltnts,_tlIalttypes,_tlIself) =
+        ( _tlIaltArgTypes,_tlIaltNts,_tlIaltTypes,_tlIself) =
             (tl_ )
-        (_lhsOaltargtypes@_) =
-            _hdIaltargtypes  ++  _tlIaltargtypes
-        (_lhsOaltnts@_) =
-            _hdIaltnts  ++  _tlIaltnts
-        (_lhsOalttypes@_) =
-            _hdIalttypes  ++  _tlIalttypes
+        (_lhsOaltArgTypes@_) =
+            _hdIaltArgTypes  ++  _tlIaltArgTypes
+        (_lhsOaltNts@_) =
+            _hdIaltNts  ++  _tlIaltNts
+        (_lhsOaltTypes@_) =
+            _hdIaltTypes  ++  _tlIaltTypes
         (_self@_) =
             (:) _hdIself _tlIself
         (_lhsOself@_) =
             _self
-    in  ( _lhsOaltargtypes,_lhsOaltnts,_lhsOalttypes,_lhsOself)
+    in  ( _lhsOaltArgTypes,_lhsOaltNts,_lhsOaltTypes,_lhsOself)
 sem_AGDatas_Nil :: (T_AGDatas)
 sem_AGDatas_Nil  =
-    let _lhsOaltargtypes :: ([(String, [String])])
-        _lhsOaltnts :: ([(String, String)])
-        _lhsOalttypes :: ([(String, TpScheme)])
+    let _lhsOaltArgTypes :: (AltArgTypesAL)
+        _lhsOaltNts :: (AltNts)
+        _lhsOaltTypes :: (AltTypesAL)
         _lhsOself :: (AGDatas)
-        (_lhsOaltargtypes@_) =
+        (_lhsOaltArgTypes@_) =
             []
-        (_lhsOaltnts@_) =
+        (_lhsOaltNts@_) =
             []
-        (_lhsOalttypes@_) =
+        (_lhsOaltTypes@_) =
             []
         (_self@_) =
             []
         (_lhsOself@_) =
             _self
-    in  ( _lhsOaltargtypes,_lhsOaltnts,_lhsOalttypes,_lhsOself)
+    in  ( _lhsOaltArgTypes,_lhsOaltNts,_lhsOaltTypes,_lhsOself)
 -- AGSem -------------------------------------------------------
 -- semantic domain
 type T_AGSem = ( (AGSem))
@@ -498,12 +545,14 @@ sem_Attr_Synthesized  =
 -- ConstraintTerm ----------------------------------------------
 -- semantic domain
 type T_ConstraintTerm = (AGDatas) ->
-                        (ArgTypesMap) ->
+                        (AltArgTypesMap) ->
                         (FunctionEnvironment) ->
                         (JudgementsMap) ->
                         ([String]) ->
                         (String) ->
-                        ( ([String]),(ConstraintTerm),(StaticMessages),(StaticMessages))
+                        ([(String, Int)]) ->
+                        (Int) ->
+                        ( ([String]),(CSet),(ConstraintTerm),(StaticMessages),(StaticMessages),(Tp),(Int))
 -- cata
 sem_ConstraintTerm :: (ConstraintTerm) ->
                       (T_ConstraintTerm)
@@ -513,45 +562,61 @@ sem_ConstraintTerm_ConstraintTerm :: (T_Term) ->
                                      (T_ConstraintTerm)
 sem_ConstraintTerm_ConstraintTerm (constraint_) =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
       _lhsIfunctions
       _lhsIjudgementsMap
       _lhsInts
-      _lhsIrulename ->
+      _lhsIrulename
+      _lhsIstrmap
+      _lhsIunique ->
         let _lhsOallVariables :: ([String])
+            _lhsOcset :: (CSet)
             _lhsOself :: (ConstraintTerm)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOtp :: (Tp)
+            _lhsOunique :: (Int)
             _constraintIallVariables :: ([String])
+            _constraintIcset :: (CSet)
             _constraintIself :: (Term)
             _constraintIstaticErrors :: (StaticMessages)
             _constraintIstaticWarnings :: (StaticMessages)
+            _constraintItp :: (Tp)
+            _constraintIunique :: (Int)
             _constraintOagdatas :: (AGDatas)
-            _constraintOargTypesMap :: (ArgTypesMap)
+            _constraintOaltArgTypesMap :: (AltArgTypesMap)
             _constraintOfunctions :: (FunctionEnvironment)
             _constraintOjudgementsMap :: (JudgementsMap)
             _constraintOnts :: ([String])
             _constraintOrulename :: (String)
-            ( _constraintIallVariables,_constraintIself,_constraintIstaticErrors,_constraintIstaticWarnings) =
-                (constraint_ (_constraintOagdatas) (_constraintOargTypesMap) (_constraintOfunctions) (_constraintOjudgementsMap) (_constraintOnts) (_constraintOrulename))
+            _constraintOstrmap :: ([(String, Int)])
+            _constraintOunique :: (Int)
+            ( _constraintIallVariables,_constraintIcset,_constraintIself,_constraintIstaticErrors,_constraintIstaticWarnings,_constraintItp,_constraintIunique) =
+                (constraint_ (_constraintOagdatas) (_constraintOaltArgTypesMap) (_constraintOfunctions) (_constraintOjudgementsMap) (_constraintOnts) (_constraintOrulename) (_constraintOstrmap) (_constraintOunique))
             (_lhsOstaticErrors@_) =
                 [ ConstraintIsNotApplication _lhsIrulename (getTerm con)
-                | con <- _self
+                | con <- [_self]
                 , not (isTermApp con)
                 ]
-                ++ constraint.staticErrors
+                ++ _constraintIstaticErrors
+            (_lhsOtp@_) =
+                _constraintItp
             (_lhsOallVariables@_) =
                 _constraintIallVariables
+            (_lhsOcset@_) =
+                _constraintIcset
             (_lhsOstaticWarnings@_) =
                 _constraintIstaticWarnings
             (_self@_) =
                 ConstraintTerm _constraintIself
             (_lhsOself@_) =
                 _self
+            (_lhsOunique@_) =
+                _constraintIunique
             (_constraintOagdatas@_) =
                 _lhsIagdatas
-            (_constraintOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_constraintOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_constraintOfunctions@_) =
                 _lhsIfunctions
             (_constraintOjudgementsMap@_) =
@@ -560,16 +625,22 @@ sem_ConstraintTerm_ConstraintTerm (constraint_) =
                 _lhsInts
             (_constraintOrulename@_) =
                 _lhsIrulename
-        in  ( _lhsOallVariables,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
+            (_constraintOstrmap@_) =
+                _lhsIstrmap
+            (_constraintOunique@_) =
+                _lhsIunique
+        in  ( _lhsOallVariables,_lhsOcset,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOtp,_lhsOunique)
 -- ConstraintTerms ---------------------------------------------
 -- semantic domain
 type T_ConstraintTerms = (AGDatas) ->
-                         (ArgTypesMap) ->
+                         (AltArgTypesMap) ->
                          (FunctionEnvironment) ->
                          (JudgementsMap) ->
                          ([String]) ->
                          (String) ->
-                         ( ([String]),(ConstraintTerms),(StaticMessages),(StaticMessages))
+                         ([(String, Int)]) ->
+                         (Int) ->
+                         ( ([String]),(CSet),(ConstraintTerms),(StaticMessages),(StaticMessages),(Tps),(Int))
 -- cata
 sem_ConstraintTerms :: (ConstraintTerms) ->
                        (T_ConstraintTerms)
@@ -580,41 +651,60 @@ sem_ConstraintTerms_Cons :: (T_ConstraintTerm) ->
                             (T_ConstraintTerms)
 sem_ConstraintTerms_Cons (hd_) (tl_) =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
       _lhsIfunctions
       _lhsIjudgementsMap
       _lhsInts
-      _lhsIrulename ->
+      _lhsIrulename
+      _lhsIstrmap
+      _lhsIunique ->
         let _lhsOallVariables :: ([String])
+            _lhsOcset :: (CSet)
             _lhsOself :: (ConstraintTerms)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOtps :: (Tps)
+            _lhsOunique :: (Int)
             _hdIallVariables :: ([String])
+            _hdIcset :: (CSet)
             _hdIself :: (ConstraintTerm)
             _hdIstaticErrors :: (StaticMessages)
             _hdIstaticWarnings :: (StaticMessages)
+            _hdItp :: (Tp)
+            _hdIunique :: (Int)
             _hdOagdatas :: (AGDatas)
-            _hdOargTypesMap :: (ArgTypesMap)
+            _hdOaltArgTypesMap :: (AltArgTypesMap)
             _hdOfunctions :: (FunctionEnvironment)
             _hdOjudgementsMap :: (JudgementsMap)
             _hdOnts :: ([String])
             _hdOrulename :: (String)
+            _hdOstrmap :: ([(String, Int)])
+            _hdOunique :: (Int)
             _tlIallVariables :: ([String])
+            _tlIcset :: (CSet)
             _tlIself :: (ConstraintTerms)
             _tlIstaticErrors :: (StaticMessages)
             _tlIstaticWarnings :: (StaticMessages)
+            _tlItps :: (Tps)
+            _tlIunique :: (Int)
             _tlOagdatas :: (AGDatas)
-            _tlOargTypesMap :: (ArgTypesMap)
+            _tlOaltArgTypesMap :: (AltArgTypesMap)
             _tlOfunctions :: (FunctionEnvironment)
             _tlOjudgementsMap :: (JudgementsMap)
             _tlOnts :: ([String])
             _tlOrulename :: (String)
-            ( _hdIallVariables,_hdIself,_hdIstaticErrors,_hdIstaticWarnings) =
-                (hd_ (_hdOagdatas) (_hdOargTypesMap) (_hdOfunctions) (_hdOjudgementsMap) (_hdOnts) (_hdOrulename))
-            ( _tlIallVariables,_tlIself,_tlIstaticErrors,_tlIstaticWarnings) =
-                (tl_ (_tlOagdatas) (_tlOargTypesMap) (_tlOfunctions) (_tlOjudgementsMap) (_tlOnts) (_tlOrulename))
+            _tlOstrmap :: ([(String, Int)])
+            _tlOunique :: (Int)
+            ( _hdIallVariables,_hdIcset,_hdIself,_hdIstaticErrors,_hdIstaticWarnings,_hdItp,_hdIunique) =
+                (hd_ (_hdOagdatas) (_hdOaltArgTypesMap) (_hdOfunctions) (_hdOjudgementsMap) (_hdOnts) (_hdOrulename) (_hdOstrmap) (_hdOunique))
+            ( _tlIallVariables,_tlIcset,_tlIself,_tlIstaticErrors,_tlIstaticWarnings,_tlItps,_tlIunique) =
+                (tl_ (_tlOagdatas) (_tlOaltArgTypesMap) (_tlOfunctions) (_tlOjudgementsMap) (_tlOnts) (_tlOrulename) (_tlOstrmap) (_tlOunique))
+            (_lhsOtps@_) =
+                _hdItp : _tlItps
             (_lhsOallVariables@_) =
                 _hdIallVariables  ++  _tlIallVariables
+            (_lhsOcset@_) =
+                _hdIcset  ++  _tlIcset
             (_lhsOstaticErrors@_) =
                 _hdIstaticErrors  ++  _tlIstaticErrors
             (_lhsOstaticWarnings@_) =
@@ -623,10 +713,12 @@ sem_ConstraintTerms_Cons (hd_) (tl_) =
                 (:) _hdIself _tlIself
             (_lhsOself@_) =
                 _self
+            (_lhsOunique@_) =
+                _tlIunique
             (_hdOagdatas@_) =
                 _lhsIagdatas
-            (_hdOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_hdOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_hdOfunctions@_) =
                 _lhsIfunctions
             (_hdOjudgementsMap@_) =
@@ -635,10 +727,14 @@ sem_ConstraintTerms_Cons (hd_) (tl_) =
                 _lhsInts
             (_hdOrulename@_) =
                 _lhsIrulename
+            (_hdOstrmap@_) =
+                _lhsIstrmap
+            (_hdOunique@_) =
+                _lhsIunique
             (_tlOagdatas@_) =
                 _lhsIagdatas
-            (_tlOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_tlOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_tlOfunctions@_) =
                 _lhsIfunctions
             (_tlOjudgementsMap@_) =
@@ -647,20 +743,33 @@ sem_ConstraintTerms_Cons (hd_) (tl_) =
                 _lhsInts
             (_tlOrulename@_) =
                 _lhsIrulename
-        in  ( _lhsOallVariables,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
+            (_tlOstrmap@_) =
+                _lhsIstrmap
+            (_tlOunique@_) =
+                _hdIunique
+        in  ( _lhsOallVariables,_lhsOcset,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOtps,_lhsOunique)
 sem_ConstraintTerms_Nil :: (T_ConstraintTerms)
 sem_ConstraintTerms_Nil  =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
       _lhsIfunctions
       _lhsIjudgementsMap
       _lhsInts
-      _lhsIrulename ->
+      _lhsIrulename
+      _lhsIstrmap
+      _lhsIunique ->
         let _lhsOallVariables :: ([String])
+            _lhsOcset :: (CSet)
             _lhsOself :: (ConstraintTerms)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOtps :: (Tps)
+            _lhsOunique :: (Int)
+            (_lhsOtps@_) =
+                []
             (_lhsOallVariables@_) =
+                []
+            (_lhsOcset@_) =
                 []
             (_lhsOstaticErrors@_) =
                 []
@@ -670,16 +779,20 @@ sem_ConstraintTerms_Nil  =
                 []
             (_lhsOself@_) =
                 _self
-        in  ( _lhsOallVariables,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
+            (_lhsOunique@_) =
+                _lhsIunique
+        in  ( _lhsOallVariables,_lhsOcset,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOtps,_lhsOunique)
 -- DeductionRule -----------------------------------------------
 -- semantic domain
 type T_DeductionRule = (AGDatas) ->
-                       (ArgTypesMap) ->
+                       (AltArgTypesMap) ->
                        (FunctionEnvironment) ->
                        (JudgementsMap) ->
                        ([String]) ->
                        (String) ->
-                       ( ([String]),(ConclusionAttr),([String]),(PremiseAttrs),(DeductionRule),(StaticMessages),(StaticMessages),([String]))
+                       ([(String, Int)]) ->
+                       (Int) ->
+                       ( ([String]),(Maybe ConclusionAttr),(CSet),([String]),(PremiseAttrs),(DeductionRule),(StaticMessages),(StaticMessages),(Int),([String]))
 -- cata
 sem_DeductionRule :: (DeductionRule) ->
                      (T_DeductionRule)
@@ -690,86 +803,103 @@ sem_DeductionRule_DeductionRule :: (T_Judgements) ->
                                    (T_DeductionRule)
 sem_DeductionRule_DeductionRule (premises_) (conclusion_) =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
       _lhsIfunctions
       _lhsIjudgementsMap
       _lhsInts
-      _lhsIrulename ->
+      _lhsIrulename
+      _lhsIstrmap
+      _lhsIunique ->
         let _lhsOallVariables :: ([String])
-            _lhsOconclusionAttr :: (ConclusionAttr)
+            _lhsOconclusionAttr :: (Maybe ConclusionAttr)
+            _lhsOcset :: (CSet)
             _lhsOdeclaredVars :: ([String])
             _lhsOpremiseAttrs :: (PremiseAttrs)
             _lhsOself :: (DeductionRule)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOunique :: (Int)
             _lhsOusedVars :: ([String])
             _premisesIallVariables :: ([String])
+            _premisesIcset :: (CSet)
             _premisesIdeclaredVars :: ([String])
             _premisesIpremiseAttrs :: (PremiseAttrs)
             _premisesIself :: (Judgements)
             _premisesIstaticErrors :: (StaticMessages)
             _premisesIstaticWarnings :: (StaticMessages)
+            _premisesIunique :: (Int)
             _premisesIusedVars :: ([String])
             _premisesOagdatas :: (AGDatas)
-            _premisesOargTypesMap :: (ArgTypesMap)
+            _premisesOaltArgTypesMap :: (AltArgTypesMap)
             _premisesOfunctions :: (FunctionEnvironment)
             _premisesOisConclusion :: (Bool)
             _premisesOjudgementsMap :: (JudgementsMap)
             _premisesOmetaVarAL :: (VarAL)
             _premisesOnts :: ([String])
             _premisesOrulename :: (String)
+            _premisesOstrmap :: ([(String, Int)])
+            _premisesOunique :: (Int)
             _conclusionIallVariables :: ([String])
+            _conclusionIcset :: (CSet)
             _conclusionIdeclaredVars :: ([String])
             _conclusionIpremiseAttrs :: (PremiseAttrs)
             _conclusionIself :: (Judgement)
             _conclusionIstaticErrors :: (StaticMessages)
             _conclusionIstaticWarnings :: (StaticMessages)
+            _conclusionIunique :: (Int)
             _conclusionIusedVars :: ([String])
             _conclusionOagdatas :: (AGDatas)
-            _conclusionOargTypesMap :: (ArgTypesMap)
+            _conclusionOaltArgTypesMap :: (AltArgTypesMap)
             _conclusionOfunctions :: (FunctionEnvironment)
             _conclusionOisConclusion :: (Bool)
             _conclusionOjudgementsMap :: (JudgementsMap)
             _conclusionOmetaVarAL :: (VarAL)
             _conclusionOnts :: ([String])
             _conclusionOrulename :: (String)
-            ( _premisesIallVariables,_premisesIdeclaredVars,_premisesIpremiseAttrs,_premisesIself,_premisesIstaticErrors,_premisesIstaticWarnings,_premisesIusedVars) =
-                (premises_ (_premisesOagdatas) (_premisesOargTypesMap) (_premisesOfunctions) (_premisesOisConclusion) (_premisesOjudgementsMap) (_premisesOmetaVarAL) (_premisesOnts) (_premisesOrulename))
-            ( _conclusionIallVariables,_conclusionIdeclaredVars,_conclusionIpremiseAttrs,_conclusionIself,_conclusionIstaticErrors,_conclusionIstaticWarnings,_conclusionIusedVars) =
-                (conclusion_ (_conclusionOagdatas) (_conclusionOargTypesMap) (_conclusionOfunctions) (_conclusionOisConclusion) (_conclusionOjudgementsMap) (_conclusionOmetaVarAL) (_conclusionOnts) (_conclusionOrulename))
+            _conclusionOstrmap :: ([(String, Int)])
+            _conclusionOunique :: (Int)
+            ( _premisesIallVariables,_premisesIcset,_premisesIdeclaredVars,_premisesIpremiseAttrs,_premisesIself,_premisesIstaticErrors,_premisesIstaticWarnings,_premisesIunique,_premisesIusedVars) =
+                (premises_ (_premisesOagdatas) (_premisesOaltArgTypesMap) (_premisesOfunctions) (_premisesOisConclusion) (_premisesOjudgementsMap) (_premisesOmetaVarAL) (_premisesOnts) (_premisesOrulename) (_premisesOstrmap) (_premisesOunique))
+            ( _conclusionIallVariables,_conclusionIcset,_conclusionIdeclaredVars,_conclusionIpremiseAttrs,_conclusionIself,_conclusionIstaticErrors,_conclusionIstaticWarnings,_conclusionIunique,_conclusionIusedVars) =
+                (conclusion_ (_conclusionOagdatas) (_conclusionOaltArgTypesMap) (_conclusionOfunctions) (_conclusionOisConclusion) (_conclusionOjudgementsMap) (_conclusionOmetaVarAL) (_conclusionOnts) (_conclusionOrulename) (_conclusionOstrmap) (_conclusionOunique))
             (_lhsOstaticErrors@_) =
                 _staticErrorsConclusion ++
                 [ DuplicateVar _lhsIrulename x
                 | x <- duplicates _declaredVars
                 ] ++
-                if (_conclusionAttr == Nothing) then []
-                else
-                  let metaVarsPremise = map preMeta _premisesIpremiseAttrs
-                  in _premisesIstaticErrors ++
-                     [ DuplicateMetaVarInPremise _lhsIrulename x
-                     | x <- duplicates metaVarsPremise
-                     ] ++
-                     [ DuplicateVar _lhsIrulename x
-                     | x <- duplicates _declaredVars
-                     ]
+                case _conclusionAttr of
+                   Nothing -> []
+                   Just _  ->
+                     let metaVarsPremise = map preMeta (catMaybes _premisesIpremiseAttrs)
+                     in _premisesIstaticErrors ++
+                       [ DuplicateMetaVarInPremise _lhsIrulename x
+                       | x <- duplicates metaVarsPremise
+                       ] ++
+                       [ DuplicateVar _lhsIrulename x
+                       | x <- duplicates _declaredVars
+                       ]
             (_lhsOstaticWarnings@_) =
                 _conclusionIstaticWarnings ++ _premisesIstaticWarnings ++
                 [ MetaVarNotUsed _lhsIrulename x
-                | x <- map snd (metaVarAL _conclusionAttr)
+                | x <- map snd _conclusionMetaVarAL
                 , x `notElem` _usedVars
                 ] ++
                 [ DeclaredAndUsedInPremise _lhsIrulename x
                 | x <- _premisesIusedVars
                 , x `elem` _premisesIdeclaredVars
                 ]
+            (_lhsOconclusionAttr@_) =
+                _conclusionAttr
             (_declaredVars@_) =
                 _premisesIdeclaredVars ++ _conclusionIdeclaredVars
             (_lhsOusedVars@_) =
                 _usedVars
             (_usedVars@_) =
                 nub (_premisesIusedVars ++ _conclusionIusedVars)
-            ((_staticErrorsConclusion@_,_conclusionAttr@_,_premisesOmetaVarAL@_)) =
-                case checkConclusion _lhsIrulename _lhsIjudgementsMap _lhsIargTypesMap _lhsInts _conclusionIself of
+            (_premisesOmetaVarAL@_) =
+                _conclusionMetaVarAL
+            ((_staticErrorsConclusion@_,_conclusionAttr@_,_conclusionMetaVarAL@_)) =
+                case (checkConclusion _lhsIrulename _lhsIjudgementsMap _lhsIaltArgTypesMap _lhsInts _conclusionIself) of
                   Escape errors           -> (errors, Nothing, [])
                   Continue conclusionAttr -> ([], Just conclusionAttr, metaVarAL conclusionAttr)
             (_premisesOisConclusion@_) =
@@ -780,6 +910,8 @@ sem_DeductionRule_DeductionRule (premises_) (conclusion_) =
                 True
             (_lhsOallVariables@_) =
                 _premisesIallVariables  ++  _conclusionIallVariables
+            (_lhsOcset@_) =
+                _premisesIcset  ++  _conclusionIcset
             (_lhsOdeclaredVars@_) =
                 _declaredVars
             (_lhsOpremiseAttrs@_) =
@@ -788,12 +920,12 @@ sem_DeductionRule_DeductionRule (premises_) (conclusion_) =
                 DeductionRule _premisesIself _conclusionIself
             (_lhsOself@_) =
                 _self
-            (_lhsOconclusionAttr@_) =
-                _conclusionAttr
+            (_lhsOunique@_) =
+                _conclusionIunique
             (_premisesOagdatas@_) =
                 _lhsIagdatas
-            (_premisesOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_premisesOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_premisesOfunctions@_) =
                 _lhsIfunctions
             (_premisesOjudgementsMap@_) =
@@ -802,10 +934,14 @@ sem_DeductionRule_DeductionRule (premises_) (conclusion_) =
                 _lhsInts
             (_premisesOrulename@_) =
                 _lhsIrulename
+            (_premisesOstrmap@_) =
+                _lhsIstrmap
+            (_premisesOunique@_) =
+                _lhsIunique
             (_conclusionOagdatas@_) =
                 _lhsIagdatas
-            (_conclusionOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_conclusionOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_conclusionOfunctions@_) =
                 _lhsIfunctions
             (_conclusionOjudgementsMap@_) =
@@ -814,18 +950,24 @@ sem_DeductionRule_DeductionRule (premises_) (conclusion_) =
                 _lhsInts
             (_conclusionOrulename@_) =
                 _lhsIrulename
-        in  ( _lhsOallVariables,_lhsOconclusionAttr,_lhsOdeclaredVars,_lhsOpremiseAttrs,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOusedVars)
+            (_conclusionOstrmap@_) =
+                _lhsIstrmap
+            (_conclusionOunique@_) =
+                _premisesIunique
+        in  ( _lhsOallVariables,_lhsOconclusionAttr,_lhsOcset,_lhsOdeclaredVars,_lhsOpremiseAttrs,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOunique,_lhsOusedVars)
 -- Judgement ---------------------------------------------------
 -- semantic domain
 type T_Judgement = (AGDatas) ->
-                   (ArgTypesMap) ->
+                   (AltArgTypesMap) ->
                    (FunctionEnvironment) ->
                    (Bool) ->
                    (JudgementsMap) ->
                    (VarAL) ->
                    ([String]) ->
                    (String) ->
-                   ( ([String]),([String]),(PremiseAttrs),(Judgement),(StaticMessages),(StaticMessages),([String]))
+                   ([(String, Int)]) ->
+                   (Int) ->
+                   ( ([String]),(CSet),([String]),(PremiseAttrs),(Judgement),(StaticMessages),(StaticMessages),(Int),([String]))
 -- cata
 sem_Judgement :: (Judgement) ->
                  (T_Judgement)
@@ -837,65 +979,93 @@ sem_Judgement_Judgement :: (T_Terms) ->
                            (T_Judgement)
 sem_Judgement_Judgement (inhs_) (expression_) (syns_) =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
       _lhsIfunctions
       _lhsIisConclusion
       _lhsIjudgementsMap
       _lhsImetaVarAL
       _lhsInts
-      _lhsIrulename ->
+      _lhsIrulename
+      _lhsIstrmap
+      _lhsIunique ->
         let _lhsOallVariables :: ([String])
+            _lhsOcset :: (CSet)
             _lhsOdeclaredVars :: ([String])
             _lhsOpremiseAttrs :: (PremiseAttrs)
             _lhsOself :: (Judgement)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOunique :: (Int)
             _lhsOusedVars :: ([String])
             _inhsIallVariables :: ([String])
+            _inhsIcset :: (CSet)
             _inhsIself :: (Terms)
             _inhsIstaticErrors :: (StaticMessages)
             _inhsIstaticWarnings :: (StaticMessages)
+            _inhsItps :: (Tps)
+            _inhsIunique :: (Int)
             _inhsOagdatas :: (AGDatas)
-            _inhsOargTypesMap :: (ArgTypesMap)
+            _inhsOaltArgTypesMap :: (AltArgTypesMap)
             _inhsOfunctions :: (FunctionEnvironment)
             _inhsOjudgementsMap :: (JudgementsMap)
             _inhsOnts :: ([String])
             _inhsOrulename :: (String)
+            _inhsOstrmap :: ([(String, Int)])
+            _inhsOunique :: (Int)
             _expressionIallVariables :: ([String])
+            _expressionIcset :: (CSet)
             _expressionIself :: (Term)
             _expressionIstaticErrors :: (StaticMessages)
             _expressionIstaticWarnings :: (StaticMessages)
+            _expressionItp :: (Tp)
+            _expressionIunique :: (Int)
             _expressionOagdatas :: (AGDatas)
-            _expressionOargTypesMap :: (ArgTypesMap)
+            _expressionOaltArgTypesMap :: (AltArgTypesMap)
             _expressionOfunctions :: (FunctionEnvironment)
             _expressionOjudgementsMap :: (JudgementsMap)
             _expressionOnts :: ([String])
             _expressionOrulename :: (String)
+            _expressionOstrmap :: ([(String, Int)])
+            _expressionOunique :: (Int)
             _synsIallVariables :: ([String])
+            _synsIcset :: (CSet)
             _synsIself :: (Terms)
             _synsIstaticErrors :: (StaticMessages)
             _synsIstaticWarnings :: (StaticMessages)
+            _synsItps :: (Tps)
+            _synsIunique :: (Int)
             _synsOagdatas :: (AGDatas)
-            _synsOargTypesMap :: (ArgTypesMap)
+            _synsOaltArgTypesMap :: (AltArgTypesMap)
             _synsOfunctions :: (FunctionEnvironment)
             _synsOjudgementsMap :: (JudgementsMap)
             _synsOnts :: ([String])
             _synsOrulename :: (String)
-            ( _inhsIallVariables,_inhsIself,_inhsIstaticErrors,_inhsIstaticWarnings) =
-                (inhs_ (_inhsOagdatas) (_inhsOargTypesMap) (_inhsOfunctions) (_inhsOjudgementsMap) (_inhsOnts) (_inhsOrulename))
-            ( _expressionIallVariables,_expressionIself,_expressionIstaticErrors,_expressionIstaticWarnings) =
-                (expression_ (_expressionOagdatas) (_expressionOargTypesMap) (_expressionOfunctions) (_expressionOjudgementsMap) (_expressionOnts) (_expressionOrulename))
-            ( _synsIallVariables,_synsIself,_synsIstaticErrors,_synsIstaticWarnings) =
-                (syns_ (_synsOagdatas) (_synsOargTypesMap) (_synsOfunctions) (_synsOjudgementsMap) (_synsOnts) (_synsOrulename))
+            _synsOstrmap :: ([(String, Int)])
+            _synsOunique :: (Int)
+            ( _inhsIallVariables,_inhsIcset,_inhsIself,_inhsIstaticErrors,_inhsIstaticWarnings,_inhsItps,_inhsIunique) =
+                (inhs_ (_inhsOagdatas) (_inhsOaltArgTypesMap) (_inhsOfunctions) (_inhsOjudgementsMap) (_inhsOnts) (_inhsOrulename) (_inhsOstrmap) (_inhsOunique))
+            ( _expressionIallVariables,_expressionIcset,_expressionIself,_expressionIstaticErrors,_expressionIstaticWarnings,_expressionItp,_expressionIunique) =
+                (expression_ (_expressionOagdatas) (_expressionOaltArgTypesMap) (_expressionOfunctions) (_expressionOjudgementsMap) (_expressionOnts) (_expressionOrulename) (_expressionOstrmap) (_expressionOunique))
+            ( _synsIallVariables,_synsIcset,_synsIself,_synsIstaticErrors,_synsIstaticWarnings,_synsItps,_synsIunique) =
+                (syns_ (_synsOagdatas) (_synsOaltArgTypesMap) (_synsOfunctions) (_synsOjudgementsMap) (_synsOnts) (_synsOrulename) (_synsOstrmap) (_synsOunique))
             (_lhsOdeclaredVars@_) =
                 if _lhsIisConclusion then _inhsIallVariables ++ _expressionIallVariables else _synsIallVariables
             (_lhsOusedVars@_) =
                 if _lhsIisConclusion then _synsIallVariables else _inhsIallVariables ++ _expressionIallVariables
             ((_lhsOpremiseAttrs@_,_newErrors@_)) =
                 if _lhsIisConclusion then ([], [])
-                else checkPremise _lhsIrulename _lhsIjudgementsMap _lhsImetaVarAL _self
+                else
+                  case (checkPremise _lhsIrulename _lhsIjudgementsMap _lhsImetaVarAL _self) of
+                    Escape errors        -> ([Nothing], errors)
+                    Continue premiseAttr -> ([Just premiseAttr], [])
             (_lhsOstaticErrors@_) =
                 _inhsIstaticErrors ++ _expressionIstaticErrors ++ _newErrors ++ _synsIstaticErrors
+            (_lhsOcset@_) =
+                [ SumLeft $ Equality inh (TCon "Gamma") "(Gamma)" | inh <- _inhsItps ]
+                ++ [SumLeft $ Equality _expressionItp (TCon "Expr") "(Expr)"] ++
+                [ SumLeft $ Equality syn (TCon "Type") "(Type)" | syn <- _synsItps ]
+                ++
+                _inhsIcset ++ _expressionIcset ++ _synsIcset
             (_lhsOallVariables@_) =
                 _inhsIallVariables  ++  _expressionIallVariables  ++  _synsIallVariables
             (_lhsOstaticWarnings@_) =
@@ -904,10 +1074,12 @@ sem_Judgement_Judgement (inhs_) (expression_) (syns_) =
                 Judgement _inhsIself _expressionIself _synsIself
             (_lhsOself@_) =
                 _self
+            (_lhsOunique@_) =
+                _synsIunique
             (_inhsOagdatas@_) =
                 _lhsIagdatas
-            (_inhsOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_inhsOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_inhsOfunctions@_) =
                 _lhsIfunctions
             (_inhsOjudgementsMap@_) =
@@ -916,10 +1088,14 @@ sem_Judgement_Judgement (inhs_) (expression_) (syns_) =
                 _lhsInts
             (_inhsOrulename@_) =
                 _lhsIrulename
+            (_inhsOstrmap@_) =
+                _lhsIstrmap
+            (_inhsOunique@_) =
+                _lhsIunique
             (_expressionOagdatas@_) =
                 _lhsIagdatas
-            (_expressionOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_expressionOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_expressionOfunctions@_) =
                 _lhsIfunctions
             (_expressionOjudgementsMap@_) =
@@ -928,10 +1104,14 @@ sem_Judgement_Judgement (inhs_) (expression_) (syns_) =
                 _lhsInts
             (_expressionOrulename@_) =
                 _lhsIrulename
+            (_expressionOstrmap@_) =
+                _lhsIstrmap
+            (_expressionOunique@_) =
+                _inhsIunique
             (_synsOagdatas@_) =
                 _lhsIagdatas
-            (_synsOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_synsOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_synsOfunctions@_) =
                 _lhsIfunctions
             (_synsOjudgementsMap@_) =
@@ -940,7 +1120,11 @@ sem_Judgement_Judgement (inhs_) (expression_) (syns_) =
                 _lhsInts
             (_synsOrulename@_) =
                 _lhsIrulename
-        in  ( _lhsOallVariables,_lhsOdeclaredVars,_lhsOpremiseAttrs,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOusedVars)
+            (_synsOstrmap@_) =
+                _lhsIstrmap
+            (_synsOunique@_) =
+                _expressionIunique
+        in  ( _lhsOallVariables,_lhsOcset,_lhsOdeclaredVars,_lhsOpremiseAttrs,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOunique,_lhsOusedVars)
 -- JudgementDecl -----------------------------------------------
 -- semantic domain
 type T_JudgementDecl = ([String]) ->
@@ -1031,14 +1215,16 @@ sem_JudgementDecls_Nil  =
 -- Judgements --------------------------------------------------
 -- semantic domain
 type T_Judgements = (AGDatas) ->
-                    (ArgTypesMap) ->
+                    (AltArgTypesMap) ->
                     (FunctionEnvironment) ->
                     (Bool) ->
                     (JudgementsMap) ->
                     (VarAL) ->
                     ([String]) ->
                     (String) ->
-                    ( ([String]),([String]),(PremiseAttrs),(Judgements),(StaticMessages),(StaticMessages),([String]))
+                    ([(String, Int)]) ->
+                    (Int) ->
+                    ( ([String]),(CSet),([String]),(PremiseAttrs),(Judgements),(StaticMessages),(StaticMessages),(Int),([String]))
 -- cata
 sem_Judgements :: (Judgements) ->
                   (T_Judgements)
@@ -1049,56 +1235,70 @@ sem_Judgements_Cons :: (T_Judgement) ->
                        (T_Judgements)
 sem_Judgements_Cons (hd_) (tl_) =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
       _lhsIfunctions
       _lhsIisConclusion
       _lhsIjudgementsMap
       _lhsImetaVarAL
       _lhsInts
-      _lhsIrulename ->
+      _lhsIrulename
+      _lhsIstrmap
+      _lhsIunique ->
         let _lhsOallVariables :: ([String])
+            _lhsOcset :: (CSet)
             _lhsOdeclaredVars :: ([String])
             _lhsOpremiseAttrs :: (PremiseAttrs)
             _lhsOself :: (Judgements)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOunique :: (Int)
             _lhsOusedVars :: ([String])
             _hdIallVariables :: ([String])
+            _hdIcset :: (CSet)
             _hdIdeclaredVars :: ([String])
             _hdIpremiseAttrs :: (PremiseAttrs)
             _hdIself :: (Judgement)
             _hdIstaticErrors :: (StaticMessages)
             _hdIstaticWarnings :: (StaticMessages)
+            _hdIunique :: (Int)
             _hdIusedVars :: ([String])
             _hdOagdatas :: (AGDatas)
-            _hdOargTypesMap :: (ArgTypesMap)
+            _hdOaltArgTypesMap :: (AltArgTypesMap)
             _hdOfunctions :: (FunctionEnvironment)
             _hdOisConclusion :: (Bool)
             _hdOjudgementsMap :: (JudgementsMap)
             _hdOmetaVarAL :: (VarAL)
             _hdOnts :: ([String])
             _hdOrulename :: (String)
+            _hdOstrmap :: ([(String, Int)])
+            _hdOunique :: (Int)
             _tlIallVariables :: ([String])
+            _tlIcset :: (CSet)
             _tlIdeclaredVars :: ([String])
             _tlIpremiseAttrs :: (PremiseAttrs)
             _tlIself :: (Judgements)
             _tlIstaticErrors :: (StaticMessages)
             _tlIstaticWarnings :: (StaticMessages)
+            _tlIunique :: (Int)
             _tlIusedVars :: ([String])
             _tlOagdatas :: (AGDatas)
-            _tlOargTypesMap :: (ArgTypesMap)
+            _tlOaltArgTypesMap :: (AltArgTypesMap)
             _tlOfunctions :: (FunctionEnvironment)
             _tlOisConclusion :: (Bool)
             _tlOjudgementsMap :: (JudgementsMap)
             _tlOmetaVarAL :: (VarAL)
             _tlOnts :: ([String])
             _tlOrulename :: (String)
-            ( _hdIallVariables,_hdIdeclaredVars,_hdIpremiseAttrs,_hdIself,_hdIstaticErrors,_hdIstaticWarnings,_hdIusedVars) =
-                (hd_ (_hdOagdatas) (_hdOargTypesMap) (_hdOfunctions) (_hdOisConclusion) (_hdOjudgementsMap) (_hdOmetaVarAL) (_hdOnts) (_hdOrulename))
-            ( _tlIallVariables,_tlIdeclaredVars,_tlIpremiseAttrs,_tlIself,_tlIstaticErrors,_tlIstaticWarnings,_tlIusedVars) =
-                (tl_ (_tlOagdatas) (_tlOargTypesMap) (_tlOfunctions) (_tlOisConclusion) (_tlOjudgementsMap) (_tlOmetaVarAL) (_tlOnts) (_tlOrulename))
+            _tlOstrmap :: ([(String, Int)])
+            _tlOunique :: (Int)
+            ( _hdIallVariables,_hdIcset,_hdIdeclaredVars,_hdIpremiseAttrs,_hdIself,_hdIstaticErrors,_hdIstaticWarnings,_hdIunique,_hdIusedVars) =
+                (hd_ (_hdOagdatas) (_hdOaltArgTypesMap) (_hdOfunctions) (_hdOisConclusion) (_hdOjudgementsMap) (_hdOmetaVarAL) (_hdOnts) (_hdOrulename) (_hdOstrmap) (_hdOunique))
+            ( _tlIallVariables,_tlIcset,_tlIdeclaredVars,_tlIpremiseAttrs,_tlIself,_tlIstaticErrors,_tlIstaticWarnings,_tlIunique,_tlIusedVars) =
+                (tl_ (_tlOagdatas) (_tlOaltArgTypesMap) (_tlOfunctions) (_tlOisConclusion) (_tlOjudgementsMap) (_tlOmetaVarAL) (_tlOnts) (_tlOrulename) (_tlOstrmap) (_tlOunique))
             (_lhsOallVariables@_) =
                 _hdIallVariables  ++  _tlIallVariables
+            (_lhsOcset@_) =
+                _hdIcset  ++  _tlIcset
             (_lhsOdeclaredVars@_) =
                 _hdIdeclaredVars  ++  _tlIdeclaredVars
             (_lhsOpremiseAttrs@_) =
@@ -1113,10 +1313,12 @@ sem_Judgements_Cons (hd_) (tl_) =
                 (:) _hdIself _tlIself
             (_lhsOself@_) =
                 _self
+            (_lhsOunique@_) =
+                _tlIunique
             (_hdOagdatas@_) =
                 _lhsIagdatas
-            (_hdOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_hdOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_hdOfunctions@_) =
                 _lhsIfunctions
             (_hdOisConclusion@_) =
@@ -1129,10 +1331,14 @@ sem_Judgements_Cons (hd_) (tl_) =
                 _lhsInts
             (_hdOrulename@_) =
                 _lhsIrulename
+            (_hdOstrmap@_) =
+                _lhsIstrmap
+            (_hdOunique@_) =
+                _lhsIunique
             (_tlOagdatas@_) =
                 _lhsIagdatas
-            (_tlOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_tlOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_tlOfunctions@_) =
                 _lhsIfunctions
             (_tlOisConclusion@_) =
@@ -1145,25 +1351,35 @@ sem_Judgements_Cons (hd_) (tl_) =
                 _lhsInts
             (_tlOrulename@_) =
                 _lhsIrulename
-        in  ( _lhsOallVariables,_lhsOdeclaredVars,_lhsOpremiseAttrs,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOusedVars)
+            (_tlOstrmap@_) =
+                _lhsIstrmap
+            (_tlOunique@_) =
+                _hdIunique
+        in  ( _lhsOallVariables,_lhsOcset,_lhsOdeclaredVars,_lhsOpremiseAttrs,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOunique,_lhsOusedVars)
 sem_Judgements_Nil :: (T_Judgements)
 sem_Judgements_Nil  =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
       _lhsIfunctions
       _lhsIisConclusion
       _lhsIjudgementsMap
       _lhsImetaVarAL
       _lhsInts
-      _lhsIrulename ->
+      _lhsIrulename
+      _lhsIstrmap
+      _lhsIunique ->
         let _lhsOallVariables :: ([String])
+            _lhsOcset :: (CSet)
             _lhsOdeclaredVars :: ([String])
             _lhsOpremiseAttrs :: (PremiseAttrs)
             _lhsOself :: (Judgements)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOunique :: (Int)
             _lhsOusedVars :: ([String])
             (_lhsOallVariables@_) =
+                []
+            (_lhsOcset@_) =
                 []
             (_lhsOdeclaredVars@_) =
                 []
@@ -1179,16 +1395,20 @@ sem_Judgements_Nil  =
                 []
             (_lhsOself@_) =
                 _self
-        in  ( _lhsOallVariables,_lhsOdeclaredVars,_lhsOpremiseAttrs,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOusedVars)
+            (_lhsOunique@_) =
+                _lhsIunique
+        in  ( _lhsOallVariables,_lhsOcset,_lhsOdeclaredVars,_lhsOpremiseAttrs,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOunique,_lhsOusedVars)
 -- Term --------------------------------------------------------
 -- semantic domain
 type T_Term = (AGDatas) ->
-              (ArgTypesMap) ->
+              (AltArgTypesMap) ->
               (FunctionEnvironment) ->
               (JudgementsMap) ->
               ([String]) ->
               (String) ->
-              ( ([String]),(Term),(StaticMessages),(StaticMessages))
+              ([(String, Int)]) ->
+              (Int) ->
+              ( ([String]),(CSet),(Term),(StaticMessages),(StaticMessages),(Tp),(Int))
 -- cata
 sem_Term :: (Term) ->
             (T_Term)
@@ -1203,32 +1423,52 @@ sem_Term_TermApp :: (String) ->
                     (T_Term)
 sem_Term_TermApp (function_) (arguments_) =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
       _lhsIfunctions
       _lhsIjudgementsMap
       _lhsInts
-      _lhsIrulename ->
+      _lhsIrulename
+      _lhsIstrmap
+      _lhsIunique ->
         let _lhsOallVariables :: ([String])
+            _lhsOcset :: (CSet)
             _lhsOself :: (Term)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOtp :: (Tp)
+            _lhsOunique :: (Int)
             _argumentsIallVariables :: ([String])
+            _argumentsIcset :: (CSet)
             _argumentsIself :: (Terms)
             _argumentsIstaticErrors :: (StaticMessages)
             _argumentsIstaticWarnings :: (StaticMessages)
+            _argumentsItps :: (Tps)
+            _argumentsIunique :: (Int)
             _argumentsOagdatas :: (AGDatas)
-            _argumentsOargTypesMap :: (ArgTypesMap)
+            _argumentsOaltArgTypesMap :: (AltArgTypesMap)
             _argumentsOfunctions :: (FunctionEnvironment)
             _argumentsOjudgementsMap :: (JudgementsMap)
             _argumentsOnts :: ([String])
             _argumentsOrulename :: (String)
-            ( _argumentsIallVariables,_argumentsIself,_argumentsIstaticErrors,_argumentsIstaticWarnings) =
-                (arguments_ (_argumentsOagdatas) (_argumentsOargTypesMap) (_argumentsOfunctions) (_argumentsOjudgementsMap) (_argumentsOnts) (_argumentsOrulename))
+            _argumentsOstrmap :: ([(String, Int)])
+            _argumentsOunique :: (Int)
+            ( _argumentsIallVariables,_argumentsIcset,_argumentsIself,_argumentsIstaticErrors,_argumentsIstaticWarnings,_argumentsItps,_argumentsIunique) =
+                (arguments_ (_argumentsOagdatas) (_argumentsOaltArgTypesMap) (_argumentsOfunctions) (_argumentsOjudgementsMap) (_argumentsOnts) (_argumentsOrulename) (_argumentsOstrmap) (_argumentsOunique))
             (_lhsOstaticErrors@_) =
                 [ FunctionNotDefined _lhsIrulename function_
                 | function_ `notElem` keysFM _lhsIfunctions
                 ] ++
                 _argumentsIstaticErrors
+            (_argumentsOunique@_) =
+                _lhsIunique + 1
+            (_lhsOcset@_) =
+                (SumRight $ Instantiate
+                   (foldr (.->.) (TVar _lhsIunique) _argumentsItps)
+                   (SigmaScheme $ lookupWithDefaultFM _lhsIfunctions (error "unknown function") function_)
+                   ("apply " ++ function_ ++ " in " ++ _lhsIrulename))
+                    : _argumentsIcset
+            (_lhsOtp@_) =
+                TVar _lhsIunique
             (_lhsOallVariables@_) =
                 _argumentsIallVariables
             (_lhsOstaticWarnings@_) =
@@ -1237,10 +1477,12 @@ sem_Term_TermApp (function_) (arguments_) =
                 TermApp function_ _argumentsIself
             (_lhsOself@_) =
                 _self
+            (_lhsOunique@_) =
+                _argumentsIunique
             (_argumentsOagdatas@_) =
                 _lhsIagdatas
-            (_argumentsOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_argumentsOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_argumentsOfunctions@_) =
                 _lhsIfunctions
             (_argumentsOjudgementsMap@_) =
@@ -1249,21 +1491,32 @@ sem_Term_TermApp (function_) (arguments_) =
                 _lhsInts
             (_argumentsOrulename@_) =
                 _lhsIrulename
-        in  ( _lhsOallVariables,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
+            (_argumentsOstrmap@_) =
+                _lhsIstrmap
+        in  ( _lhsOallVariables,_lhsOcset,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOtp,_lhsOunique)
 sem_Term_TermString :: (String) ->
                        (T_Term)
 sem_Term_TermString (string_) =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
       _lhsIfunctions
       _lhsIjudgementsMap
       _lhsInts
-      _lhsIrulename ->
+      _lhsIrulename
+      _lhsIstrmap
+      _lhsIunique ->
         let _lhsOallVariables :: ([String])
+            _lhsOcset :: (CSet)
             _lhsOself :: (Term)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOtp :: (Tp)
+            _lhsOunique :: (Int)
             (_lhsOallVariables@_) =
+                []
+            (_lhsOtp@_) =
+                TCon "String"
+            (_lhsOcset@_) =
                 []
             (_lhsOstaticErrors@_) =
                 []
@@ -1273,22 +1526,33 @@ sem_Term_TermString (string_) =
                 TermString string_
             (_lhsOself@_) =
                 _self
-        in  ( _lhsOallVariables,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
+            (_lhsOunique@_) =
+                _lhsIunique
+        in  ( _lhsOallVariables,_lhsOcset,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOtp,_lhsOunique)
 sem_Term_TermVar :: (String) ->
                     (T_Term)
 sem_Term_TermVar (variable_) =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
       _lhsIfunctions
       _lhsIjudgementsMap
       _lhsInts
-      _lhsIrulename ->
+      _lhsIrulename
+      _lhsIstrmap
+      _lhsIunique ->
         let _lhsOallVariables :: ([String])
+            _lhsOcset :: (CSet)
             _lhsOself :: (Term)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOtp :: (Tp)
+            _lhsOunique :: (Int)
             (_lhsOallVariables@_) =
                 [variable_]
+            (_lhsOtp@_) =
+                TVar (variable_ ? _lhsIstrmap)
+            (_lhsOcset@_) =
+                []
             (_lhsOstaticErrors@_) =
                 []
             (_lhsOstaticWarnings@_) =
@@ -1297,16 +1561,20 @@ sem_Term_TermVar (variable_) =
                 TermVar variable_
             (_lhsOself@_) =
                 _self
-        in  ( _lhsOallVariables,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
+            (_lhsOunique@_) =
+                _lhsIunique
+        in  ( _lhsOallVariables,_lhsOcset,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOtp,_lhsOunique)
 -- Terms -------------------------------------------------------
 -- semantic domain
 type T_Terms = (AGDatas) ->
-               (ArgTypesMap) ->
+               (AltArgTypesMap) ->
                (FunctionEnvironment) ->
                (JudgementsMap) ->
                ([String]) ->
                (String) ->
-               ( ([String]),(Terms),(StaticMessages),(StaticMessages))
+               ([(String, Int)]) ->
+               (Int) ->
+               ( ([String]),(CSet),(Terms),(StaticMessages),(StaticMessages),(Tps),(Int))
 -- cata
 sem_Terms :: (Terms) ->
              (T_Terms)
@@ -1317,41 +1585,60 @@ sem_Terms_Cons :: (T_Term) ->
                   (T_Terms)
 sem_Terms_Cons (hd_) (tl_) =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
       _lhsIfunctions
       _lhsIjudgementsMap
       _lhsInts
-      _lhsIrulename ->
+      _lhsIrulename
+      _lhsIstrmap
+      _lhsIunique ->
         let _lhsOallVariables :: ([String])
+            _lhsOcset :: (CSet)
             _lhsOself :: (Terms)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOtps :: (Tps)
+            _lhsOunique :: (Int)
             _hdIallVariables :: ([String])
+            _hdIcset :: (CSet)
             _hdIself :: (Term)
             _hdIstaticErrors :: (StaticMessages)
             _hdIstaticWarnings :: (StaticMessages)
+            _hdItp :: (Tp)
+            _hdIunique :: (Int)
             _hdOagdatas :: (AGDatas)
-            _hdOargTypesMap :: (ArgTypesMap)
+            _hdOaltArgTypesMap :: (AltArgTypesMap)
             _hdOfunctions :: (FunctionEnvironment)
             _hdOjudgementsMap :: (JudgementsMap)
             _hdOnts :: ([String])
             _hdOrulename :: (String)
+            _hdOstrmap :: ([(String, Int)])
+            _hdOunique :: (Int)
             _tlIallVariables :: ([String])
+            _tlIcset :: (CSet)
             _tlIself :: (Terms)
             _tlIstaticErrors :: (StaticMessages)
             _tlIstaticWarnings :: (StaticMessages)
+            _tlItps :: (Tps)
+            _tlIunique :: (Int)
             _tlOagdatas :: (AGDatas)
-            _tlOargTypesMap :: (ArgTypesMap)
+            _tlOaltArgTypesMap :: (AltArgTypesMap)
             _tlOfunctions :: (FunctionEnvironment)
             _tlOjudgementsMap :: (JudgementsMap)
             _tlOnts :: ([String])
             _tlOrulename :: (String)
-            ( _hdIallVariables,_hdIself,_hdIstaticErrors,_hdIstaticWarnings) =
-                (hd_ (_hdOagdatas) (_hdOargTypesMap) (_hdOfunctions) (_hdOjudgementsMap) (_hdOnts) (_hdOrulename))
-            ( _tlIallVariables,_tlIself,_tlIstaticErrors,_tlIstaticWarnings) =
-                (tl_ (_tlOagdatas) (_tlOargTypesMap) (_tlOfunctions) (_tlOjudgementsMap) (_tlOnts) (_tlOrulename))
+            _tlOstrmap :: ([(String, Int)])
+            _tlOunique :: (Int)
+            ( _hdIallVariables,_hdIcset,_hdIself,_hdIstaticErrors,_hdIstaticWarnings,_hdItp,_hdIunique) =
+                (hd_ (_hdOagdatas) (_hdOaltArgTypesMap) (_hdOfunctions) (_hdOjudgementsMap) (_hdOnts) (_hdOrulename) (_hdOstrmap) (_hdOunique))
+            ( _tlIallVariables,_tlIcset,_tlIself,_tlIstaticErrors,_tlIstaticWarnings,_tlItps,_tlIunique) =
+                (tl_ (_tlOagdatas) (_tlOaltArgTypesMap) (_tlOfunctions) (_tlOjudgementsMap) (_tlOnts) (_tlOrulename) (_tlOstrmap) (_tlOunique))
+            (_lhsOtps@_) =
+                _hdItp : _tlItps
             (_lhsOallVariables@_) =
                 _hdIallVariables  ++  _tlIallVariables
+            (_lhsOcset@_) =
+                _hdIcset  ++  _tlIcset
             (_lhsOstaticErrors@_) =
                 _hdIstaticErrors  ++  _tlIstaticErrors
             (_lhsOstaticWarnings@_) =
@@ -1360,10 +1647,12 @@ sem_Terms_Cons (hd_) (tl_) =
                 (:) _hdIself _tlIself
             (_lhsOself@_) =
                 _self
+            (_lhsOunique@_) =
+                _tlIunique
             (_hdOagdatas@_) =
                 _lhsIagdatas
-            (_hdOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_hdOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_hdOfunctions@_) =
                 _lhsIfunctions
             (_hdOjudgementsMap@_) =
@@ -1372,10 +1661,14 @@ sem_Terms_Cons (hd_) (tl_) =
                 _lhsInts
             (_hdOrulename@_) =
                 _lhsIrulename
+            (_hdOstrmap@_) =
+                _lhsIstrmap
+            (_hdOunique@_) =
+                _lhsIunique
             (_tlOagdatas@_) =
                 _lhsIagdatas
-            (_tlOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_tlOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_tlOfunctions@_) =
                 _lhsIfunctions
             (_tlOjudgementsMap@_) =
@@ -1384,20 +1677,33 @@ sem_Terms_Cons (hd_) (tl_) =
                 _lhsInts
             (_tlOrulename@_) =
                 _lhsIrulename
-        in  ( _lhsOallVariables,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
+            (_tlOstrmap@_) =
+                _lhsIstrmap
+            (_tlOunique@_) =
+                _hdIunique
+        in  ( _lhsOallVariables,_lhsOcset,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOtps,_lhsOunique)
 sem_Terms_Nil :: (T_Terms)
 sem_Terms_Nil  =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
       _lhsIfunctions
       _lhsIjudgementsMap
       _lhsInts
-      _lhsIrulename ->
+      _lhsIrulename
+      _lhsIstrmap
+      _lhsIunique ->
         let _lhsOallVariables :: ([String])
+            _lhsOcset :: (CSet)
             _lhsOself :: (Terms)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOtps :: (Tps)
+            _lhsOunique :: (Int)
+            (_lhsOtps@_) =
+                []
             (_lhsOallVariables@_) =
+                []
+            (_lhsOcset@_) =
                 []
             (_lhsOstaticErrors@_) =
                 []
@@ -1407,15 +1713,18 @@ sem_Terms_Nil  =
                 []
             (_lhsOself@_) =
                 _self
-        in  ( _lhsOallVariables,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
+            (_lhsOunique@_) =
+                _lhsIunique
+        in  ( _lhsOallVariables,_lhsOcset,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOtps,_lhsOunique)
 -- TypeRule ----------------------------------------------------
 -- semantic domain
 type T_TypeRule = (AGDatas) ->
-                  (ArgTypesMap) ->
+                  (AltArgTypesMap) ->
+                  (ClassEnvironment) ->
                   (FunctionEnvironment) ->
                   (JudgementsMap) ->
                   ([String]) ->
-                  ( ([String]),(TypeRule),(StaticMessages),(StaticMessages))
+                  ( (AGSems),([String]),(TypeRule),(StaticMessages),(StaticMessages),(TypeErrors))
 -- cata
 sem_TypeRule :: (TypeRule) ->
                 (T_TypeRule)
@@ -1427,48 +1736,123 @@ sem_TypeRule_TypeRule :: (String) ->
                          (T_TypeRule)
 sem_TypeRule_TypeRule (rulename_) (deduction_) (constraints_) =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
+      _lhsIclassEnvironment
       _lhsIfunctions
       _lhsIjudgementsMap
       _lhsInts ->
-        let _lhsOrulenames :: ([String])
+        let _lhsOagsems :: (AGSems)
+            _lhsOrulenames :: ([String])
             _lhsOself :: (TypeRule)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOtypeErrors :: (TypeErrors)
             _deductionIallVariables :: ([String])
-            _deductionIconclusionAttr :: (ConclusionAttr)
+            _deductionIconclusionAttr :: (Maybe ConclusionAttr)
+            _deductionIcset :: (CSet)
             _deductionIdeclaredVars :: ([String])
             _deductionIpremiseAttrs :: (PremiseAttrs)
             _deductionIself :: (DeductionRule)
             _deductionIstaticErrors :: (StaticMessages)
             _deductionIstaticWarnings :: (StaticMessages)
+            _deductionIunique :: (Int)
             _deductionIusedVars :: ([String])
             _deductionOagdatas :: (AGDatas)
-            _deductionOargTypesMap :: (ArgTypesMap)
+            _deductionOaltArgTypesMap :: (AltArgTypesMap)
             _deductionOfunctions :: (FunctionEnvironment)
             _deductionOjudgementsMap :: (JudgementsMap)
             _deductionOnts :: ([String])
             _deductionOrulename :: (String)
+            _deductionOstrmap :: ([(String, Int)])
+            _deductionOunique :: (Int)
             _constraintsIallVariables :: ([String])
+            _constraintsIcset :: (CSet)
             _constraintsIself :: (ConstraintTerms)
             _constraintsIstaticErrors :: (StaticMessages)
             _constraintsIstaticWarnings :: (StaticMessages)
+            _constraintsItps :: (Tps)
+            _constraintsIunique :: (Int)
             _constraintsOagdatas :: (AGDatas)
-            _constraintsOargTypesMap :: (ArgTypesMap)
+            _constraintsOaltArgTypesMap :: (AltArgTypesMap)
             _constraintsOfunctions :: (FunctionEnvironment)
             _constraintsOjudgementsMap :: (JudgementsMap)
             _constraintsOnts :: ([String])
             _constraintsOrulename :: (String)
-            ( _deductionIallVariables,_deductionIconclusionAttr,_deductionIdeclaredVars,_deductionIpremiseAttrs,_deductionIself,_deductionIstaticErrors,_deductionIstaticWarnings,_deductionIusedVars) =
-                (deduction_ (_deductionOagdatas) (_deductionOargTypesMap) (_deductionOfunctions) (_deductionOjudgementsMap) (_deductionOnts) (_deductionOrulename))
-            ( _constraintsIallVariables,_constraintsIself,_constraintsIstaticErrors,_constraintsIstaticWarnings) =
-                (constraints_ (_constraintsOagdatas) (_constraintsOargTypesMap) (_constraintsOfunctions) (_constraintsOjudgementsMap) (_constraintsOnts) (_constraintsOrulename))
+            _constraintsOstrmap :: ([(String, Int)])
+            _constraintsOunique :: (Int)
+            ( _deductionIallVariables,_deductionIconclusionAttr,_deductionIcset,_deductionIdeclaredVars,_deductionIpremiseAttrs,_deductionIself,_deductionIstaticErrors,_deductionIstaticWarnings,_deductionIunique,_deductionIusedVars) =
+                (deduction_ (_deductionOagdatas) (_deductionOaltArgTypesMap) (_deductionOfunctions) (_deductionOjudgementsMap) (_deductionOnts) (_deductionOrulename) (_deductionOstrmap) (_deductionOunique))
+            ( _constraintsIallVariables,_constraintsIcset,_constraintsIself,_constraintsIstaticErrors,_constraintsIstaticWarnings,_constraintsItps,_constraintsIunique) =
+                (constraints_ (_constraintsOagdatas) (_constraintsOaltArgTypesMap) (_constraintsOfunctions) (_constraintsOjudgementsMap) (_constraintsOnts) (_constraintsOrulename) (_constraintsOstrmap) (_constraintsOunique))
             (_constraintsOrulename@_) =
                 rulename_
             (_deductionOrulename@_) =
                 rulename_
             (_lhsOrulenames@_) =
                 [rulename_]
+            (_lhsOtypeErrors@_) =
+                errorsFromResult _solveResult
+            (_sub@_) =
+                substitutionFromResult _solveResult
+            (_solveResult@_) =
+                runGreedy _lhsIclassEnvironment noOrderedTypeSynonyms _constraintsIunique _cset
+                   :: SolveResult String Predicates ()
+            (_cset@_) =
+                [ SumLeft $ Equality tp (TCon "Constraint") "(Constraint)"
+                | tp <- _constraintsItps
+                ] ++
+                _deductionIcset ++ _constraintsIcset
+            (_nubVars@_) =
+                nub (_deductionIallVariables ++ _constraintsIallVariables)
+            (_deductionOunique@_) =
+                length _nubVars
+            (_strmap@_) =
+                zip _nubVars [0..]
+            (_semVars@_) =
+                AGSemDecl _firstChild "unique" ("@lhs.unique + " ++ show (length _newvarmap)) :
+                [ AGSemDecl "loc" fresh ("makeFresh (@lhs.unique + " ++ show i ++ ") :: " ++ show inferred)
+                | ((original, fresh), i) <- zip _newvarmap [0..]
+                , let inferred = _sub |-> TVar (original ? _strmap)
+                ]
+            (_semGamma@_) =
+                [ AGSemDecl (cn ? _metamap) "gamma" (gamma _varmap)
+                | PremiseAttr cn gamma _ <- _deductionIpremiseAttrs
+                ]
+            (_semTp@_) =
+                AGSemDecl "lhs" "tp" (metaVarAL _deductionIconclusionAttr _varmap)
+            (_semCSet@_) =
+                AGSemDecl "lhs" "cset"
+                   (concat $ intersperse " ++ " $
+                      [ "@"++s++".cset" | (s, tp) <- _dataChildren, tp == "Expr" ] ++
+                      [ bracks (concat $ intersperse ", " $ map (showConstraintTerm _varmap) _constraintsIself) ]
+                   )
+            (_newvarmap@_) =
+                [ (s, "freshVar"++show i) | (s, i) <- zip _freshVars [0..] ]
+            (_metamap@_) =
+                zip (conInhVars _deductionIconclusionAttr) (map fst _dataChildren)
+            (_varmap@_) =
+                (conGamma _deductionIconclusionAttr, "@lhs.gamma") :
+                [ (x, '@':y) | (x, y) <- _newvarmap ] ++
+                [ (x, '@':y) | (x, y) <- _metamap ] ++
+                [ (y, '@':(x ? _metamap)++".tp") | PremiseAttr x _ y <- _deductionIpremiseAttrs ]
+            (_freshVars@_) =
+                _allVars \\ ( conGamma _deductionIconclusionAttr
+                            : conInhVars _deductionIconclusionAttr
+                            ++ map preMetaType _deductionIpremiseAttrs)
+            (_allVars@_) =
+                nub (_deductionIallVariables ++ _constraintsIallVariables)
+            (_lhsOagsems@_) =
+                [ AGSem _dataNT (conAlternative _deductionIconclusionAttr) (_semCSet : _semTp : _semGamma ++ _semVars) ]
+            (_firstChild@_) =
+                case filter ((=="Expr") . snd) _dataChildren of
+                   []      -> "lhs"
+                   (x,_):_ -> x
+            ((_dataNT@_,_dataChildren@_)) =
+                case [ (nt, cs)
+                     | AGData nt alt cs <- _lhsIagdatas
+                     , alt == conAlternative _deductionIconclusionAttr ] of
+                   [pair] -> pair
+                   _ -> error "could not find the corresponding data"
             (_lhsOstaticErrors@_) =
                 _deductionIstaticErrors  ++  _constraintsIstaticErrors
             (_lhsOstaticWarnings@_) =
@@ -1479,33 +1863,40 @@ sem_TypeRule_TypeRule (rulename_) (deduction_) (constraints_) =
                 _self
             (_deductionOagdatas@_) =
                 _lhsIagdatas
-            (_deductionOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_deductionOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_deductionOfunctions@_) =
                 _lhsIfunctions
             (_deductionOjudgementsMap@_) =
                 _lhsIjudgementsMap
             (_deductionOnts@_) =
                 _lhsInts
+            (_deductionOstrmap@_) =
+                _strmap
             (_constraintsOagdatas@_) =
                 _lhsIagdatas
-            (_constraintsOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_constraintsOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
             (_constraintsOfunctions@_) =
                 _lhsIfunctions
             (_constraintsOjudgementsMap@_) =
                 _lhsIjudgementsMap
             (_constraintsOnts@_) =
                 _lhsInts
-        in  ( _lhsOrulenames,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
+            (_constraintsOstrmap@_) =
+                _strmap
+            (_constraintsOunique@_) =
+                _deductionIunique
+        in  ( _lhsOagsems,_lhsOrulenames,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOtypeErrors)
 -- TypeRules ---------------------------------------------------
 -- semantic domain
 type T_TypeRules = (AGDatas) ->
-                   (ArgTypesMap) ->
+                   (AltArgTypesMap) ->
+                   (ClassEnvironment) ->
                    (FunctionEnvironment) ->
                    (JudgementsMap) ->
                    ([String]) ->
-                   ( ([String]),(TypeRules),(StaticMessages),(StaticMessages))
+                   ( (AGSems),([String]),(TypeRules),(StaticMessages),(StaticMessages),(TypeErrors))
 -- cata
 sem_TypeRules :: (TypeRules) ->
                  (T_TypeRules)
@@ -1516,50 +1907,65 @@ sem_TypeRules_Cons :: (T_TypeRule) ->
                       (T_TypeRules)
 sem_TypeRules_Cons (hd_) (tl_) =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
+      _lhsIclassEnvironment
       _lhsIfunctions
       _lhsIjudgementsMap
       _lhsInts ->
-        let _lhsOrulenames :: ([String])
+        let _lhsOagsems :: (AGSems)
+            _lhsOrulenames :: ([String])
             _lhsOself :: (TypeRules)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOtypeErrors :: (TypeErrors)
+            _hdIagsems :: (AGSems)
             _hdIrulenames :: ([String])
             _hdIself :: (TypeRule)
             _hdIstaticErrors :: (StaticMessages)
             _hdIstaticWarnings :: (StaticMessages)
+            _hdItypeErrors :: (TypeErrors)
             _hdOagdatas :: (AGDatas)
-            _hdOargTypesMap :: (ArgTypesMap)
+            _hdOaltArgTypesMap :: (AltArgTypesMap)
+            _hdOclassEnvironment :: (ClassEnvironment)
             _hdOfunctions :: (FunctionEnvironment)
             _hdOjudgementsMap :: (JudgementsMap)
             _hdOnts :: ([String])
+            _tlIagsems :: (AGSems)
             _tlIrulenames :: ([String])
             _tlIself :: (TypeRules)
             _tlIstaticErrors :: (StaticMessages)
             _tlIstaticWarnings :: (StaticMessages)
+            _tlItypeErrors :: (TypeErrors)
             _tlOagdatas :: (AGDatas)
-            _tlOargTypesMap :: (ArgTypesMap)
+            _tlOaltArgTypesMap :: (AltArgTypesMap)
+            _tlOclassEnvironment :: (ClassEnvironment)
             _tlOfunctions :: (FunctionEnvironment)
             _tlOjudgementsMap :: (JudgementsMap)
             _tlOnts :: ([String])
-            ( _hdIrulenames,_hdIself,_hdIstaticErrors,_hdIstaticWarnings) =
-                (hd_ (_hdOagdatas) (_hdOargTypesMap) (_hdOfunctions) (_hdOjudgementsMap) (_hdOnts))
-            ( _tlIrulenames,_tlIself,_tlIstaticErrors,_tlIstaticWarnings) =
-                (tl_ (_tlOagdatas) (_tlOargTypesMap) (_tlOfunctions) (_tlOjudgementsMap) (_tlOnts))
+            ( _hdIagsems,_hdIrulenames,_hdIself,_hdIstaticErrors,_hdIstaticWarnings,_hdItypeErrors) =
+                (hd_ (_hdOagdatas) (_hdOaltArgTypesMap) (_hdOclassEnvironment) (_hdOfunctions) (_hdOjudgementsMap) (_hdOnts))
+            ( _tlIagsems,_tlIrulenames,_tlIself,_tlIstaticErrors,_tlIstaticWarnings,_tlItypeErrors) =
+                (tl_ (_tlOagdatas) (_tlOaltArgTypesMap) (_tlOclassEnvironment) (_tlOfunctions) (_tlOjudgementsMap) (_tlOnts))
+            (_lhsOagsems@_) =
+                _hdIagsems  ++  _tlIagsems
             (_lhsOrulenames@_) =
                 _hdIrulenames  ++  _tlIrulenames
             (_lhsOstaticErrors@_) =
                 _hdIstaticErrors  ++  _tlIstaticErrors
             (_lhsOstaticWarnings@_) =
                 _hdIstaticWarnings  ++  _tlIstaticWarnings
+            (_lhsOtypeErrors@_) =
+                _hdItypeErrors  ++  _tlItypeErrors
             (_self@_) =
                 (:) _hdIself _tlIself
             (_lhsOself@_) =
                 _self
             (_hdOagdatas@_) =
                 _lhsIagdatas
-            (_hdOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_hdOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
+            (_hdOclassEnvironment@_) =
+                _lhsIclassEnvironment
             (_hdOfunctions@_) =
                 _lhsIfunctions
             (_hdOjudgementsMap@_) =
@@ -1568,42 +1974,51 @@ sem_TypeRules_Cons (hd_) (tl_) =
                 _lhsInts
             (_tlOagdatas@_) =
                 _lhsIagdatas
-            (_tlOargTypesMap@_) =
-                _lhsIargTypesMap
+            (_tlOaltArgTypesMap@_) =
+                _lhsIaltArgTypesMap
+            (_tlOclassEnvironment@_) =
+                _lhsIclassEnvironment
             (_tlOfunctions@_) =
                 _lhsIfunctions
             (_tlOjudgementsMap@_) =
                 _lhsIjudgementsMap
             (_tlOnts@_) =
                 _lhsInts
-        in  ( _lhsOrulenames,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
+        in  ( _lhsOagsems,_lhsOrulenames,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOtypeErrors)
 sem_TypeRules_Nil :: (T_TypeRules)
 sem_TypeRules_Nil  =
     \ _lhsIagdatas
-      _lhsIargTypesMap
+      _lhsIaltArgTypesMap
+      _lhsIclassEnvironment
       _lhsIfunctions
       _lhsIjudgementsMap
       _lhsInts ->
-        let _lhsOrulenames :: ([String])
+        let _lhsOagsems :: (AGSems)
+            _lhsOrulenames :: ([String])
             _lhsOself :: (TypeRules)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
+            _lhsOtypeErrors :: (TypeErrors)
+            (_lhsOagsems@_) =
+                []
             (_lhsOrulenames@_) =
                 []
             (_lhsOstaticErrors@_) =
                 []
             (_lhsOstaticWarnings@_) =
                 []
+            (_lhsOtypeErrors@_) =
+                []
             (_self@_) =
                 []
             (_lhsOself@_) =
                 _self
-        in  ( _lhsOrulenames,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
+        in  ( _lhsOagsems,_lhsOrulenames,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings,_lhsOtypeErrors)
 -- TypeSystem --------------------------------------------------
 -- semantic domain
 type T_TypeSystem = (ClassEnvironment) ->
                     (FunctionEnvironment) ->
-                    ( (TypeSystem),(StaticMessages),(StaticMessages))
+                    ( (AGCode),(TypeSystem),(StaticMessages),(StaticMessages))
 -- cata
 sem_TypeSystem :: (TypeSystem) ->
                   (T_TypeSystem)
@@ -1616,32 +2031,36 @@ sem_TypeSystem_TypeSystem :: (T_AGDatas) ->
 sem_TypeSystem_TypeSystem (agDATAs_) (judgementdecls_) (typerules_) =
     \ _lhsIclassEnvironment
       _lhsIfunctions ->
-        let _lhsOself :: (TypeSystem)
+        let _lhsOagcode :: (AGCode)
+            _lhsOself :: (TypeSystem)
             _lhsOstaticErrors :: (StaticMessages)
             _lhsOstaticWarnings :: (StaticMessages)
-            _agDATAsIaltargtypes :: ([(String, [String])])
-            _agDATAsIaltnts :: ([(String, String)])
-            _agDATAsIalttypes :: ([(String, TpScheme)])
+            _agDATAsIaltArgTypes :: (AltArgTypesAL)
+            _agDATAsIaltNts :: (AltNts)
+            _agDATAsIaltTypes :: (AltTypesAL)
             _agDATAsIself :: (AGDatas)
             _judgementdeclsIjudgements :: (JudgementsAL)
             _judgementdeclsIself :: (JudgementDecls)
             _judgementdeclsIstaticErrors :: (StaticMessages)
             _judgementdeclsOtypes :: ([String])
+            _typerulesIagsems :: (AGSems)
             _typerulesIrulenames :: ([String])
             _typerulesIself :: (TypeRules)
             _typerulesIstaticErrors :: (StaticMessages)
             _typerulesIstaticWarnings :: (StaticMessages)
+            _typerulesItypeErrors :: (TypeErrors)
             _typerulesOagdatas :: (AGDatas)
-            _typerulesOargTypesMap :: (ArgTypesMap)
+            _typerulesOaltArgTypesMap :: (AltArgTypesMap)
+            _typerulesOclassEnvironment :: (ClassEnvironment)
             _typerulesOfunctions :: (FunctionEnvironment)
             _typerulesOjudgementsMap :: (JudgementsMap)
             _typerulesOnts :: ([String])
-            ( _agDATAsIaltargtypes,_agDATAsIaltnts,_agDATAsIalttypes,_agDATAsIself) =
+            ( _agDATAsIaltArgTypes,_agDATAsIaltNts,_agDATAsIaltTypes,_agDATAsIself) =
                 (agDATAs_ )
             ( _judgementdeclsIjudgements,_judgementdeclsIself,_judgementdeclsIstaticErrors) =
                 (judgementdecls_ (_judgementdeclsOtypes))
-            ( _typerulesIrulenames,_typerulesIself,_typerulesIstaticErrors,_typerulesIstaticWarnings) =
-                (typerules_ (_typerulesOagdatas) (_typerulesOargTypesMap) (_typerulesOfunctions) (_typerulesOjudgementsMap) (_typerulesOnts))
+            ( _typerulesIagsems,_typerulesIrulenames,_typerulesIself,_typerulesIstaticErrors,_typerulesIstaticWarnings,_typerulesItypeErrors) =
+                (typerules_ (_typerulesOagdatas) (_typerulesOaltArgTypesMap) (_typerulesOclassEnvironment) (_typerulesOfunctions) (_typerulesOjudgementsMap) (_typerulesOnts))
             (_errorsAfterWhichTyperulesAreSkipped@_) =
                 _ntNotDefined ++ _ntMissesJudgement ++ _dupAlternative ++ _judgementdeclsIstaticErrors
             (_ntMissesJudgement@_) =
@@ -1661,33 +2080,39 @@ sem_TypeSystem_TypeSystem (agDATAs_) (judgementdecls_) (typerules_) =
             (_judgementsnts@_) =
                 nub (domainAL _judgementdeclsIjudgements)
             (_agnts@_) =
-                nub (rangeAL _agDATAsIaltnts)
+                nub (rangeAL _agDATAsIaltNts)
             (_alternatives@_) =
-                nub (domainAL _agDATAsIaltnts)
+                nub (domainAL _agDATAsIaltNts)
             (_typerulesOnts@_) =
                 _agnts
             (_typerulesOjudgementsMap@_) =
-                listToFM (joinAL _agDATAsIaltnts _judgementdeclsIjudgements)
-            (_typerulesOargTypesMap@_) =
-                listToFM _agDATAsIaltargtypes
+                listToFM (joinAL _agDATAsIaltNts _judgementdeclsIjudgements)
+            (_typerulesOaltArgTypesMap@_) =
+                listToFM _agDATAsIaltArgTypes
             (_judgementdeclsOtypes@_) =
-                nub (map constantsInType (values _allfunctions))
+                nub (concat (map (constantsInType . unqualify . unquantify) (values _allfunctions)))
             (_typerulesOfunctions@_) =
                 _allfunctions
             (_allfunctions@_) =
-                _lhsIfunctions `plusFM` listToFM _agDATAsIalttypes
+                _lhsIfunctions `plusFM` listToFM _agDATAsIaltTypes
             (_typerulesOagdatas@_) =
                 _agDATAsIself
             (_lhsOstaticErrors@_) =
                 _errorsAfterWhichTyperulesAreSkipped ++
                 _dupRuleName ++
                 if null _errorsAfterWhichTyperulesAreSkipped then _typerulesIstaticErrors else []
+            (_lhsOagcode@_) =
+                AGCode _agDATAsIself
+                       (implicitAttrs ++ explicitAttrs)
+                       (_typerulesIagsems)
             (_self@_) =
                 TypeSystem _agDATAsIself _judgementdeclsIself _typerulesIself
             (_lhsOself@_) =
                 _self
             (_lhsOstaticWarnings@_) =
                 _typerulesIstaticWarnings
-        in  ( _lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
+            (_typerulesOclassEnvironment@_) =
+                _lhsIclassEnvironment
+        in  ( _lhsOagcode,_lhsOself,_lhsOstaticErrors,_lhsOstaticWarnings)
 
 

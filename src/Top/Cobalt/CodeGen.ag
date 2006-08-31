@@ -26,20 +26,20 @@ SEM TypeRule
        lhs.agsems = [ AGSem @dataNT (conAlternative @deduction.conclusionAttr) (@semCSet : @semTp : @semGamma ++ @semVars) ]
        loc.allVars = nub (@deduction.allVariables ++ @constraints.allVariables)
        loc.freshVars = @allVars \\ ( conGamma @deduction.conclusionAttr 
-                                   : conMetas @deduction.conclusionAttr 
-                                   ++ map preType @deduction.premiseAttrs)
+                                   : conInhVars @deduction.conclusionAttr 
+                                   ++ map preMetaType @deduction.premiseAttrs)
        loc.varmap  = (conGamma @deduction.conclusionAttr, "@lhs.gamma") :
                      [ (x, '@':y) | (x, y) <- @newvarmap ] ++
                      [ (x, '@':y) | (x, y) <- @metamap ] ++
                      [ (y, '@':(x ? @metamap)++".tp") | PremiseAttr x _ y <- @deduction.premiseAttrs ]
-       loc.metamap = zip (conMetas @deduction.conclusionAttr) (map fst @dataChildren)
+       loc.metamap = zip (conInhVars @deduction.conclusionAttr) (map fst @dataChildren)
        loc.newvarmap = [ (s, "freshVar"++show i) | (s, i) <- zip @freshVars [0..] ]
        loc.semCSet = AGSemDecl "lhs" "cset"
                         (concat $ intersperse " ++ " $ 
                            [ "@"++s++".cset" | (s, tp) <- @dataChildren, tp == "Expr" ] ++ 
                            [ bracks (concat $ intersperse ", " $ map (showConstraintTerm @varmap) @constraints.self) ]
                         )
-       loc.semTp = AGSemDecl "lhs" "tp" (conType @deduction.conclusionAttr @varmap)
+       loc.semTp = AGSemDecl "lhs" "tp" (metaVarAL @deduction.conclusionAttr @varmap)
        loc.semGamma = [ AGSemDecl (cn ? @metamap) "gamma" (gamma @varmap)
                       | PremiseAttr cn gamma _ <- @deduction.premiseAttrs
                       ]

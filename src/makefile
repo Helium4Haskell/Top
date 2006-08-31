@@ -11,7 +11,7 @@ all: topsolver cobalt
 # Compilers and Tools
 #-----------------------------------------------------------------------
 
-AG = ag
+AG = /Volumes/Apps/uuagc-visage/dist/build/src/uuagc
 HC = ghc
 HADDOCK = haddock
 

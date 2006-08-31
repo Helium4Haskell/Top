@@ -1,5 +1,5 @@
 -- compile with:
---    ag -dm --module=Top.TypeRules.Syntax Syntax.ag
+--    ag -dm --module=Top.Cobalt.Syntax Syntax.ag
 
 imports {
 import Top.Cobalt.AGSyntax
