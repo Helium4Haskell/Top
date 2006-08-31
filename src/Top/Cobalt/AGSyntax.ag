@@ -1,5 +1,5 @@
 -- compile with:
---    ag -dm --module=Top.TypeRules.AGSyntax AGSyntax.ag
+--    ag -dm --module=Top.Cobalt.AGSyntax AGSyntax.ag
 
 DATA AGCode
    | AGCode
