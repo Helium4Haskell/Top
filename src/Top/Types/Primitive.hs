@@ -167,21 +167,28 @@ isIOType _                    = False
 -- Show and Read instances
 
 instance Show Tp where
-   show tp = case leftSpine tp of 
-       (TCon "->",[t1,t2]) -> rec (<1) t1 ++ " -> " ++ rec (const False) t2
-       (TVar i   ,[]     ) -> 'v' : show i
-       (TCon s   ,[]     ) -> s
-       (TCon "[]",[t1]   ) -> "[" ++ rec (const False) t1 ++ "]"
-       (TCon s   ,ts     ) | isTupleConstructor s -> let ts'  = map (rec (const False)) ts
-                                                         f [] = ""
-                                                         f xs = foldr1 (\x y -> x++", "++y) xs
-                                                     in "(" ++ f ts' ++ ")"
-       (t,ts) -> unwords (map (rec (<2)) (t:ts))
-
-       where rec p t       = parIf (p (priorityOfType t)) (show t) 
-             parIf True  s = "("++s++")"
-             parIf False s = s
-
+   -- parenthesis are needed when the type must be shown as a part of 
+   -- some other data type
+   showsPrec prio tp rest = 
+      parIf (prio > 0) (showTp tp) ++ rest
+   
+    where
+      showTp tp = 
+         case leftSpine tp of
+            (TCon "->",[t1,t2]) -> rec (<1) t1 ++ " -> " ++ rec (const False) t2
+            (TVar i   ,[]     ) -> 'v' : show i
+            (TCon s   ,[]     ) -> s
+            (TCon "[]",[t1]   ) -> "[" ++ rec (const False) t1 ++ "]"
+            (TCon s   ,ts     ) | isTupleConstructor s -> let ts'  = map (rec (const False)) ts
+                                                              f [] = ""
+                                                              f xs = foldr1 (\x y -> x++", "++y) xs
+                                                          in "(" ++ f ts' ++ ")"
+            (t,ts) -> unwords (map (rec (<2)) (t:ts))
+      
+      rec p t = parIf (p (priorityOfType t)) (showTp t) 
+      parIf True  s = "("++s++")"
+      parIf False s = s
+      
 instance Read Tp where 
    readsPrec _ = tpParser
 
