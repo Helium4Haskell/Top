@@ -23,7 +23,7 @@ import Top.Interface.Qualification hiding (contextReduction)
 import Top.Interface.TypeInference
 import Top.Solver
 import Top.Types 
-import Utils (internalError)
+import Utils (internalError, fst3, snd3)
 
 type ErrorInfo info = ([EdgeId], info)
 
@@ -42,6 +42,22 @@ applyHeuristics heuristics =
       do errorPath <- allErrorPaths
          rec (removeSomeDuplicates info2ToEdgeNr errorPath)
 
+-- These functions are used to describe for a change due to a heuristic how it affected the error path
+-- showing whether the set of constraints shrunk and if so, whether it has now become a singleton.
+tag :: String -> String
+tag s = "~" ++ s ++ "~"
+
+shrunkAndFinalMsg :: [a] -> [a] -> String
+shrunkAndFinalMsg old new =
+  if length new < length old then
+    if length new == 1 then
+      tag "shrunk" ++ " " ++ tag "final"
+    else
+      tag "shrunk"
+  else
+    tag "unmodified"
+
+
 evalHeuristics :: HasTypeGraph m info => Path (EdgeId, info) -> [Heuristic info] -> m (ErrorInfo info)
 evalHeuristics path heuristics =
    rec edgesBegin heuristics
@@ -58,28 +74,33 @@ evalHeuristics path heuristics =
              
    rec edges (Heuristic heuristic:rest) = 
       case heuristic of
-      
+
          Filter name f -> 
-            do edges' <- f edges                
-               logMsg (name ++ " (filter)")
+            do edges' <- f edges
+               logMsg (name ++ " (filter) " ++ shrunkAndFinalMsg edges edges')
                logMsg ("   " ++ showSet [ i | (EdgeId _ _ i, _) <- edges' ])
                rec edges' rest
-        
+
          Voting selectors -> 
             do logMsg ("Voting with "++show (length selectors) ++ " heuristics")
                results <- mapM (evalSelector edges) selectors
-               let (thePrio, listWithBest) = foldr op (minBound, []) (concat results)
-                   op (prio, es, info) best@(i, list) =
+               let successList = [ (getSelectorName s, x) | (s, xs) <- zip selectors results, x <- xs ]
+                   (thePrio, listWithBest) = foldr op (minBound, []) successList
+                   op (selname, (prio, es, info)) best@(i, list) =
                       case compare prio i of
                          LT -> best
-                         EQ -> (i, (head es, info):list)
-                         GT -> (prio, [(head es, info)])
+                         EQ -> (i, (selname, (head es, info)):list)
+                         GT -> (prio, [(selname, (head es, info))])
+                   heuristicNames = map fst listWithBest
+                   remainingEdges = map snd listWithBest
                case listWithBest of 
                   [] -> do logMsg "Unfortunately, none of the heuristics could be applied"
                            rec edges rest
-                  _  -> do logMsg ("\n*** Selected with priority "++show thePrio++": "++showSet (map fst listWithBest)++"\n")
-                           rec listWithBest rest
-               
+                  _  -> do logMsg ("Selected heuristics are " ++ unwords heuristicNames ++ ". "
+                                   ++ shrunkAndFinalMsg edges remainingEdges)  
+                           logMsg ("   selected with priority "++show thePrio++": "++showSet (map fst remainingEdges)++"\n")
+                           rec remainingEdges rest
+
 evalSelector :: (MonadWriter LogEntries m, HasTypeGraph m info) => [(EdgeId, info)] -> Selector m info -> m [(Int, [EdgeId], info)]
 evalSelector edges selector = 
    case selector of
@@ -96,8 +117,8 @@ evalSelector edges selector =
             foldM op [] edges
      
       SelectorList (name, f) ->
-         do logMsg ("- "++name++" (list selector)")
-            result <- f edges
+         do result <- f edges
+            logMsg ("- "++name++" (list selector)")
             case result of 
                Nothing -> return []
                Just (i,_,es,info) -> return [(i,es,info)]

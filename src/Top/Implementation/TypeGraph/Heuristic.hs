@@ -28,7 +28,11 @@ data HasTypeGraph m info => Selector m info
 data HComponent m info 
      = Filter    String ([(EdgeId, info)] -> m [(EdgeId, info)])
      | Voting   [Selector m info]
-          
+
+getSelectorName :: (MonadWriter LogEntries m, HasTypeGraph m info) => Selector m info -> String
+getSelectorName (Selector     (name,_)) = name
+getSelectorName (SelectorList (name,_)) = name
+
 resultsEdgeFilter :: (Eq a, Monad m) => ([a] -> a) -> String -> ((EdgeId,info) -> m a) -> HComponent m info
 resultsEdgeFilter selector description function =
    Filter description $ \es -> 
