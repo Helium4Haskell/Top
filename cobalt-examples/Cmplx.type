@@ -1,0 +1,23 @@
+
+DATA
+  Cmplx
+  | Complex
+      x : String
+      y : Cmplx
+      z : Cmplx
+  | Simple
+      s : String
+                
+JUDGEMENT
+  Gamma, String |- Cmplx : Type, String;
+
+RULE
+
+--------------------------------- [Simple] 
+  G, M |- Simple s : a, s
+
+RULE
+  G, append M "y" |- b : Ty, Sy;
+  G, M |- c : Tz, Sz;
+--------------------------------- [Complex]
+  G, M |- Complex a b c : arrow Ty Tz, append a (append Sy Sz);

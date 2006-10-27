@@ -11,11 +11,12 @@ all: topsolver cobalt
 # Compilers and Tools
 #-----------------------------------------------------------------------
 
-AG = /Volumes/Apps/uuagc-visage/dist/build/src/uuagc
+AG = uuagc
+# AG = /Volumes/Apps/uuagc-visage/dist/build/src/uuagc
 HC = ghc
 HADDOCK = haddock
 
-HC_OPTS = -static -fglasgow-exts -Wall
+HC_OPTS = -static -fglasgow-exts -Wall -package text
 
 DOC_DIR = ../doc
 BIN_DIR = ../bin

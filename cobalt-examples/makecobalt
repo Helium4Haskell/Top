@@ -1,0 +1,4 @@
+echo Recompling cobalt files 
+cd ../src/ && make cobalt && cd ../cobalt-examples
+
+

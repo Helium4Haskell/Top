@@ -1,0 +1,2 @@
+tar cvfz $1 Temp*.hs  Temp*.ag Top/TypeRules/* Example.hs snapshot testexample makeag README *.type
+

@@ -1,12 +1,12 @@
 imports {
-import Top.Constraints.Equality
-import Top.Constraints.Polymorphism
-import Top.Solvers.GreedySolver
-import Top.Solvers.SolveConstraints
-import Top.Constraints.TypeConstraintInfo
-import Top.Constraints.Constraints
-import Top.Qualifiers.TypeClasses
-import Top.States.BasicState (ErrorLabel)
+import Top.Constraint.Equality
+import Top.Constraint.Polymorphism
+import Top.Solver.Greedy
+import Top.Solver
+import Top.Constraint.Information
+import Top.Constraint
+import Top.Implementation.Overloading
+import Top.Implementation.Basic (ErrorLabel)
 import Debug.Trace
 }
 

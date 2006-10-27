@@ -16,14 +16,14 @@ import Data.FiniteMap
 import Top.Cobalt.AGSyntax
 import Top.Cobalt.ShowAG
 
-import Top.Constraints.Equality
-import Top.Constraints.Polymorphism
-import Top.Solvers.GreedySolver
-import Top.Solvers.SolveConstraints
-import Top.Constraints.TypeConstraintInfo
-import Top.Constraints.Constraints
-import Top.Qualifiers.TypeClasses
-import Top.States.BasicState (ErrorLabel)
+import Top.Constraint.Equality
+import Top.Constraint.Polymorphism
+import Top.Solver.Greedy
+import Top.Solver
+import Top.Constraint.Information
+import Top.Constraint
+import Top.Implementation.Overloading
+import Top.Implementation.Basic (ErrorLabel)
 import Debug.Trace
 
 -- Returns the elements in xs which occur more than once.  
@@ -136,43 +136,46 @@ type PremiseAttrs   = [Maybe PremiseAttr]
 data PremiseAttr    = PremiseAttr 
    { preMeta           :: String 
    , preMetaType       :: String
+   , preSynVars        :: [Term]  -- implicitly declared variables from the synthesized section
+   , preInhExprs       :: [Term]  -- all inherited expressions
 --   , declaredInPremise :: [String] -- Variables declared by this construct: the syns in this case
    }
    
 data ConclusionAttr = ConclusionAttr
-   { conAlternative       :: String   -- name of the alternative
-   , metaVarAL            :: VarAL    -- maps each metavar (that has a type referring to an AG datatype) to its type
-   , conInhVars           :: [Term]   -- implicitly declared variables from the inherited attr section
+   { conAlternative       :: String     -- name of the alternative
+   , metaVarAL            :: VarAL      -- maps each metavar (that has a type referring to an AG datatype) to its type
+   , conInhVars           :: [Term]     -- implicitly declared variables from the inherited attr section
+   , conSynExprs          :: [Term]     -- all synthesized expressions
 --   , declaredInConclusion :: [String] -- Variables declared by this construct: the inhs and the meta vars in this case
    }
 
 
 checkPremise :: String -> JudgementsMap -> VarAL -> Judgement -> Escape StaticMessages PremiseAttr
-checkPremise rulename judgementdeclmap metavarAL (Judgement inhs expr syns) = 
+checkPremise rulename judgementdeclmap metavarAL (Judgement inhExprs expr synExprs) = 
    do{ var <- check (matchTermVar expr) [MustBeVar rulename expr]
      ; tp <- check (lookup var metavarAL) [MetaVarNotDefined rulename var]
-     ; (declinhs, declsyns) <- 
+     ; (inhTypes, synTypes) <- 
          check (lookupFM judgementdeclmap var) [NoJudgementForType rulename tp]  -- retrieve info on judgement for this type
-     ; let termVars = filter (isJust . matchTermVar) syns
-     ; continueIf (length declinhs == length inhs) [WrongNumberOfAttributes rulename ("premise " ++ var ++", inhs")] +++
-       continueIf (length declsyns == length syns) [WrongNumberOfAttributes rulename ("premise " ++ var ++ ", syns")] +++
-       continueIf (length termVars == length syns) (map (MustBeVar rulename) (filter (not . isJust . matchTermVar) syns))
-     ; return (PremiseAttr var tp)
+     ; let synVars = filter (isJust . matchTermVar) synExprs
+     ; continueIf (length inhTypes == length inhExprs) [WrongNumberOfAttributes rulename ("premise " ++ var ++", inhs")] +++
+       continueIf (length synTypes == length synExprs) [WrongNumberOfAttributes rulename ("premise " ++ var ++ ", syns")] +++
+       continueIf (length synVars == length synExprs) (map (MustBeVar rulename) (filter (not . isJust . matchTermVar) syns))
+     ; return (PremiseAttr var tp synVars)
      }
 
 checkConclusion :: String -> JudgementsMap -> AltArgTypesMap -> [String] -> Judgement -> Escape StaticMessages ConclusionAttr 
-checkConclusion rulename judgementdeclmap argtypesmap nts (Judgement inhs expr syns) =
+checkConclusion rulename judgementdeclmap argtypesmap nts (Judgement inhExprs expr synExprs) =
    do{ (con, args) <- check (matchSimpleTermApp expr) [MustBeSimpleApp rulename expr]                -- is expr of the form C var1 ... varm ?
-     ; (declinhs, declsyns) <- 
+     ; (inhTypes, synTypes) <- 
          check (lookupFM judgementdeclmap con) [UnknownAlternative rulename con]                                               -- is C known?
      ; argTypes <- check (lookupFM argtypesmap con) [InternalError rulename "while doing lookup for argument type of conclusion"]
                                                                                                                        -- Should not go wrong
-     ; let termVars = filter (isJust . matchTermVar) inhs
-     ; continueIf (length declinhs == length inhs) [WrongNumberOfAttributes rulename "conclusion,inhs"] +++  -- Compare declared and given number of inherited attributes
-       continueIf (length declsyns == length syns) [WrongNumberOfAttributes rulename "conclusion,syns"] +++  -- Compare declared and given number of synthesized attributes
+     ; let inhVars = filter (isJust . matchTermVar) inhExprs
+     ; continueIf (length inhTypes == length inhExprs) [WrongNumberOfAttributes rulename "conclusion, inhs"] +++  -- Compare declared and given number of inherited attributes
+       continueIf (length synTypes == length synExprs) [WrongNumberOfAttributes rulename "conclusion, syns"] +++  -- Compare declared and given number of synthesized attributes
        continueIf (length args == length argTypes) [WrongNumberOfArguments rulename expr] +++  -- Compare declared and given number of arguments to C
-       continueIf (length termVars == length inhs) (map (MustBeVar rulename) (filter (not . isJust . matchTermVar) inhs)) -- All inhs should be simple variables.
-     ; return (ConclusionAttr con (metaFilter nts (zip args argTypes)) termVars)
+       continueIf (length inhVars == length inhExprs) (map (MustBeVar rulename) (filter (not . isJust . matchTermVar) inhExprs)) -- All inhs should be simple variables.
+     ; return (ConclusionAttr con (metaFilter nts (zip args argTypes)) inhExprs synExprs)
      }
 
 -- Helper functions
@@ -203,6 +206,11 @@ matchTermApp _                  = Nothing
 matchSimpleTermApp :: Term -> Maybe (String, [String])
 matchSimpleTermApp (TermApp fun args) = do xs <- mapM matchTermVar args ; return (fun, xs)
 matchSimpleTermApp _                  = Nothing
+
+getTermVariables :: Term -> [String]
+getTermVariables (TermVar x)        = [x]
+getTermVariables (TermApp fun args) = concat (map getTermVariables args)
+getTermVariables (TermString s)     = []
 
 -- Bastiaan
 values = eltsFM
@@ -259,7 +267,7 @@ type T_AGAttrs = ( (AGAttrs))
 sem_AGAttrs :: (AGAttrs) ->
                (T_AGAttrs)
 sem_AGAttrs (list) =
-    (Prelude.foldr (sem_AGAttrs_Cons) (sem_AGAttrs_Nil) ((Prelude.map sem_AGAttr list)))
+    (foldr (sem_AGAttrs_Cons) (sem_AGAttrs_Nil) ((map sem_AGAttr list)))
 sem_AGAttrs_Cons :: (T_AGAttr) ->
                     (T_AGAttrs) ->
                     (T_AGAttrs)
@@ -352,7 +360,7 @@ type T_AGDatas = ( (AltArgTypesAL),(AltNts),(AltTypesAL),(AGDatas))
 sem_AGDatas :: (AGDatas) ->
                (T_AGDatas)
 sem_AGDatas (list) =
-    (Prelude.foldr (sem_AGDatas_Cons) (sem_AGDatas_Nil) ((Prelude.map sem_AGData list)))
+    (foldr (sem_AGDatas_Cons) (sem_AGDatas_Nil) ((map sem_AGData list)))
 sem_AGDatas_Cons :: (T_AGData) ->
                     (T_AGDatas) ->
                     (T_AGDatas)
@@ -449,7 +457,7 @@ type T_AGSemDecls = ( (AGSemDecls))
 sem_AGSemDecls :: (AGSemDecls) ->
                   (T_AGSemDecls)
 sem_AGSemDecls (list) =
-    (Prelude.foldr (sem_AGSemDecls_Cons) (sem_AGSemDecls_Nil) ((Prelude.map sem_AGSemDecl list)))
+    (foldr (sem_AGSemDecls_Cons) (sem_AGSemDecls_Nil) ((map sem_AGSemDecl list)))
 sem_AGSemDecls_Cons :: (T_AGSemDecl) ->
                        (T_AGSemDecls) ->
                        (T_AGSemDecls)
@@ -481,7 +489,7 @@ type T_AGSems = ( (AGSems))
 sem_AGSems :: (AGSems) ->
               (T_AGSems)
 sem_AGSems (list) =
-    (Prelude.foldr (sem_AGSems_Cons) (sem_AGSems_Nil) ((Prelude.map sem_AGSem list)))
+    (foldr (sem_AGSems_Cons) (sem_AGSems_Nil) ((map sem_AGSem list)))
 sem_AGSems_Cons :: (T_AGSem) ->
                    (T_AGSems) ->
                    (T_AGSems)
@@ -645,7 +653,7 @@ type T_ConstraintTerms = (AGDatas) ->
 sem_ConstraintTerms :: (ConstraintTerms) ->
                        (T_ConstraintTerms)
 sem_ConstraintTerms (list) =
-    (Prelude.foldr (sem_ConstraintTerms_Cons) (sem_ConstraintTerms_Nil) ((Prelude.map sem_ConstraintTerm list)))
+    (foldr (sem_ConstraintTerms_Cons) (sem_ConstraintTerms_Nil) ((map sem_ConstraintTerm list)))
 sem_ConstraintTerms_Cons :: (T_ConstraintTerm) ->
                             (T_ConstraintTerms) ->
                             (T_ConstraintTerms)
@@ -1163,7 +1171,7 @@ type T_JudgementDecls = ([String]) ->
 sem_JudgementDecls :: (JudgementDecls) ->
                       (T_JudgementDecls)
 sem_JudgementDecls (list) =
-    (Prelude.foldr (sem_JudgementDecls_Cons) (sem_JudgementDecls_Nil) ((Prelude.map sem_JudgementDecl list)))
+    (foldr (sem_JudgementDecls_Cons) (sem_JudgementDecls_Nil) ((map sem_JudgementDecl list)))
 sem_JudgementDecls_Cons :: (T_JudgementDecl) ->
                            (T_JudgementDecls) ->
                            (T_JudgementDecls)
@@ -1229,7 +1237,7 @@ type T_Judgements = (AGDatas) ->
 sem_Judgements :: (Judgements) ->
                   (T_Judgements)
 sem_Judgements (list) =
-    (Prelude.foldr (sem_Judgements_Cons) (sem_Judgements_Nil) ((Prelude.map sem_Judgement list)))
+    (foldr (sem_Judgements_Cons) (sem_Judgements_Nil) ((map sem_Judgement list)))
 sem_Judgements_Cons :: (T_Judgement) ->
                        (T_Judgements) ->
                        (T_Judgements)
@@ -1512,10 +1520,10 @@ sem_Term_TermString (string_) =
             _lhsOstaticWarnings :: (StaticMessages)
             _lhsOtp :: (Tp)
             _lhsOunique :: (Int)
-            (_lhsOallVariables@_) =
-                []
             (_lhsOtp@_) =
                 TCon "String"
+            (_lhsOallVariables@_) =
+                []
             (_lhsOcset@_) =
                 []
             (_lhsOstaticErrors@_) =
@@ -1579,7 +1587,7 @@ type T_Terms = (AGDatas) ->
 sem_Terms :: (Terms) ->
              (T_Terms)
 sem_Terms (list) =
-    (Prelude.foldr (sem_Terms_Cons) (sem_Terms_Nil) ((Prelude.map sem_Term list)))
+    (foldr (sem_Terms_Cons) (sem_Terms_Nil) ((map sem_Term list)))
 sem_Terms_Cons :: (T_Term) ->
                   (T_Terms) ->
                   (T_Terms)
@@ -1901,7 +1909,7 @@ type T_TypeRules = (AGDatas) ->
 sem_TypeRules :: (TypeRules) ->
                  (T_TypeRules)
 sem_TypeRules (list) =
-    (Prelude.foldr (sem_TypeRules_Cons) (sem_TypeRules_Nil) ((Prelude.map sem_TypeRule list)))
+    (foldr (sem_TypeRules_Cons) (sem_TypeRules_Nil) ((map sem_TypeRule list)))
 sem_TypeRules_Cons :: (T_TypeRule) ->
                       (T_TypeRules) ->
                       (T_TypeRules)

@@ -1,0 +1,72 @@
+imports {
+import TempImport
+}
+DATA Expr | Lambda
+   ident : Identifier
+   body : Expr
+
+DATA Expr | Apply
+   function : Expr
+   argument : Expr
+
+DATA Expr | Variable
+   ident : Identifier
+
+DATA Expr | Where
+   body : Expr
+   ident : Identifier
+   definition : Expr
+
+DATA Expr | Let
+   ident : Identifier
+   decl : Expr
+   body : Expr
+
+
+ATTR Expr [ gamma:{Gamma} | | ]
+ATTR Expr [ | | tp:{Type} ]
+ATTR Expr [ | unique:{Int} | ]
+ATTR Expr [ | | cset:{[Constraint]} ]
+
+SEM Expr | Variable
+   lhs.cset = [instc (@freshVar0) (mylookup (@ident) (@lhs.gamma)) ("Should not fail")]
+   lhs.tp = @freshVar0
+   lhs.unique = @lhs.unique + 1
+   loc.freshVar0 = makeFresh (@lhs.unique + 0) :: Type
+
+SEM Expr | Apply
+   lhs.cset = @function.cset ++ @argument.cset ++ [eqc (@function.tp) (arrow (@argument.tp) (@freshVar0)) ("Inconsistent types in application")]
+   lhs.tp = @freshVar0
+   function.gamma = @lhs.gamma
+   argument.gamma = @lhs.gamma
+   function.unique = @lhs.unique + 1
+   loc.freshVar0 = makeFresh (@lhs.unique + 0) :: Type
+
+SEM Expr | Lambda
+   lhs.cset = @body.cset ++ [eqc (@freshVar1) (arrow (@freshVar0) (@body.tp)) ("Inconsistent types in lambda abstraction")]
+   lhs.tp = @freshVar1
+   body.gamma = update (@ident) (@freshVar0) (@lhs.gamma)
+   body.unique = @lhs.unique + 2
+   loc.freshVar0 = makeFresh (@lhs.unique + 0) :: Type
+   loc.freshVar1 = makeFresh (@lhs.unique + 1) :: Type
+
+SEM Expr | Let
+   lhs.cset = @decl.cset ++ @body.cset ++ [genc (@freshVar0) (@lhs.gamma) (@decl.tp) ("Generalize failed in Let"), eqc (@body.tp) (@freshVar1) ("Type of body does not match context type for Let")]
+   lhs.tp = @freshVar1
+   decl.gamma = @lhs.gamma
+   body.gamma = update (@ident) (@freshVar0) (@lhs.gamma)
+   decl.unique = @lhs.unique + 2
+   loc.freshVar0 = makeFresh (@lhs.unique + 0) :: SVar
+   loc.freshVar1 = makeFresh (@lhs.unique + 1) :: Type
+
+SEM Expr | Where
+   lhs.cset = @body.cset ++ @definition.cset ++ [genc (@freshVar0) (@lhs.gamma) (@definition.tp) ("Generalize failed in Where"), eqc (@body.tp) (@freshVar1) ("Type of body does not match type of Where")]
+   lhs.tp = @freshVar1
+   definition.gamma = @lhs.gamma
+   body.gamma = update (@ident) (@freshVar0) (@lhs.gamma)
+   body.unique = @lhs.unique + 2
+   loc.freshVar0 = makeFresh (@lhs.unique + 0) :: SVar
+   loc.freshVar1 = makeFresh (@lhs.unique + 1) :: Type
+
+
+
