@@ -20,7 +20,7 @@ import Top.Solver
 
 defaultHeuristics :: Show info => Path (EdgeId, info) -> [Heuristic info]
 defaultHeuristics path = 
-   [ highParticipation 1.00 path, positionInList ]
+   [ highParticipation 1.00 path, firstComeFirstBlamed ]
          
 -----------------------------------------------------------------------------
 
@@ -66,11 +66,11 @@ highParticipation ratio path =
             return bestEdges
             
 -- |Select the "latest" constraint
-positionInList :: Heuristic info
-positionInList = 
+firstComeFirstBlamed :: Heuristic info
+firstComeFirstBlamed = 
    Heuristic ( 
       let f (EdgeId _ _ cnr, _) = return cnr
-      in maximalEdgeFilter "Constraint number of edge" f)
+      in maximalEdgeFilter "First come, first blamed" f)
 
 -- |Select only specific constraint numbers
 selectConstraintNumbers :: [EdgeNr] -> Heuristic info
