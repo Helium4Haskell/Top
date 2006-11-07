@@ -43,12 +43,14 @@ class Monad m => HasBasic m info | m -> info where
    -- options
    stopAfterFirstError :: OptionAccess m Bool
    checkConditions     :: OptionAccess m Bool
+   deferErrorTrees     :: OptionAccess m Bool
 
    -- defaults
    pushConstraint c    = pushConstraints [c]
    pushConstraints     = mapM_ pushConstraint
    stopAfterFirstError = ignoreOption stopOption
    checkConditions     = ignoreOption checkOption
+   deferErrorTrees     = ignoreOption deferETOption 
 
 ------------------------------------------------------------------------
 -- (III)  Instance for solver monad
@@ -74,6 +76,7 @@ instance ( Monad m
    -- options
    stopAfterFirstError   = optionAccessTrans deBasic stopAfterFirstError
    checkConditions       = optionAccessTrans deBasic checkConditions
+   deferErrorTrees       = optionAccessTrans deBasic deferErrorTrees
 
 ------------------------------------------------------------------------
 -- (IV)  Additional functions
@@ -118,6 +121,7 @@ data ErrorLabel = ErrorLabel String
                 | NoErrorLabel 
    deriving (Eq, Ord, Show)
    
-stopOption, checkOption :: Option Bool
+stopOption, checkOption, deferETOption :: Option Bool
 stopOption  = option False "Stop solving constraints after the first error"
 checkOption = option False "Check constraint satisfaction afterwards"
+deferETOption = option False "Defer evaluation of error trees until we have the final substitution"
