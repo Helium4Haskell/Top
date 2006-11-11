@@ -1,0 +1,149 @@
+This file was generated (and hand-aligned) from: TestErrorTree.hs, r967.
+
+naming of the solvers: tg* -> type graph solver
+                       g*  -> greedy solver (fast substitution)
+                       *i  -> immediately evaluated error trees
+                       *d  -> deferred error trees
+
+----------
+
+x is the constraint listed in the first column (elements of [c1..c10])
+
+error-tree-constraint ec2 =
+  v1 == () :
+      v1 == Bool -> v3 :
+          v1 == [v4] :  "E4 -- neither a function on Bools nor a list"
+          "E3 -- a list"
+      v3 == Int :  "E2 -- function from (possible) Bool to non-Int"
+      "E1 -- function from (possible) Bool to (possible) Int"
+
+
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+constraintset: [x, ec2]
+
+tgi1/tgd1/gi1/gd1: (all identical)
+(v1 == v20 -> v21    : {Right "c1"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Bool -> v22   : {Right "c2"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Int -> v23    : {Right "c3"},["E4 -- neither a function on Bools nor a list"])
+(v1 == v24 -> Int    : {Right "c4"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == v25 -> Bool   : {Right "c5"},["E2 -- function from (possible) Bool to non-Int"])
+(v1 == Bool -> Int   : {Right "c6"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Int -> Bool   : {Right "c7"},["E4 -- neither a function on Bools nor a list"])
+(v1 == [Int]         : {Right "c8"},["E3 -- a list"])
+(v1 == [v26]         : {Right "c9"},["E3 -- a list"])
+(v1 == IO ()         : {Right "c10"},["E4 -- neither a function on Bools nor a list"])
+
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+constraintset: [ec2, x]
+
+tgi2/tgd2/gi2/gd2: (all identical)
+(v1 == v20 -> v21    : {Right "c1"},["c1"])
+(v1 == Bool -> v22   : {Right "c2"},["c2"])
+(v1 == Int -> v23    : {Right "c3"},["c3"])
+(v1 == v24 -> Int    : {Right "c4"},["c4"])
+(v1 == v25 -> Bool   : {Right "c5"},["c5"])
+(v1 == Bool -> Int   : {Right "c6"},["c6"])
+(v1 == Int -> Bool   : {Right "c7"},["c7"])
+(v1 == [Int]         : {Right "c8"},["c8"])
+(v1 == [v26]         : {Right "c9"},["c9"])
+(v1 == IO ()         : {Right "c10"},["c10"])
+
+
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+constraintset: [ec2, x, x, x, x]
+
+tgi3:
+(v1 == v20 -> v21    : {Right "c1"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Bool -> v22   : {Right "c2"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Int -> v23    : {Right "c3"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == v24 -> Int    : {Right "c4"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == v25 -> Bool   : {Right "c5"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Bool -> Int   : {Right "c6"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Int -> Bool   : {Right "c7"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == [Int]         : {Right "c8"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == [v26]         : {Right "c9"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == IO ()         : {Right "c10"},["E1 -- function from (possible) Bool to (possible) Int"])
+
+tgd3: (same as tgd1/tgi1)
+(v1 == v20 -> v21    : {Right "c1"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Bool -> v22   : {Right "c2"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Int -> v23    : {Right "c3"},["E4 -- neither a function on Bools nor a list"])
+(v1 == v24 -> Int    : {Right "c4"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == v25 -> Bool   : {Right "c5"},["E2 -- function from (possible) Bool to non-Int"])
+(v1 == Bool -> Int   : {Right "c6"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Int -> Bool   : {Right "c7"},["E4 -- neither a function on Bools nor a list"])
+(v1 == [Int]         : {Right "c8"},["E3 -- a list"])
+(v1 == [v26]         : {Right "c9"},["E3 -- a list"])
+(v1 == IO ()         : {Right "c10"},["E4 -- neither a function on Bools nor a list"])
+
+gi3/gd3:
+(v1 == v20 -> v21    : {Right "c1"},["c1","c1","c1","c1"])
+(v1 == Bool -> v22   : {Right "c2"},["c2","c2","c2","c2"])
+(v1 == Int -> v23    : {Right "c3"},["c3","c3","c3","c3"])
+(v1 == v24 -> Int    : {Right "c4"},["c4","c4","c4","c4"])
+(v1 == v25 -> Bool   : {Right "c5"},["c5","c5","c5","c5"])
+(v1 == Bool -> Int   : {Right "c6"},["c6","c6","c6","c6"])
+(v1 == Int -> Bool   : {Right "c7"},["c7","c7","c7","c7"])
+(v1 == [Int]         : {Right "c8"},["c8","c8","c8","c8"])
+(v1 == [v26]         : {Right "c9"},["c9","c9","c9","c9"])
+(v1 == IO ()         : {Right "c10"},["c10","c10","c10","c10"])
+
+
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+constraint c3:  v1 == Int -> v23
+constraintset:  [x, ec2, c3 , x, x]
+
+tgi4: (same as tgi1/tgd1 but with "c3" added as additional error in the "*" cases)
+(v1 == v20 -> v21    : {Right "c1"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Bool -> v22  *: {Right "c2"},["E1 -- function from (possible) Bool to (possible) Int","c3"])
+(v1 == Int -> v23    : {Right "c3"},["E4 -- neither a function on Bools nor a list"])
+(v1 == v24 -> Int    : {Right "c4"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == v25 -> Bool   : {Right "c5"},["E2 -- function from (possible) Bool to non-Int"])
+(v1 == Bool -> Int  *: {Right "c6"},["E1 -- function from (possible) Bool to (possible) Int","c3"])
+(v1 == Int -> Bool   : {Right "c7"},["E4 -- neither a function on Bools nor a list"])
+(v1 == [Int]        *: {Right "c8"},["E3 -- a list","c3"])
+(v1 == [v26]        *: {Right "c9"},["E3 -- a list","c3"])
+(v1 == IO ()        *: {Right "c10"},["E4 -- neither a function on Bools nor a list","c3"])
+
+tgd4: (cases marked with ** differ from tgi1/tgd1. others are the same)
+(v1 == v20 -> v21   ** : {Right "c1"},["E4 -- neither a function on Bools nor a list"])   
+(v1 == Bool -> v22     : {Right "c2"},["E1 -- function from (possible) Bool to (possible) Int","c3"])
+(v1 == Int -> v23      : {Right "c3"},["E4 -- neither a function on Bools nor a list"])
+(v1 == v24 -> Int   ** : {Right "c4"},["E4 -- neither a function on Bools nor a list"])
+(v1 == v25 -> Bool  ** : {Right "c5"},["E4 -- neither a function on Bools nor a list"])
+(v1 == Bool -> Int     : {Right "c6"},["E1 -- function from (possible) Bool to (possible) Int","c3"])
+(v1 == Int -> Bool     : {Right "c7"},["E4 -- neither a function on Bools nor a list"])
+(v1 == [Int]           : {Right "c8"},["E3 -- a list","c3"])
+(v1 == [v26]           : {Right "c9"},["E3 -- a list","c3"])
+(v1 == IO ()           : {Right "c10"},["E4 -- neither a function on Bools nor a list","c3"])
+
+gi4: (same as tgi4, including occurrences of "c3". Only difference is the order of the error-list)
+(v1 == v20 -> v21      : {Right "c1"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Bool -> v22     : {Right "c2"},["c3","E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Int -> v23      : {Right "c3"},["E4 -- neither a function on Bools nor a list"])
+(v1 == v24 -> Int      : {Right "c4"},["E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == v25 -> Bool     : {Right "c5"},["E2 -- function from (possible) Bool to non-Int"])
+(v1 == Bool -> Int     : {Right "c6"},["c3","E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Int -> Bool     : {Right "c7"},["E4 -- neither a function on Bools nor a list"])
+(v1 == [Int]           : {Right "c8"},["c3","E3 -- a list"])
+(v1 == [v26]           : {Right "c9"},["c3","E3 -- a list"])
+(v1 == IO ()           : {Right "c10"},["c3","E4 -- neither a function on Bools nor a list"])
+
+gd4: (same as tgd4, including occurrences of "c3". Only difference is the order of the error-list)
+(v1 == v20 -> v21      : {Right "c1"},["E4 -- neither a function on Bools nor a list"])
+(v1 == Bool -> v22     : {Right "c2"},["c3","E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Int -> v23      : {Right "c3"},["E4 -- neither a function on Bools nor a list"])
+(v1 == v24 -> Int      : {Right "c4"},["E4 -- neither a function on Bools nor a list"])
+(v1 == v25 -> Bool     : {Right "c5"},["E4 -- neither a function on Bools nor a list"])
+(v1 == Bool -> Int     : {Right "c6"},["c3","E1 -- function from (possible) Bool to (possible) Int"])
+(v1 == Int -> Bool     : {Right "c7"},["E4 -- neither a function on Bools nor a list"])
+(v1 == [Int]           : {Right "c8"},["c3","E3 -- a list"])
+(v1 == [v26]           : {Right "c9"},["c3","E3 -- a list"])
+(v1 == IO ()           : {Right "c10"},["c3","E4 -- neither a function on Bools nor a list"])
+
+----------------------------------------------------------------------------------------------------
