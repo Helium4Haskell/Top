@@ -124,4 +124,4 @@ data ErrorLabel = ErrorLabel String
 stopOption, checkOption, deferETOption :: Option Bool
 stopOption  = option False "Stop solving constraints after the first error"
 checkOption = option False "Check constraint satisfaction afterwards"
-deferETOption = option False "Defer evaluation of error trees until we have the final substitution"
+deferETOption = option True "Defer evaluation of error trees until we have the final substitution"

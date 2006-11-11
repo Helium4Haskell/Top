@@ -128,6 +128,7 @@ data SolveOptions = SolveOptions_
    -- optional settings
    , setStopAfterFirstError :: Bool -- see Basic
    , setCheckConditions     :: Bool -- see Basic
+   , setDeferErrorTrees     :: Bool -- for ErrorTree solving
    }
 
 solveOptions :: SolveOptions
@@ -137,6 +138,7 @@ solveOptions = SolveOptions_
    , classEnvironment       = standardClasses
    , setStopAfterFirstError = currentValue stopOption
    , setCheckConditions     = currentValue checkOption
+   , setDeferErrorTrees     = currentValue deferETOption
    } 
 
 initialize :: (HasBasic m info, HasQual m info, HasTI m info, Substitutable a) => a -> SolveOptions -> m ()
@@ -146,6 +148,7 @@ initialize cs options =
       setClassEnvironment (classEnvironment options)
       setOption stopAfterFirstError (setStopAfterFirstError options)
       setOption checkConditions     (setCheckConditions options)
+      setOption deferErrorTrees     (setDeferErrorTrees options)
  where
    unique
       | uniqueCounter options < 0 = 1 + maximum (-1 : ftv cs) 

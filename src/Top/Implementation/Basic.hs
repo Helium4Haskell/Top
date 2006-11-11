@@ -35,6 +35,7 @@ data BasicState info m = BasicState
    , conditions  :: [(m Bool, String)]     -- ^ Conditions to check (for the solved constraints)
    , optionStop  :: Option Bool            -- ^ Discard all remaining constraints after the first error
    , optionCheck :: Option Bool
+   , optionDeferET :: Option Bool
    }
 
 ------------------------------------------------------------------------
@@ -52,6 +53,7 @@ instance Empty (BasicState info m) where
       , conditions  = []
       , optionStop  = stopOption
       , optionCheck = checkOption
+      , optionDeferET = deferETOption
       }
  
 instance Show (BasicState info m) where 
@@ -121,3 +123,4 @@ instance ( MonadState s m
 
    stopAfterFirstError = useOption optionStop  (\x s -> s { optionStop  = x })
    checkConditions     = useOption optionCheck (\x s -> s { optionCheck = x })
+   deferErrorTrees     = useOption optionDeferET (\x s -> s { optionDeferET = x })
