@@ -1,6 +1,6 @@
 At its most general, Top is a framework for constructing abstract interpretations 
 which focuses on giving good feedback on why an abstract interpretation does not give 
-any useful information. In a mathematical notation this is usually make explicit by 
+any useful information. In a mathematical notation this is usually made explicit by 
 returning the top element of a (complete) lattice. This is also one of the reasons 
 for the name of the project.
 
