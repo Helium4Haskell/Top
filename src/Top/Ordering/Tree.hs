@@ -36,14 +36,16 @@ binTree a b = Node [a, b]
 infixr 8 .>. , .>>. , .<. , .<<.
 
 (.>.), (.>>.), (.<.), (.<<.) :: [a] -> Tree a -> Tree a
-((.>.), (.>>.), (.<.), (.<<.)) = 
-   let -- prevents adding an empty list
-       f constructor direction as tree
-          | null as   = tree 
-          | otherwise = constructor direction as tree
-   in (f AddList Down, f Spread Down, f AddList Up, f Spread Up)
+(.>.)  = makeTreeHelper AddList Down
+(.>>.) = makeTreeHelper Spread Down
+(.<.)  = makeTreeHelper AddList Up
+(.<<.) = makeTreeHelper Spread Up
 
-
+-- prevents adding an empty list
+makeTreeHelper constructor direction xs tree
+   | null xs   = tree 
+   | otherwise = constructor direction xs tree
+          
 ------------------------------------------------------------------------
 
 data Direction   = Up | Down deriving (Eq, Show)
