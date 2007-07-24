@@ -16,7 +16,7 @@ AG = uuagc
 HC = ghc
 HADDOCK = haddock
 
-HC_OPTS = -static -fglasgow-exts -Wall -package text
+HC_OPTS = -static -fglasgow-exts -fallow-undecidable-instances  -fallow-overlapping-instances -Wall
 
 DOC_DIR = ../doc
 BIN_DIR = ../bin

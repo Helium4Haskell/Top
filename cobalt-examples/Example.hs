@@ -5,7 +5,7 @@ import Top.Cobalt.AGSyntax
 import Top.Cobalt.Syntax
 import Top.Cobalt.Generator
 import Top.Types
-import Data.FiniteMap
+import Data.Map
 
 {-
 ex :: TypeSystem

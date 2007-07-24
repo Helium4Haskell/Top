@@ -267,7 +267,7 @@ type T_AGAttrs = ( (AGAttrs))
 sem_AGAttrs :: (AGAttrs) ->
                (T_AGAttrs)
 sem_AGAttrs (list) =
-    (foldr (sem_AGAttrs_Cons) (sem_AGAttrs_Nil) ((map sem_AGAttr list)))
+    (Prelude.foldr (sem_AGAttrs_Cons) (sem_AGAttrs_Nil) ((Prelude.map sem_AGAttr list)))
 sem_AGAttrs_Cons :: (T_AGAttr) ->
                     (T_AGAttrs) ->
                     (T_AGAttrs)
@@ -360,7 +360,7 @@ type T_AGDatas = ( (AltArgTypesAL),(AltNts),(AltTypesAL),(AGDatas))
 sem_AGDatas :: (AGDatas) ->
                (T_AGDatas)
 sem_AGDatas (list) =
-    (foldr (sem_AGDatas_Cons) (sem_AGDatas_Nil) ((map sem_AGData list)))
+    (Prelude.foldr (sem_AGDatas_Cons) (sem_AGDatas_Nil) ((Prelude.map sem_AGData list)))
 sem_AGDatas_Cons :: (T_AGData) ->
                     (T_AGDatas) ->
                     (T_AGDatas)
@@ -457,7 +457,7 @@ type T_AGSemDecls = ( (AGSemDecls))
 sem_AGSemDecls :: (AGSemDecls) ->
                   (T_AGSemDecls)
 sem_AGSemDecls (list) =
-    (foldr (sem_AGSemDecls_Cons) (sem_AGSemDecls_Nil) ((map sem_AGSemDecl list)))
+    (Prelude.foldr (sem_AGSemDecls_Cons) (sem_AGSemDecls_Nil) ((Prelude.map sem_AGSemDecl list)))
 sem_AGSemDecls_Cons :: (T_AGSemDecl) ->
                        (T_AGSemDecls) ->
                        (T_AGSemDecls)
@@ -489,7 +489,7 @@ type T_AGSems = ( (AGSems))
 sem_AGSems :: (AGSems) ->
               (T_AGSems)
 sem_AGSems (list) =
-    (foldr (sem_AGSems_Cons) (sem_AGSems_Nil) ((map sem_AGSem list)))
+    (Prelude.foldr (sem_AGSems_Cons) (sem_AGSems_Nil) ((Prelude.map sem_AGSem list)))
 sem_AGSems_Cons :: (T_AGSem) ->
                    (T_AGSems) ->
                    (T_AGSems)
@@ -653,7 +653,7 @@ type T_ConstraintTerms = (AGDatas) ->
 sem_ConstraintTerms :: (ConstraintTerms) ->
                        (T_ConstraintTerms)
 sem_ConstraintTerms (list) =
-    (foldr (sem_ConstraintTerms_Cons) (sem_ConstraintTerms_Nil) ((map sem_ConstraintTerm list)))
+    (Prelude.foldr (sem_ConstraintTerms_Cons) (sem_ConstraintTerms_Nil) ((Prelude.map sem_ConstraintTerm list)))
 sem_ConstraintTerms_Cons :: (T_ConstraintTerm) ->
                             (T_ConstraintTerms) ->
                             (T_ConstraintTerms)
@@ -1171,7 +1171,7 @@ type T_JudgementDecls = ([String]) ->
 sem_JudgementDecls :: (JudgementDecls) ->
                       (T_JudgementDecls)
 sem_JudgementDecls (list) =
-    (foldr (sem_JudgementDecls_Cons) (sem_JudgementDecls_Nil) ((map sem_JudgementDecl list)))
+    (Prelude.foldr (sem_JudgementDecls_Cons) (sem_JudgementDecls_Nil) ((Prelude.map sem_JudgementDecl list)))
 sem_JudgementDecls_Cons :: (T_JudgementDecl) ->
                            (T_JudgementDecls) ->
                            (T_JudgementDecls)
@@ -1237,7 +1237,7 @@ type T_Judgements = (AGDatas) ->
 sem_Judgements :: (Judgements) ->
                   (T_Judgements)
 sem_Judgements (list) =
-    (foldr (sem_Judgements_Cons) (sem_Judgements_Nil) ((map sem_Judgement list)))
+    (Prelude.foldr (sem_Judgements_Cons) (sem_Judgements_Nil) ((Prelude.map sem_Judgement list)))
 sem_Judgements_Cons :: (T_Judgement) ->
                        (T_Judgements) ->
                        (T_Judgements)
@@ -1587,7 +1587,7 @@ type T_Terms = (AGDatas) ->
 sem_Terms :: (Terms) ->
              (T_Terms)
 sem_Terms (list) =
-    (foldr (sem_Terms_Cons) (sem_Terms_Nil) ((map sem_Term list)))
+    (Prelude.foldr (sem_Terms_Cons) (sem_Terms_Nil) ((Prelude.map sem_Term list)))
 sem_Terms_Cons :: (T_Term) ->
                   (T_Terms) ->
                   (T_Terms)
@@ -1909,7 +1909,7 @@ type T_TypeRules = (AGDatas) ->
 sem_TypeRules :: (TypeRules) ->
                  (T_TypeRules)
 sem_TypeRules (list) =
-    (foldr (sem_TypeRules_Cons) (sem_TypeRules_Nil) ((map sem_TypeRule list)))
+    (Prelude.foldr (sem_TypeRules_Cons) (sem_TypeRules_Nil) ((Prelude.map sem_TypeRule list)))
 sem_TypeRules_Cons :: (T_TypeRule) ->
                       (T_TypeRules) ->
                       (T_TypeRules)
