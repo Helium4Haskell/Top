@@ -1,9 +1,0 @@
-echo Do not forget: you might want to recompile the ag files first.
-echo Compiling and running the example
-ghc --make -fglasgow-exts -package text -o example Example.hs && ./example
-
-echo Compiling the resulting ag code
-ag -dcfsp --module=Temp Temp && ghc --make -fglasgow-exts -package text -o temptest TempTest.hs
-
-echo Testing the resulting ag code
-./temptest
