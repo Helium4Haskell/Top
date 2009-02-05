@@ -1,4 +1,4 @@
-{-# OPTIONS -fglasgow-exts -fallow-overlapping-instances -fallow-undecidable-instances #-}
+{-# OPTIONS -fglasgow-exts -XUndecidableInstances -XOverlappingInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
