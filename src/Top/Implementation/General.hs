@@ -1,8 +1,9 @@
-{-# OPTIONS -fglasgow-exts -XUndecidableInstances #-}
+{-# OPTIONS -XUndecidableInstances -XFlexibleInstances -XKindSignatures
+            -XMultiParamTypeClasses -XOverlappingInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
---   Maintainer   :  bastiaan@cs.uu.nl
+--   Maintainer   :  helium@cs.uu.nl
 --   Stability    :  provisional
 --   Portability  :  non-portable (requires extensions)
 -----------------------------------------------------------------------------
@@ -43,9 +44,9 @@ allOptions = gets stateOptions
 -- ToDo: kind annotations for And, Simple, Fix
 -- infixr 7 :^:
 
-data And f g   x m = Compose (f (g x m) m)      | AndDummy (m ())
-data Simple a  x m = Simple a x                 | SimpleDummy (m ())
-data Fix g     x m = Fix (g m) x                | FixDummy (m ())
+data And f g   x (m :: * -> *) = Compose (f (g x m) m)      
+data Simple a  x (m :: * -> *) = Simple a x
+data Fix g     x (m :: * -> *) = Fix (g m) x
 
 --- Empty
 instance Empty (f (g x m) m) => Empty (And f g x m) where 

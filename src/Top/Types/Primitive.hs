@@ -1,7 +1,7 @@
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
---   Maintainer   :  bastiaan@cs.uu.nl
+--   Maintainer   :  helium@cs.uu.nl
 --   Stability    :  provisional
 --   Portability  :  portable
 --
@@ -169,8 +169,8 @@ isIOType _                    = False
 instance Show Tp where
    -- parenthesis are needed when the type must be shown as a part of 
    -- some other data type
-   showsPrec prio tp rest = 
-      parIf (prio > 0) (showTp tp) ++ rest
+   showsPrec prio theType rest = 
+      parIf (prio > 0) (showTp theType) ++ rest
    
     where
       showTp tp = 

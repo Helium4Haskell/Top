@@ -1,8 +1,8 @@
-{-# OPTIONS -fglasgow-exts #-}
+{-# OPTIONS -XFlexibleInstances -XMultiParamTypeClasses #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
---   Maintainer   :  bastiaan@cs.uu.nl
+--   Maintainer   :  helium@cs.uu.nl
 --   Stability    :  provisional
 --   Portability  :  non-portable (requires extensions)
 -----------------------------------------------------------------------------
@@ -85,7 +85,7 @@ instance TypeGraph (StandardTypeGraph info) info where
                   case maybeGetGroupOf (VertexId i) stg of
                      Nothing ->
                         Just (TVar i)
-                     Just eqnr -> 
+                     Just _ -> 
                         do newtp <- typeOfGroup synonyms (getGroupOf (VertexId i) stg)
                            case newtp of 
                               TVar j -> Just (TVar j)
@@ -183,7 +183,7 @@ splitClass ::  VertexId -> StandardTypeGraph info -> ([VertexId], StandardTypeGr
 splitClass vid stg = 
    let eqgroup   = getGroupOf vid stg  
        newGroups = splitGroup eqgroup
-       results   = [ vid | (vid, _):_ <- map vertices newGroups ]
+       results   = [ vid2 | (vid2, _):_ <- map vertices newGroups ]
        newGraph  
           | length newGroups > 1 = foldr createGroup (removeGroup eqgroup stg) newGroups
           | otherwise = stg

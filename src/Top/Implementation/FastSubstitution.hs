@@ -1,8 +1,9 @@
-{-# OPTIONS -fglasgow-exts -XUndecidableInstances -XOverlappingInstances #-}
+{-# OPTIONS -XUndecidableInstances -XOverlappingInstances 
+            -XFlexibleInstances -XMultiParamTypeClasses #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
---   Maintainer   :  bastiaan@cs.uu.nl
+--   Maintainer   :  helium@cs.uu.nl
 --   Stability    :  provisional
 --   Portability  :  non-portable (requires extensions)
 -----------------------------------------------------------------------------

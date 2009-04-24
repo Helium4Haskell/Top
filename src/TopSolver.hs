@@ -1,8 +1,8 @@
-{-# OPTIONS -fglasgow-exts -XUndecidableInstances -XOverlappingInstances #-}
+{-# OPTIONS -XUndecidableInstances -XOverlappingInstances -XFlexibleInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
---   Maintainer   :  bastiaan@cs.uu.nl
+--   Maintainer   :  helium@cs.uu.nl
 --   Stability    :  provisional
 --   Portability  :  non-portable (requires extensions)
 -----------------------------------------------------------------------------
@@ -161,9 +161,9 @@ run p input =
          do putStrLn (unlines logo)
             let result :: SolveResult TopInfo
                 options = solveOptions { uniqueCounter = unique, typeSynonyms = stringAsTypeSynonym }
-                (result, log) = solve options cset typegraphConstraintSolverDefault
+                (result, logm) = solve options cset typegraphConstraintSolverDefault
                 
-            putStrLn (show log)          
+            putStrLn (show logm)          
             
             putStrLn . concat $ 
                "Substitution: " : intersperse ", " (

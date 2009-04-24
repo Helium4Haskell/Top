@@ -1,7 +1,7 @@
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
---   Maintainer   :  bastiaan@cs.uu.nl
+--   Maintainer   :  helium@cs.uu.nl
 --   Stability    :  provisional
 --   Portability  :  portable
 -----------------------------------------------------------------------------
@@ -55,14 +55,14 @@ highParticipation ratio path =
           bestEdges  = filter (\(EdgeId _ _ cnr,_) -> cnr `elem` goodCNrs) es
   
           -- prints a nice report
-          msg    = unlines ("" : title : replicate 50 '-' : map f es)
+          mymsg  = unlines ("" : title : replicate 50 '-' : map f es)
           title  = "cnr  edge          ratio   info"
           f (edgeID@(EdgeId _ _ cnr),info) = 
              take 5  (show cnr++(if cnr `elem` goodCNrs then "*" else "")++repeat ' ') ++
              take 14 (show edgeID++repeat ' ') ++
              take 8  (show (M.findWithDefault 0 cnr fm * 100 `div` nrOfPaths)++"%"++repeat ' ') ++
              "{"++show info++"}"
-      in do logMsg msg
+      in do logMsg mymsg
             return bestEdges
             
 -- |Select the "latest" constraint

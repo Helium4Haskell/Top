@@ -2,7 +2,7 @@
 # Top Library
 #-----------------------------------------------------------------------
 
-.PHONY:  clean cobalt
+.PHONY:  clean
 
 default: topsolver
 all: topsolver 
@@ -16,7 +16,7 @@ AG = uuagc
 HC = ghc
 HADDOCK = haddock
 
-HC_OPTS = -static -fglasgow-exts -fallow-undecidable-instances  -fallow-overlapping-instances -Wall
+HC_OPTS = -Wall
 
 DOC_DIR = ../doc
 BIN_DIR = ../bin

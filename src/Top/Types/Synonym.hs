@@ -1,7 +1,7 @@
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
---   Maintainer   :  bastiaan@cs.uu.nl
+--   Maintainer   :  helium@cs.uu.nl
 --   Stability    :  provisional
 --   Portability  :  portable
 --
@@ -16,7 +16,7 @@
 module Top.Types.Synonym where
 
 import Top.Types.Primitive
-import Top.Types.Substitution
+import Top.Types.Substitution hiding (lookupInt)
 import Utils (internalError)
 import Data.Graph (scc, buildG)
 import Data.Tree (flatten)

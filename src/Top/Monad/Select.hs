@@ -1,8 +1,9 @@
-{-# OPTIONS -fglasgow-exts -XUndecidableInstances #-}
+{-# OPTIONS -XUndecidableInstances -XMultiParamTypeClasses -XKindSignatures
+            -XFunctionalDependencies -XFlexibleInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
---   Maintainer   :  bastiaan@cs.uu.nl
+--   Maintainer   :  helium@cs.uu.nl
 --   Stability    :  provisional
 --   Portability  :  non-portable (requires extensions)
 -----------------------------------------------------------------------------
@@ -39,8 +40,7 @@ select = Select
 --------------------------------------------------------
 -- SelectFix Monad
 
--- ToDo: fix with kind annotation
-data SelectFix t m a = SelectFix (m a) | SelectFix_Dummy_ (t m)
+data SelectFix (t :: (* -> *) -> *) (m :: * -> *) a = SelectFix (m a)
 
 instance Monad m => Monad (SelectFix t m) where
    return a          = SelectFix (return a)

@@ -1,8 +1,8 @@
-{-# OPTIONS -fglasgow-exts -XOverlappingInstances #-}
+{-# OPTIONS -XOverlappingInstances -XUndecidableInstances -XFlexibleContexts #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
---   Maintainer   :  bastiaan@cs.uu.nl
+--   Maintainer   :  helium@cs.uu.nl
 --   Stability    :  provisional
 --   Portability  :  non-portable (requires extensions)
 -----------------------------------------------------------------------------
@@ -16,13 +16,9 @@ import Top.Implementation.General
 import Top.Implementation.Basic
 import Top.Implementation.Overloading
 import Top.Implementation.TypeInference
-import Top.Implementation.TypeGraph.Standard
 import Top.Implementation.TypeGraphSubstitution
 import Top.Implementation.TypeGraph.Heuristic
 import Top.Monad.Select
--- for testing only
---import Top.Types
---import Top.Constraint.Equality
 
 type TG  info = BasicMonad (TGS info)
 type TGS info = And ( Fix (BasicState info) ) 

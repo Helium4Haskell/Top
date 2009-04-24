@@ -1,20 +1,17 @@
-{-# OPTIONS -fglasgow-exts -XUndecidableInstances #-}
+{-# OPTIONS -XUndecidableInstances -XFlexibleInstances -XMultiParamTypeClasses #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
---   Maintainer   :  bastiaan@cs.uu.nl
+--   Maintainer   :  helium@cs.uu.nl
 --   Stability    :  provisional
 --   Portability  :  non-portable (requires extensions)
 -----------------------------------------------------------------------------
 
 module Top.Implementation.TypeGraphSubstitution where
 
-import Top.Implementation.TypeGraph.Class (TypeGraph)
 import Top.Implementation.TypeGraph.ClassMonadic
 import Top.Implementation.TypeGraph.Standard
 import Top.Implementation.TypeGraph.Heuristic
-import Top.Implementation.TypeGraph.Path
-import Top.Implementation.TypeGraph.Basics
 import Top.Interface.Substitution
 import Top.Interface.Basic
 import Top.Interface.TypeInference
