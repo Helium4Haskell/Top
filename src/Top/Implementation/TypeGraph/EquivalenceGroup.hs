@@ -52,7 +52,7 @@ instance Show (EquivalenceGroup info) where
 emptyGroup :: EquivalenceGroup info
 emptyGroup = 
    EQGroup { vertices = [], edges = [], cliques = [] }
-	   
+   
 insertVertex :: VertexId -> VertexInfo -> EquivalenceGroup info -> EquivalenceGroup info
 insertVertex i info eqgroup = 
    eqgroup { vertices = (i, info) : vertices eqgroup }  
@@ -68,7 +68,7 @@ insertClique clique eqgroup =
  where
    newCliques = mergeCliques (clique : cs2) : cs1
    (cs1, cs2) = partition (isDisjointClique clique) (cliques eqgroup)
-	    
+    
    {- msg = unlines [ "------------------insert clique -------------------------"
                  , show eqgroup
                  , "---- new cliques ----"
@@ -81,7 +81,7 @@ combineGroups eqgroup1 eqgroup2 =
            , edges    = edges    eqgroup1 ++ edges    eqgroup2
            , cliques  = cliques  eqgroup1 `combineCliqueList` cliques  eqgroup2
            }
-	   
+   
 ----------------------------------------------------------------------
 -- * Removing parts from an equivalence group
 
@@ -180,7 +180,7 @@ equalPaths without start targets eqgroup =
                            in if null sources 
                                 then []
                                 else map f neighbours) neighbourCliques
-				
+
       removeFromClique :: VertexId -> [[ParentChild]] -> [[ParentChild]]
       removeFromClique vid =
          let p pcs = length pcs > 1

@@ -246,11 +246,11 @@ allSubPathsList childList vertex targets = rec S.empty vertex
    rec without start =  
       do vs <- verticesInGroupOf start
          case any (`elem` map fst vs) targets of 
-	 
+
             True  -> -- targets are in the same group as the source
                do directPath <- allPathsListWithout without start targets
                   return (simplifyPath directPath)
-	       
+
             False -> -- go down to another equivalence group  
                let recDown (newStart, childTargets) =
                       do let newWithout = without `S.union` S.fromList (map fst vs){- don't return to this equivalence group -}
@@ -263,7 +263,7 @@ allSubPathsList childList vertex targets = rec S.empty vertex
                    targetPairs :: [(VertexId, [VertexId])]
                    targetPairs =
                       let p (i, j) =  i `elem` map fst vs
-			                       && not (i `S.member` without || j `S.member` without)
+                                   && not (i `S.member` without || j `S.member` without)
                       in map (\((i,j):rest) -> (i, j:map snd rest))
                        . groupBy (\x y -> fst x     ==    fst y)
                        . sortBy  (\x y -> fst x `compare` fst y)
@@ -271,7 +271,7 @@ allSubPathsList childList vertex targets = rec S.empty vertex
                in
                   do extendedPaths <- mapM recDown targetPairs
                      return (altList extendedPaths)           
-	           
+
 expandPath :: HasTypeGraph m info => TypeGraphPath info -> m (Path (EdgeId, info))
 expandPath Fail = return Fail
 expandPath p =
@@ -309,7 +309,7 @@ impliedEdgeTable = insertPairs M.empty
                       in allPaths (VertexId i1) (VertexId i2)
               let new = nub [ intPair (v1, v2) | (_, Implied _ (VertexId v1) (VertexId v2)) <- steps path ]
               insertPairs (M.insert pair path fm) (rest `union` new)
-	  
+
 -------------------------------
 -- 
 

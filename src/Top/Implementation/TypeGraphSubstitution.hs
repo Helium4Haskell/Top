@@ -96,8 +96,8 @@ removeInconsistencies hs =
       mapM_ deleteEdge (concatMap fst errs)
       mapM_ (addLabeledError unificationErrorLabel . snd) errs
       if null errs
-	    then -- everything is okay: no errors were found.
-	       unmarkPossibleErrors
+            then -- everything is okay: no errors were found.
+               unmarkPossibleErrors
         else -- Bug patch 3 february 2004
-	         -- safety first: check whether *everything* is really removed. 
-	      removeInconsistencies hs
+                 -- safety first: check whether *everything* is really removed. 
+              removeInconsistencies hs
