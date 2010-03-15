@@ -57,27 +57,27 @@ flattenTree (TreeWalk treewalk) theTree =
    strictRec theTree []
     
     where    
-     rec :: List a ->             -- downward constraints
+     rec_ :: List a ->             -- downward constraints
             Tree a ->             -- the tree to flatten
             ( List a              -- the result
             , List a              -- upward constraints
             )
-     rec down tree = 
+     rec_ down tree = 
         case tree of
         
            Node trees ->
-              let tuples = map (rec id) trees
+              let tuples = map (rec_ id) trees
               in (treewalk down tuples, id)
            
            Chunk _ t -> 
-              rec down t
+              rec_ down t
                  
            AddList Up as t ->
-              let (result, up) = rec down t
+              let (result, up) = rec_ down t
               in (result, (as++) . up)
 
            AddList Down as t ->
-              rec ((as++) . down) t
+              rec_ ((as++) . down) t
               
            StrictOrder left right ->
               let left_result  = strictRec left
@@ -85,45 +85,45 @@ flattenTree (TreeWalk treewalk) theTree =
               in (treewalk down [(left_result . right_result, id)], id) 
               
            Spread direction as t -> 
-              rec down (AddList direction as t)
+              rec_ down (AddList direction as t)
               
            Receive _ -> 
-              rec down emptyTree
+              rec_ down emptyTree
               
            Phase _ as ->
-              rec down (listTree as)                  
+              rec_ down (listTree as)                  
 
      strictRec :: Tree a ->             -- the tree to flatten
                   List a                -- the result
      strictRec tree = 
-        let (result, up) = rec id tree
+        let (result, up) = rec_ id tree
         in treewalk id [(result, up)]
 
 spreadTree :: (a -> Maybe Int) -> Tree a -> Tree a
-spreadTree spreadFunction = fst . rec M.empty
+spreadTree spreadFunction = fst . rec_ M.empty
    where
-    rec fm tree = 
+    rec_ fm tree = 
        case tree of   
 
           Node trees -> 
-             let (trees', sets) = unzip (map (rec fm) trees)
+             let (trees', sets) = unzip (map (rec_ fm) trees)
              in (Node trees', S.unions sets)
           
           Chunk cnr t -> 
-             let (tree', set) = rec fm t
+             let (tree', set) = rec_ fm t
              in (Chunk cnr tree', set)
           
           AddList direction as t -> 
-             let (tree', set) = rec fm t
+             let (tree', set) = rec_ fm t
              in (AddList direction as tree', set)
 
           StrictOrder left right -> 
-             let (left' , set1) = rec fm left
-                 (right', set2) = rec fm right
+             let (left' , set1) = rec_ fm left
+                 (right', set2) = rec_ fm right
              in (StrictOrder left' right', S.union set1 set2)
           
           Spread direction as t -> 
-             let (tree', set) = rec fmNew t
+             let (tree', set) = rec_ fmNew t
                  fmNew = M.unionWith (++) fm (M.fromList [ (i, [x]) | x <- doSpread, let Just i = spreadFunction x ])
                  (doSpread, noSpread) = 
                     partition (maybe False (`S.member` set) . spreadFunction) as
@@ -140,20 +140,20 @@ phaseTree :: a -> Tree a -> Tree a
 phaseTree a = strictRec
    
    where
-    rec tree = 
+    rec_ tree = 
        case tree of
        
           Node trees -> 
-             let (trees', phasesList) = unzip (map rec trees)
+             let (trees', phasesList) = unzip (map rec_ trees)
                  phases = foldr (M.unionWith (.)) M.empty phasesList
              in (Node trees', phases)
              
           Chunk cnr t ->
-             let (tree', phases) = rec t
+             let (tree', phases) = rec_ t
              in (Chunk cnr tree', phases)
              
           AddList dir as t ->
-             let (tree', phases) = rec t
+             let (tree', phases) = rec_ t
              in (AddList dir as tree', phases)
              
           StrictOrder left right -> 
@@ -162,7 +162,7 @@ phaseTree a = strictRec
              in (StrictOrder left' right', M.empty)     
              
           Spread dir as t -> 
-             let (tree', phases) = rec t
+             let (tree', phases) = rec_ t
              in (Spread dir as tree', phases)
              
           Receive _  -> 
@@ -172,40 +172,40 @@ phaseTree a = strictRec
              (emptyTree, M.singleton i (as++))
           
     strictRec tree = 
-       let (tree', phases) = rec tree
+       let (tree', phases) = rec_ tree
            f list = listTree (list [])
        in foldr1 StrictOrder (intersperse (unitTree a) (M.elems (M.insertWith binTree 5 tree' (M.map f phases))))
         
 chunkTree :: Tree a -> [(Int, Tree a)]
 chunkTree theTree = 
-   let (ts, chunks) = rec theTree 
+   let (ts, chunks) = rec_ theTree 
    in ((-1), ts) : chunks
   
   where   
-   rec tree =
+   rec_ tree =
      case tree of
    
         Node trees -> 
-           let (ts, chunks) = unzip (map rec trees)
+           let (ts, chunks) = unzip (map rec_ trees)
            in (Node ts, concat chunks)
            
         -- This chunk should be solved later then the inner chunks.
         -- Therefore, the new chunk is appended
         Chunk cnr t ->
-           let (ts, chunks) = rec t
+           let (ts, chunks) = rec_ t
            in (emptyTree, chunks ++ [(cnr, ts)]) 
           
         AddList direction as t ->
-           let (ts, chunks) = rec t
+           let (ts, chunks) = rec_ t
            in (AddList direction as ts, chunks)
 
         StrictOrder left right -> 
-           let (ts1, chunks1) = rec left
-               (ts2, chunks2) = rec right
+           let (ts1, chunks1) = rec_ left
+               (ts2, chunks2) = rec_ right
            in (StrictOrder ts1 ts2, chunks1 ++ chunks2)
 
         Spread direction as t ->
-           let (ts, chunks) = rec t
+           let (ts, chunks) = rec_ t
            in (Spread direction as ts, chunks)
 
         _ -> (tree, [])

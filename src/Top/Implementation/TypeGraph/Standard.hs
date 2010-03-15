@@ -42,9 +42,9 @@ instance Show (StandardTypeGraph info) where
   
 instance TypeGraph (StandardTypeGraph info) info where
 
-   addTermGraph synonyms = rec 
+   addTermGraph synonyms = rec_ 
     where 
-      rec unique tp stg = 
+      rec_ unique tp stg = 
          let (newtp, original) = 
                 case expandToplevelTC synonyms tp of
                    Nothing -> (tp, Nothing) 
@@ -57,8 +57,8 @@ instance TypeGraph (StandardTypeGraph info) info where
                   let vid = VertexId unique
                   in (unique+1, vid, addVertex vid (VCon s, original) stg)
                TApp t1 t2 -> 
-                  let (u1, v1, g1) = rec unique t1 stg
-                      (u2, v2, g2) = rec u1     t2 g1 
+                  let (u1, v1, g1) = rec_ unique t1 stg
+                      (u2, v2, g2) = rec_ u1     t2 g1 
                       vid = VertexId u2
                   in (u2+1, vid, addVertex vid (VApp v1 v2, original) g2)
    
@@ -79,7 +79,7 @@ instance TypeGraph (StandardTypeGraph info) info where
       vertices . getGroupOf i
       
    substituteTypeSafe synonyms =
-      let rec history (TVar i) stg
+      let rec_ history (TVar i) stg
             |  i `elem` history  = Nothing
             |  otherwise         =
                   case maybeGetGroupOf (VertexId i) stg of
@@ -89,15 +89,15 @@ instance TypeGraph (StandardTypeGraph info) info where
                         do newtp <- typeOfGroup synonyms (getGroupOf (VertexId i) stg)
                            case newtp of 
                               TVar j -> Just (TVar j)
-                              _      -> rec (i:history) newtp stg
+                              _      -> rec_ (i:history) newtp stg
           
-          rec _ tp@(TCon _) _ = Just tp
+          rec_ _ tp@(TCon _) _ = Just tp
           
-          rec history (TApp l r) stg =
-             do l' <- rec history l stg
-                r' <- rec history r stg
+          rec_ history (TApp l r) stg =
+             do l' <- rec_ history l stg
+                r' <- rec_ history r stg
                 Just (TApp l' r')
-       in rec []
+       in rec_ []
     
    edgesFrom i =
       let p (EdgeId v1 v2 _, _) = v1 == i || v2 == i

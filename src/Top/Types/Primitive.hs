@@ -83,17 +83,17 @@ constantsInType tp = case tp of
 -- |Returns the left spine of a type. For instance, if type @t@
 -- is @Either Bool [Int]@, then @leftSpine t@ is @(Either,[Bool,[Int]])@.
 leftSpine :: Tp -> (Tp,Tps)
-leftSpine = rec [] where
-   rec tps (TApp t1 t2) = rec (t2:tps) t1
-   rec tps tp           = (tp,tps)
+leftSpine = rec_ [] where
+   rec_ tps (TApp t1 t2) = rec_ (t2:tps) t1
+   rec_ tps tp           = (tp,tps)
 
 -- |Returns the right spine of a function type. For instance,
 -- if type @t@ is @Int -> (Bool -> String)@, then @functionSpine t@
 -- is @([Int,Bool],String)@.
 functionSpine :: Tp -> (Tps,Tp)
-functionSpine = rec [] where
-   rec tps (TApp (TApp (TCon "->") t1) t2) = rec (t1:tps) t2
-   rec tps tp                              = (reverse tps,tp)
+functionSpine = rec_ [] where
+   rec_ tps (TApp (TApp (TCon "->") t1) t2) = rec_ (t1:tps) t2
+   rec_ tps tp                              = (reverse tps,tp)
 
 -- |Returns the right spine of a function type of a maximal length.
 functionSpineOfLength :: Int -> Tp -> (Tps, Tp)

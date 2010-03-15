@@ -129,7 +129,7 @@ equalPaths  :: S.Set VertexId -> VertexId -> [VertexId] -> EquivalenceGroup info
 equalPaths without start targets eqgroup =
    reduceNumberOfPaths $
       tailSharingBy (\(e1, _) (e2, _) -> e1 `compare` e2) $
-      rec start (edgeList, cliqueList)
+      rec_ start (edgeList, cliqueList)
  where   
       -- msg        = "Path from "++show start++" to "++show targets++" without "++show (S.elems without)
       edgeList   = let p (EdgeId v1 v2 _, _) = 
@@ -142,8 +142,8 @@ equalPaths without start targets eqgroup =
       -- Allow a second visit of a clique in a path?
       secondCliqueVisit = False
       
-      rec :: VertexId -> ([(EdgeId, info)], [[ParentChild]]) -> TypeGraphPath info
-      rec v1 (es, cs)
+      rec_ :: VertexId -> ([(EdgeId, info)], [[ParentChild]]) -> TypeGraphPath info
+      rec_ v1 (es, cs)
         | v1 `S.member` targetSet  = Empty
         | otherwise =
              let (edges1,es' ) = partition (\(EdgeId a _ _, _) -> v1 == a) es
@@ -157,10 +157,10 @@ equalPaths without start targets eqgroup =
                 altList $ 
                 map (\(EdgeId _ neighbour edgeNr, info) -> 
                       Step (EdgeId v1 neighbour edgeNr, Initial info) 
-                      :+: rec neighbour rest) edges1
+                      :+: rec_ neighbour rest) edges1
              ++ map (\(EdgeId neighbour _ edgeNr, info) -> 
                       Step (EdgeId v1 neighbour edgeNr, Initial info) 
-                      :+: rec neighbour rest) edges2
+                      :+: rec_ neighbour rest) edges2
              ++ concatMap (\list ->
                            let (sources, others) = partition ((v1==) . child) list
                                sourceParents     = map parent sources
@@ -171,8 +171,8 @@ equalPaths without start targets eqgroup =
                                   , child pc == neighbour
                                   , let beginPath = altList1 (map g sourceParents)
                                         restPath   
-                                           | secondCliqueVisit = rec neighbour (es'', map (filter (/= pc)) restCliques)
-                                           | otherwise         = rec neighbour rest
+                                           | secondCliqueVisit = rec_ neighbour (es'', map (filter (/= pc)) restCliques)
+                                           | otherwise         = rec_ neighbour rest
                                         g sp = Step ( EdgeId v1 neighbour impliedEdgeNr
                                                     , Implied (childSide pc) sp (parent pc)
                                                     )
