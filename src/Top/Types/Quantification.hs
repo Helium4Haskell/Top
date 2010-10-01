@@ -15,7 +15,7 @@ module Top.Types.Quantification where
 import Top.Types.Primitive
 import Top.Types.Substitution
 import Data.List
-import Data.Maybe
+-- import Data.Maybe
 import Utils (internalError)
 
 -----------------------------------------------------------------------------
