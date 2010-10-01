@@ -11,7 +11,7 @@ module Top.Implementation.TypeGraph.ApplyHeuristics (applyHeuristics, predicateP
 
 import Data.Graph (buildG, scc)
 import Data.List
-import Data.Maybe
+-- import Data.Maybe
 import Data.Tree (flatten)
 import qualified Data.Map as M
 import qualified Data.Set as S
