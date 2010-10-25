@@ -175,17 +175,17 @@ instance Show Tp where
     where
       showTp tp = 
          case leftSpine tp of
-            (TCon "->",[t1,t2]) -> rec (<1) t1 ++ " -> " ++ rec (const False) t2
+            (TCon "->",[t1,t2]) -> rec_ (<1) t1 ++ " -> " ++ rec_ (const False) t2
             (TVar i   ,[]     ) -> 'v' : show i
             (TCon s   ,[]     ) -> s
-            (TCon "[]",[t1]   ) -> "[" ++ rec (const False) t1 ++ "]"
-            (TCon s   ,ts     ) | isTupleConstructor s -> let ts'  = map (rec (const False)) ts
+            (TCon "[]",[t1]   ) -> "[" ++ rec_ (const False) t1 ++ "]"
+            (TCon s   ,ts     ) | isTupleConstructor s -> let ts'  = map (rec_ (const False)) ts
                                                               f [] = ""
                                                               f xs = foldr1 (\x y -> x++", "++y) xs
                                                           in "(" ++ f ts' ++ ")"
-            (t,ts) -> unwords (map (rec (<2)) (t:ts))
+            (t,ts) -> unwords (map (rec_ (<2)) (t:ts))
       
-      rec p t = parIf (p (priorityOfType t)) (showTp t) 
+      rec_ p t = parIf (p (priorityOfType t)) (showTp t) 
       parIf True  s = "("++s++")"
       parIf False s = s
       
