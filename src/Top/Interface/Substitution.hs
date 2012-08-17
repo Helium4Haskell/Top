@@ -50,10 +50,10 @@ instance ( Monad m
          ) => 
            HasSubst (StateFixT s m) info where
 
-   makeSubstConsistent   = deSubst $ makeSubstConsistent 
+   makeSubstConsistent   = deSubst makeSubstConsistent 
    unifyTerms info t1 t2 = deSubst (unifyTerms info t1 t2)
    findSubstForVar       = deSubst . findSubstForVar
-   fixpointSubst         = deSubst $ fixpointSubst
+   fixpointSubst         = deSubst fixpointSubst
   
 ------------------------------------------------------------------------
 -- (IV)  Additional functions

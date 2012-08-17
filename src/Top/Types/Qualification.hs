@@ -63,7 +63,7 @@ showContext = showContextSimple . showQualifiers
 showContextSimple :: [String] -> String
 showContextSimple []  = ""
 showContextSimple [x] = x ++ " => "
-showContextSimple xs  = "(" ++ concat (intersperse ", " xs) ++ ") => "
+showContextSimple xs  = "(" ++ intercalate ", " xs ++ ") => "
       
 instance (ShowQualifiers a, ShowQualifiers b) => ShowQualifiers (a, b) where
    showQualifiers (a, b) = showQualifiers a ++ showQualifiers b

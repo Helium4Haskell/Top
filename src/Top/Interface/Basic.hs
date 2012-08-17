@@ -63,11 +63,11 @@ instance ( Monad m
    -- constraints
    pushConstraint        = deBasic . pushConstraint . mapConstraint selectFix
    pushConstraints       = deBasic . pushConstraints . map (mapConstraint selectFix)
-   popConstraint         = deBasic $ popConstraint >>= return . fmap (mapConstraint (deBasic))
-   discardConstraints    = deBasic $ discardConstraints
+   popConstraint         = deBasic $ liftM (fmap (mapConstraint deBasic)) popConstraint
+   discardConstraints    = deBasic discardConstraints
    -- errors
    addLabeledError label = deBasic . addLabeledError label
-   getLabeledErrors      = deBasic $ getLabeledErrors
+   getLabeledErrors      = deBasic getLabeledErrors
    updateErrorInfo       = deBasic . selectFix . updateErrorInfo
    -- conditions
    addCheck s            = deBasic . addCheck s . selectFix
@@ -89,13 +89,12 @@ addError :: HasBasic m info => info -> m ()
 addError = addLabeledError NoErrorLabel
 
 getErrors :: HasBasic m info => m [info]  
-getErrors = getLabeledErrors >>= (return . map fst)
+getErrors = liftM (map fst) getLabeledErrors
 
 doChecks :: HasBasic m info => m ()
 doChecks = 
    do ms <- getChecks
-      bs <- let f x = fst x >>= (return . not)
-            in filterM f ms
+      bs <- filterM (liftM not . fst) ms
       unless (null bs) $ 
          let err = "\n\n  The following constraints were violated:\n" 
                    ++ unlines (map (("  - "++) . snd) bs)

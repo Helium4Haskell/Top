@@ -45,11 +45,11 @@ t1 .->. t2 = TApp (TApp (TCon "->") t1) t2
 
 -- |For instance, @(listType intType)@ represents @[Int]@
 listType :: Tp -> Tp
-listType t1 = TApp (TCon "[]") t1
+listType = TApp (TCon "[]")
 
 -- |For instance, @(ioType boolType)@ represents @(IO Bool)@
 ioType :: Tp -> Tp
-ioType t1 = TApp (TCon "IO") t1
+ioType = TApp (TCon "IO")
 
 -- |A cathesian product of zero or more Top.Types. For instance,
 -- @(tupleType [])@ represents @()@, and @(tupleType [charType, stringType])@
@@ -204,7 +204,7 @@ tpParser = level0
    ident xs =
       case break (\c -> isSpace c || c `elem` "[]()-,") (dropWhile isSpace xs) of
          ([], _) -> []
-         (s, xs2) | length s > 1 && take 1 s == "v" && all isDigit (drop 1 s)
+         (s, xs2) | length s > 1 && "v" `isPrefixOf` s && all isDigit (drop 1 s)
                                -> [ (TVar (read $ drop 1 s), xs2) ]
                   |  otherwise -> [ (TCon s, xs2) ]     
                 
@@ -215,9 +215,8 @@ tpParser = level0
    p *> q = flip const <$> p <*> q
    succeed a xs = [(a, xs)]
    tok s xs = 
-      case dropWhile isSpace xs of
-         []   -> []
-         ys -> if s `isPrefixOf` ys then [(s, drop (length s) ys)] else []
+      let ys = dropWhile isSpace xs
+      in [ (s, drop (length s) ys) | not (null ys), s `isPrefixOf` ys ]
    pars   p = tok "(" *> p <* tok ")"
    bracks p = tok "[" *> p <* tok "]"
    list p = ((:) <$> p <*> list p) <|> succeed []
@@ -245,8 +244,8 @@ instance (HasTypes a, HasTypes b) => HasTypes (a, b) where
    changeTypes f (a, b) = (changeTypes f a, changeTypes f b)
    
 instance HasTypes a => HasTypes (Maybe a) where
-   getTypes      = maybe [] getTypes
-   changeTypes f = maybe Nothing (Just . changeTypes f)
+   getTypes    = maybe [] getTypes
+   changeTypes = fmap . changeTypes
 
 instance (HasTypes a, HasTypes b) => HasTypes (Either a b) where
    getTypes      = either getTypes getTypes

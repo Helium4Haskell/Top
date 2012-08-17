@@ -25,7 +25,7 @@ instance Monad m => Monad (StateFixT s m) where
    m >>= f = Fix (unFix m >>= unFix . f)
 
 instance Monad m => MonadState (s (StateFixT s m)) (StateFixT s m) where
-   get = Fix $ get
+   get = Fix get
    put = Fix . put
 
 instance MonadTrans (StateFixT s) where
@@ -55,5 +55,5 @@ runStateFix m = runIdentity . runStateFixT m
 evalStateFix :: StateFix s a -> s (StateFix s) -> a
 evalStateFix m = runIdentity . evalStateFixT m
 
-execStateFix :: StateFix s a -> s (StateFix s) -> (s (StateFix s))
+execStateFix :: StateFix s a -> s (StateFix s) -> s (StateFix s)
 execStateFix m = runIdentity . execStateFixT m

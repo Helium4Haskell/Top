@@ -23,6 +23,7 @@ import Top.Implementation.TypeGraph.Path
 import Top.Implementation.TypeGraph.Basics
 import Top.Types
 import Data.List
+import Data.Maybe
 import qualified Data.Set as S
 
 -----------------------------------------------------------------------
@@ -44,7 +45,7 @@ instance Show (EquivalenceGroup info) where
               , "   " ++ concatMap show (sort [ a | (a, _) <- edges eqgroup ])
               , "[Cliques  ]:"
               ] ++ 
-              (map (("   "++). show) (sort  (cliques eqgroup)))
+                map (("   "++) . show) (sort (cliques eqgroup))
 
 -----------------------------------------------------------------------
 -- * Constructing an equivalence group
@@ -183,8 +184,8 @@ equalPaths without start targets eqgroup =
 
       removeFromClique :: VertexId -> [[ParentChild]] -> [[ParentChild]]
       removeFromClique vid =
-         let p pcs = length pcs > 1
-             f pcs = filter ((/=vid) . child) pcs
+         let p = (> 1) . length
+             f = filter ((/=vid) . child)
          in filter p . map f
 
 typeOfGroup :: OrderedTypeSynonyms -> EquivalenceGroup info -> Maybe Tp
@@ -210,9 +211,7 @@ typeOfGroup synonyms eqgroup
 -- Todo: improve
 theBestType :: OrderedTypeSynonyms -> Tps -> Tp 
 theBestType synonyms tps = 
-   let f t1 t2 = case equalUnderTypeSynonyms synonyms t1 t2 of
-                    Just best -> best
-                    Nothing -> t1
+   let f t1 t2 = fromMaybe t1 (equalUnderTypeSynonyms synonyms t1 t2)
    in foldr1 f tps
    
 -- Check for some invariants: identity if everything is okay, otherwise an internal error

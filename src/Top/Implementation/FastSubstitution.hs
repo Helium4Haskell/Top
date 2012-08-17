@@ -18,6 +18,7 @@ import Top.Interface.TypeInference
 import Top.Interface.Basic
 import Top.Interface.Substitution
 import qualified Data.Map as M
+import Data.Maybe
 import Utils (internalError)
 
 ------------------------------------------------------------------------
@@ -66,10 +67,10 @@ instance ( MonadState s m
             Left _           -> select (addLabeledError unificationErrorLabel info)
             Right (used,sub) -> 
                let mutp = equalUnderTypeSynonyms synonyms (sub |-> t1') (sub |-> t2') 
-                   utp = maybe err id mutp
+                   utp = fromMaybe err mutp
                    err = internalError "Top.Solvers.GreedySubst" "greedyState" "types not unifiable"
                    f (FixpointSubstitution fm) =
-                         FixpointSubstitution (M.union (M.fromList [ (i, lookupInt i sub) | i <- dom sub ]) fm)
+                         FixpointSubstitution (M.fromList [ (i, lookupInt i sub) | i <- dom sub ] `M.union` fm)
                    g = writeExpandedType synonyms t2 utp 
                      . writeExpandedType synonyms t1 utp 
                    h = if used then g . f else f

@@ -120,7 +120,7 @@ spreadTree spreadFunction = fst . rec_ M.empty
           StrictOrder left right -> 
              let (left' , set1) = rec_ fm left
                  (right', set2) = rec_ fm right
-             in (StrictOrder left' right', S.union set1 set2)
+             in (StrictOrder left' right', set1 `S.union` set2)
           
           Spread direction as t -> 
              let (tree', set) = rec_ fmNew t
@@ -179,7 +179,7 @@ phaseTree a = strictRec
 chunkTree :: Tree a -> [(Int, Tree a)]
 chunkTree theTree = 
    let (ts, chunks) = rec_ theTree 
-   in ((-1), ts) : chunks
+   in (-1, ts) : chunks
   
   where   
    rec_ tree =

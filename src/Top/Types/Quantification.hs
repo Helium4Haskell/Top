@@ -15,7 +15,7 @@ module Top.Types.Quantification where
 import Top.Types.Primitive
 import Top.Types.Substitution
 import Data.List
--- import Data.Maybe
+import Data.Maybe
 import Utils (internalError)
 
 -----------------------------------------------------------------------------
@@ -151,12 +151,12 @@ instance HasSkolems Tp where
    changeSkolems skMap = rec_ where
       rec_ tp@(TVar _) = tp
       rec_ tp@(TCon s) = case fromSkolemString s of
-                              Just i  -> maybe tp id (lookup i skMap)
+                              Just i  -> fromMaybe tp (lookup i skMap)
                               Nothing -> tp
       rec_ (TApp l r)  = TApp (rec_ l) (rec_ r)
       
 instance HasSkolems a => HasSkolems [a] where
-   allSkolems = foldr union [] . map allSkolems
+   allSkolems = foldr (union . allSkolems) []
    changeSkolems skMap = map (changeSkolems skMap) 
    
 -----------------------------------------------------------------------------
@@ -199,7 +199,7 @@ instance (Substitutable a, ShowQuantors a, Show q) => ShowQuantors (Quantificati
       let 
           qs          = is `intersect` ftv a
           quantorText | null qs || not (showTopLevelQuantors options) = ""
-                      | otherwise = unwords (showQuantor q : (map (\i -> show (sub |-> TVar i)) qs) ++ [". "])
+                      | otherwise = unwords (showQuantor q : map (\i -> show (sub |-> TVar i)) qs ++ [". "])
           dontUse     = dontUseIdentifiers options
           -- find an appropriate name for bound type variables that are in the name map
           qmap1       | not (useTheNameMap options) || showAllTheSame options = []
@@ -218,7 +218,7 @@ instance (Substitutable a, ShowQuantors a, Show q) => ShowQuantors (Quantificati
           qmap2       | showAllTheSame options = []
                       | otherwise = zip (filter (`notElem` map fst qmap1) qs) (variableList \\ dontUse1)
           dontUse2    = map snd qmap2 ++ dontUse1
-          frees       = ftv a \\ (map fst (qmap1 ++ qmap2))
+          frees       = ftv a \\ map fst (qmap1 ++ qmap2)
           sub         = listToSubstitution $  [ (i, TCon s) | (i,s) <- qmap1 ++ qmap2 ]
                                            ++ [ (i, TCon (variablePrefix options ++ show i)) | i <- frees ]
           newOptions  = options { dontUseIdentifiers   = dontUse2
@@ -230,4 +230,4 @@ instance (Substitutable a, ShowQuantors a, Show q) => ShowQuantors (Quantificati
 -- |List of unique identifiers.(a, b, .., z, a1, b1 .., z1, a2, ..)
 variableList :: [String]
 variableList =  [ [x]        | x <- ['a'..'z'] ]
-             ++ [ (x:show i) | i <- [1 :: Int ..], x <- ['a'..'z'] ]            
+             ++ [ x:show i | i <- [1 :: Int ..], x <- ['a'..'z'] ]            

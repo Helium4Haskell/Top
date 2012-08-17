@@ -55,7 +55,7 @@ edgeFilter :: Monad m => String -> ((EdgeId, info) -> m Bool) -> HComponent m in
 edgeFilter description function = 
    Filter description $ \es -> 
       do xs <- filterM function es
-         return (if (null xs) then es else xs)
+         return (if null xs then es else xs)
 
 
 -----------------------------------------------------------------------------

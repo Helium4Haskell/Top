@@ -29,11 +29,11 @@ inorderTopLastPreTreeWalk = TreeWalk (\top cs -> children cs . top)
 
 inorderTopFirstPostTreeWalk :: TreeWalk
 inorderTopFirstPostTreeWalk = TreeWalk (\top cs -> top . children cs)
-   where children = concatList . map (\(f,g) -> f . g)
+   where children = concatList . map (uncurry (.))
 
 inorderTopLastPostTreeWalk :: TreeWalk
 inorderTopLastPostTreeWalk = TreeWalk (\top cs -> children cs . top)
-   where children = concatList . map (\(f,g) -> f . g)
+   where children = concatList . map (uncurry (.))
 
 reverseTreeWalk :: TreeWalk -> TreeWalk
 reverseTreeWalk (TreeWalk f) = TreeWalk (\top cs -> f top (reverse cs))

@@ -8,6 +8,7 @@
 
 module Top.Implementation.TypeGraph.Path where  
 
+import Data.Function
 import Data.List
 import Data.Maybe
 import qualified Data.Map as M
@@ -141,8 +142,8 @@ tailSharingBy compf thePath =
   rec_ (p1 :+: p2) = p1 :+: rec_ p2 
   rec_ path =  
      let sharedTail = map (\((p, tl):rest) -> combine (p:map fst rest) tl)
-                    . groupBy (\x y -> snd x  `eqfM`  snd y)
-                    . sortBy  (\x y -> snd x `compfM` snd y)
+                    . groupBy (eqfM `on` snd)
+                    . sortBy  (compfM `on` snd)
                     $ [ (p, lastStep p) |  p <- altPath path ]
 
          combine paths Nothing   = altList1 paths

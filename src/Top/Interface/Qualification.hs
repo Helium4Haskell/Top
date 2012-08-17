@@ -79,18 +79,18 @@ instance ( Monad m
    assumeQualifier info p   = deQual (assumeQualifier info p)
    changeQualifiers f       = deQual (changeQualifiers (select . f))
    
-   allQualifiers = deQual $ allQualifiers
+   allQualifiers = deQual allQualifiers
    generalizeWithQualifiers monos tp = 
       deQual (generalizeWithQualifiers monos tp)
       
    improveQualifiers       = deQual . improveQualifiers
-   improveQualifiersNormal = deQual $ improveQualifiersNormal
-   improveQualifiersFinal  = deQual $ improveQualifiersFinal
-   simplifyQualifiers      = deQual $ simplifyQualifiers
-   ambiguousQualifiers     = deQual $ ambiguousQualifiers
+   improveQualifiersNormal = deQual improveQualifiersNormal
+   improveQualifiersFinal  = deQual improveQualifiersFinal
+   simplifyQualifiers      = deQual simplifyQualifiers
+   ambiguousQualifiers     = deQual ambiguousQualifiers
    
    setClassEnvironment      = deQual . setClassEnvironment
-   getClassEnvironment      = deQual $ getClassEnvironment
+   getClassEnvironment      = deQual getClassEnvironment
       
 ------------------------------------------------------------------------
 -- (IV)  Additional functions

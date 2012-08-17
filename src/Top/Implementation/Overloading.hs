@@ -22,7 +22,7 @@ import Top.Monad.Select
 import Top.Util.Embedding
 import qualified Data.Map as M
 import Data.Maybe
-import Data.List (intersperse, (\\), partition)
+import Data.List (intercalate, (\\), partition)
 
 ------------------------------------------------------------------------
 -- (I)  Algebraic data type
@@ -44,7 +44,7 @@ instance Empty (OverloadingState info) where
       }
 
 instance Show (OverloadingState info) where
-   show s = unlines [ "class environment: " ++ concat (intersperse "," (M.keys (classEnvironment s)))
+   show s = unlines [ "class environment: " ++ intercalate "," (M.keys (classEnvironment s))
                     , "directives: " ++ show (typeClassDirectives s)
                     , "predicates: " ++ show (predicateMap s)
                     ] 
@@ -258,7 +258,7 @@ instance Show (PredicateMap info) where
    show qm = 
       let f (s, sf)
              | null ps   = []
-             | otherwise = ["   " ++ s ++ ": " ++ concat (intersperse "," (map (show . fst) ps))]
+             | otherwise = ["   " ++ s ++ ": " ++ intercalate "," (map (show . fst) ps)]
             where ps = sf qm 
       in unlines $ concatMap f 
             [ ("qualifiers"            , globalQualifiers)

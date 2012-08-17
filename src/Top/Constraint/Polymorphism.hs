@@ -17,7 +17,7 @@ import Top.Interface.TypeInference
 import Top.Interface.Substitution
 import Top.Interface.Qualification
 import Top.Constraint.Information
-import Data.List (union, intersperse)
+import Data.List (union, intercalate)
 
 data PolymorphismConstraint info
    = Generalize   Int (Tps, Tp) info
@@ -42,7 +42,7 @@ instance Show info => Show (PolymorphismConstraint info) where
             show t1 ++ " := Implicit" ++ commaList [show (map TVar (ftv monos)), show t2] ++ showInfo info
             
     where showInfo info = "   : {" ++ show info ++ "}"
-          commaList = par . concat . intersperse ", "
+          commaList = par . intercalate ", "
           par s = "(" ++ s ++ ")"
 
 instance Functor PolymorphismConstraint where
@@ -99,7 +99,7 @@ instance ( HasBasic m info
          Skolemize tp (monos, sigma) info -> 
             do scheme <- findScheme sigma
                let newInfo = skolemizedTypeScheme (monos, scheme) info
-               qtp <- skolemizeFaked (equalityTypePair (tp, tp) $ newInfo) monos scheme
+               qtp <- skolemizeFaked (equalityTypePair (tp, tp) newInfo) monos scheme
                let (ps, stp) = split qtp
                assumeQualifiers (equalityTypePair (tp, tp) newInfo) ps
                pushConstraint $ liftConstraint

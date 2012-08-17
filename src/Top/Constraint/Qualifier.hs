@@ -27,9 +27,9 @@ instance Show info => Show (ExtraConstraint info) where
    show typeConstraint =
       case typeConstraint of
          Prove p info ->
-            "Prove (" ++ concat (intersperse ", " (showQualifiers p)) ++ ")" ++ showInfo info 
+            "Prove (" ++ intercalate ", " (showQualifiers p) ++ ")" ++ showInfo info 
          Assume p info ->
-            "Assume (" ++ concat (intersperse ", " (showQualifiers p)) ++ ")" ++ showInfo info
+            "Assume (" ++ intercalate ", " (showQualifiers p) ++ ")" ++ showInfo info
             
     where showInfo info = "   : {" ++ show info ++ "}"
 

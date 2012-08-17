@@ -11,7 +11,7 @@ module Top.Implementation.TypeGraph.ApplyHeuristics (applyHeuristics, predicateP
 
 import Data.Graph (buildG, scc)
 import Data.List
--- import Data.Maybe
+import Data.Function
 import Data.Tree (flatten)
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -59,9 +59,7 @@ shrunkAndFinalMsg old new =
 
 
 evalHeuristics :: HasTypeGraph m info => Path (EdgeId, info) -> [Heuristic info] -> m (ErrorInfo info)
-evalHeuristics path heuristics =
-   rec_ edgesBegin heuristics
-   
+evalHeuristics path = rec_ edgesBegin
  where
    edgesBegin = nubBy eqInfo2 (steps path)
    
@@ -162,10 +160,10 @@ constantClashPaths (first:rest) =
   -- (all vertices are in the same equivalence group)
   groupTheConstants :: [(VertexId, String)] -> [[VertexId]]
   groupTheConstants =  
-     sortBy (\xs ys -> length xs `compare` length ys)
+     sortBy (compare `on` length)
      .  map (map fst)
-     .  groupBy (\x y -> snd x    ==     snd y)
-     .  sortBy  (\x y -> snd x `compare` snd y)
+     .  groupBy ((==) `on` snd)
+     .  sortBy  (compare `on` snd)
    
   errorPath :: HasTypeGraph m info => [[VertexId]] -> m [TypeGraphPath info]   
   errorPath []        = return []             
@@ -211,15 +209,15 @@ childrenGraph = rec_ []
       rec_ as (i:is) = 
          do vertices <- verticesInGroupOf i
             ri       <- representativeInGroupOf i           
-            if ri `elem` (map (fst . fst) as)
+            if ri `elem` map (fst . fst) as
               then rec_ as is
               else do let cs = concat [ [(n, l), (n, r)] | (n, (VApp l r, _)) <- vertices ]
                       cs' <- let f t = do r <- representativeInGroupOf (snd t)
                                           return (r, t)
                              in mapM f cs
                       let children = map (\((a,b):xs) -> (a,b:map snd xs))
-                                   . groupBy (\x y -> fst x     ==    fst y)
-                                   . sortBy  (\x y -> fst x `compare` fst y)
+                                   . groupBy ((==) `on` fst)
+                                   . sortBy  (compare `on` fst)
                                    $ cs'
                       rec_ ([ ((ri, rc), xs) | (rc, xs) <- children ] ++ as) (map fst children ++ is)      
 
@@ -236,7 +234,7 @@ infiniteGroups xs =
        selfRecursive = [ f1 i | (i, j) <- xs, i == j ]
        recursive = let p [i] = i `elem` selfRecursive
                        p is  = length is > 1
-                   in map (map f2) ((filter p groups))
+                   in map (map f2) (filter p groups)
    in recursive
 
 allSubPathsList :: HasTypeGraph m info => [(VertexId, VertexId)] -> VertexId -> [VertexId] -> m (TypeGraphPath info) 
@@ -245,33 +243,37 @@ allSubPathsList childList vertex targets = rec_ S.empty vertex
    rec_ :: HasTypeGraph m info => S.Set VertexId -> VertexId -> m (TypeGraphPath info)
    rec_ without start =  
       do vs <- verticesInGroupOf start
-         case any (`elem` map fst vs) targets of 
+         if any (`elem` map fst vs) targets
+            then sameGroup 
+            else otherGroup vs
+    where 
+      -- targets are in the same group as the source
+      sameGroup = do
+         directPath <- allPathsListWithout without start targets
+         return (simplifyPath directPath)
+   
+      -- go down to another equivalence group  
+      otherGroup vs = do 
+         extendedPaths <- mapM (recDown vs) (targetPairs vs)
+         return (altList extendedPaths)    
 
-            True  -> -- targets are in the same group as the source
-               do directPath <- allPathsListWithout without start targets
-                  return (simplifyPath directPath)
-
-            False -> -- go down to another equivalence group  
-               let recDown (newStart, childTargets) =
-                      do let newWithout = without `S.union` S.fromList (map fst vs){- don't return to this equivalence group -}
-                             f ct = let set = S.fromList [ t | t <- childTargets, t /= ct ]
-                                    in rec_ (set `S.union` newWithout) ct
-                         path     <- allPathsListWithout without start [newStart]
-                         newPaths <- mapM f childTargets
-                         return (path :+: altList newPaths)
+      recDown vs (newStart, childTargets) = do
+         let newWithout = without `S.union` S.fromList (map fst vs){- don't return to this equivalence group -}
+             f ct = let set = S.fromList [ t | t <- childTargets, t /= ct ]
+                    in rec_ (set `S.union` newWithout) ct
+         path     <- allPathsListWithout without start [newStart]
+         newPaths <- mapM f childTargets
+         return (path :+: altList newPaths)
                    
-                   targetPairs :: [(VertexId, [VertexId])]
-                   targetPairs =
-                      let p (i, j) =  i `elem` map fst vs
-                                   && not (i `S.member` without || j `S.member` without)
-                      in map (\((i,j):rest) -> (i, j:map snd rest))
-                       . groupBy (\x y -> fst x     ==    fst y)
-                       . sortBy  (\x y -> fst x `compare` fst y)
-                       $ filter p childList
-               in
-                  do extendedPaths <- mapM recDown targetPairs
-                     return (altList extendedPaths)           
-
+      targetPairs :: [(VertexId, (VertexKind, Maybe Tp))] -> [(VertexId, [VertexId])]
+      targetPairs vs =
+         let p (i, j) =  i `elem` map fst vs
+                         && not (i `S.member` without || j `S.member` without)
+         in map (\((i,j):rest) -> (i, j:map snd rest))
+            . groupBy ((==) `on` fst)
+            . sortBy  (compare `on` fst)
+            $ filter p childList    
+   
 expandPath :: HasTypeGraph m info => TypeGraphPath info -> m (Path (EdgeId, info))
 expandPath Fail = return Fail
 expandPath p =
@@ -313,22 +315,22 @@ impliedEdgeTable = insertPairs M.empty
 -------------------------------
 -- 
 
-newtype IntPair = Hidden_IP { tupleFromIntPair :: (Int, Int) }
+newtype IntPair = HiddenIP { tupleFromIntPair :: (Int, Int) }
 
 intPair :: (Int, Int) -> IntPair
 intPair (x, y)
-   | x <= y    = Hidden_IP (x, y)
-   | otherwise = Hidden_IP (y, x)
+   | x <= y    = HiddenIP (x, y)
+   | otherwise = HiddenIP (y, x)
  
 instance Show IntPair where
-   show (Hidden_IP pair) = show pair
+   show (HiddenIP pair) = show pair
    
 instance Eq IntPair where
-   Hidden_IP pair1 == Hidden_IP pair2 = 
+   HiddenIP pair1 == HiddenIP pair2 = 
       pair1 == pair2
 
 instance Ord IntPair where
-   Hidden_IP pair1 `compare` Hidden_IP pair2 = 
+   HiddenIP pair1 `compare` HiddenIP pair2 = 
       pair1 `compare` pair2
 
 type PathMap info = M.Map IntPair (Path (EdgeId, PathStep info))
@@ -343,7 +345,7 @@ predicatePath :: (HasQual m info, HasTypeGraph m info) => m (Path (EdgeId, PathS
 predicatePath =
    do ps       <- allQualifiers
       simples  <- simplePredicates ps
-      makeList (S.empty) Empty simples
+      makeList S.empty Empty simples
 
  where 
   simplePredicates ps =

@@ -149,14 +149,14 @@ instance Substitutable Tp where
 
 instance Substitutable a => Substitutable [a] where
    sub |-> as = map (sub |->) as
-   ftv as     = foldr union [] (map ftv as)
+   ftv        = foldr (union . ftv) []
 
 instance (Substitutable a, Substitutable b) => Substitutable (a, b) where
    sub |-> (a, b) = (sub |-> a, sub |-> b)
    ftv (a, b)     = ftv a `union` ftv b
 
 instance Substitutable a => Substitutable (Maybe a) where
-   sub |-> ma  = maybe Nothing (Just . (sub |->)) ma
+   sub |-> ma  = fmap (sub |->) ma
    ftv         = maybe [] ftv
 
 instance (Substitutable a, Substitutable b) => Substitutable (Either a b) where

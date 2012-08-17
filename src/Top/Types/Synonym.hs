@@ -18,6 +18,7 @@ module Top.Types.Synonym where
 import Top.Types.Primitive
 import Top.Types.Substitution hiding (lookupInt)
 import Utils (internalError)
+import Data.Maybe
 import Data.Graph (scc, buildG)
 import Data.Tree (flatten)
 import qualified Data.Map as M
@@ -57,8 +58,8 @@ getTypeSynonymOrdering synonyms =
                                   )
 
        err          = internalError "Top.Types.Synonyms" "getTypeSynonymOrdering" "error in lookup table"
-       lookupName n = maybe err id (M.lookup n nameTable)
-       lookupInt  i = maybe err id (M.lookup i intTable)
+       lookupName n = fromMaybe err (M.lookup n nameTable)
+       lookupInt  i = fromMaybe err (M.lookup i intTable)
 
        edges = let op s1 (arity, function) es =
                       let i1 = lookupName s1
@@ -67,9 +68,9 @@ getTypeSynonymOrdering synonyms =
                                       Just i2 -> (:) (i2,i1)
                                       Nothing -> id
                       in foldr add es cs
-               in M.foldWithKey op [] synonyms
+               in M.foldrWithKey op [] synonyms
        
-       graph = buildG (0, (M.size synonyms - 1)) edges
+       graph = buildG (0, M.size synonyms - 1) edges
        list  = map flatten (scc graph)
 
        (ordering, recursive, _) =
@@ -131,9 +132,8 @@ expandOneStepOrdered (ordering, synonyms) (t1,t2) =
    let f tp = case fst (leftSpine tp) of
                  TCon s -> M.lookup s ordering
                  _      -> Nothing
-       expand tp = case expandTypeConstructorOneStep synonyms tp of
-                      Just x  -> x
-                      Nothing -> internalError "Top.Types.Synonyms" "expandOneStep" "invalid set of OrderedTypeSynonyms"
+       expand tp = fromMaybe err (expandTypeConstructorOneStep synonyms tp)
+       err = internalError "Top.Types.Synonyms" "expandOneStep" "invalid set of OrderedTypeSynonyms"
    in case (f t1, f t2) of
          (Just i1, Just i2) | i1 <= i2  -> Just (expand t1, t2)
                             | otherwise -> Just (t1, expand t2)

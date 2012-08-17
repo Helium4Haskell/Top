@@ -89,16 +89,16 @@ instance (SolveState (f m), SolveState x) => SolveState (Fix f x m) where
 
 -- Embedded
 instance Embedded c (f (g x m) m) s => Embedded c (And f g x m) s  where
-   embedding = composeE (Embedding { getE = \(Compose a) -> a, changeE = \f (Compose a) -> Compose (f a) }) embedding 
+   embedding = composeE Embedding { getE = \(Compose a) -> a, changeE = \f (Compose a) -> Compose (f a) } embedding 
 
 instance Embedded c x s => Embedded c (Simple a x m) s where
-   embedding = composeE (Embedding { getE = \(Simple _ b) -> b, changeE = \f (Simple a b) -> Simple a (f b) }) embedding
+   embedding = composeE Embedding { getE = \(Simple _ b) -> b, changeE = \f (Simple a b) -> Simple a (f b) } embedding
    
 instance Embedded c x s => Embedded c (Fix a x m) s where
-   embedding = composeE (Embedding { getE = \(Fix _ b) -> b, changeE = \f (Fix a b) -> Fix a (f b) }) embedding
+   embedding = composeE Embedding { getE = \(Fix _ b) -> b, changeE = \f (Fix a b) -> Fix a (f b) } embedding
 
 fromFstFixE :: Embedding (g m) c -> Embedding (Fix g x m) c
-fromFstFixE = composeE (Embedding { getE = \(Fix a _) -> a, changeE = \f (Fix a b) -> Fix (f a) b })
+fromFstFixE = composeE Embedding { getE = \(Fix a _) -> a, changeE = \f (Fix a b) -> Fix (f a) b }
 
 fromFstSimpleE :: Embedding a c -> Embedding (Simple a x m) c
 fromFstSimpleE = composeE fstSimpleE

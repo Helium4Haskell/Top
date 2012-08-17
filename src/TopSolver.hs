@@ -11,7 +11,7 @@ module Main where
 
 import Text.ParserCombinators.Parsec
 import qualified Text.ParserCombinators.Parsec.Token as P
-import Text.ParserCombinators.Parsec.Language (haskellStyle, LanguageDef(..))
+import qualified Text.ParserCombinators.Parsec.Language as P
 import Top.Constraint
 import Top.Types
 import Top.Constraint.Information
@@ -23,7 +23,8 @@ import Top.Solver
 import Top.Solver.TypeGraph
 import Utils (internalError)
 import Data.Char (isDigit, isLower)
-import Data.List (intersperse)
+import Data.List (intercalate, intersperse)
+import Data.Maybe
 import qualified Data.Map as M
 import qualified Data.Set as S
 import System.Environment (getArgs)
@@ -69,7 +70,7 @@ instance PolyTypeConstraintInfo TopInfo where
 -- * Top constraints
 
 type TopQualifiers = Predicates
-type TopConstraint = ConstraintSum (EqualityConstraint) 
+type TopConstraint = ConstraintSum EqualityConstraint
                         (ConstraintSum PolymorphismConstraint ExtraConstraint)
                         TopInfo
                  
@@ -108,7 +109,7 @@ instance HasST TopSolve TopInfo where
 
 lexer :: P.TokenParser ()
 lexer = P.makeTokenParser 
-           ( haskellStyle 
+           ( P.haskellStyle 
                 { P.reservedOpNames = ["==", "::", "<=", "=>", ":=", "~>", "<:" ] 
                 , P.reservedNames   = ["forall", "Generalize", "Instantiate", "Skolemize", "Implicit",
                                        "Prove", "Assume", "MakeConsistent", "LogState", "Stop", 
@@ -118,21 +119,21 @@ lexer = P.makeTokenParser
                 })
 
 runLex :: Parser (Constraints TopSolve, Int) -> String -> IO ()
-runLex p input
+runLex p
         = run (do { whiteSpace
                   ; x <- p
                   ; eof
                   ; return x
-                  }) input
+                  })
 
-whiteSpace             :: CharParser () ()
-comma, dot, identifier :: CharParser () String
+whiteSpace, comma, dot :: CharParser () ()
+identifier             :: CharParser () String
 parens, brackets       :: CharParser () a -> CharParser () a
 reserved, reservedOp   :: String -> CharParser () ()
 
 whiteSpace = P.whiteSpace lexer
-comma      = P.comma lexer
-dot        = P.dot lexer
+comma      = void (P.comma lexer)
+dot        = void (P.dot lexer)
 parens     = P.parens lexer
 brackets   = P.brackets lexer
 identifier = P.identifier lexer
@@ -153,7 +154,7 @@ main = do args <- getArgs
 
 run :: Parser (Constraints TopSolve, Int) -> String -> IO ()
 run p input =
-   case (parse p "" input) of
+   case parse p "" input of
       Left err -> 
          do putStr "parse error at "
             print err
@@ -163,19 +164,19 @@ run p input =
                 options = solveOptions { uniqueCounter = unique, typeSynonyms = stringAsTypeSynonym }
                 (result, logm) = solve options cset typegraphConstraintSolverDefault
                 
-            putStrLn (show logm)          
+            print logm
             
             putStrLn . concat $ 
-               "Substitution: " : intersperse ", " (
+               "Substitution: " : intersperse ", "
                   [ show (i, lookupInt i (substitutionFromResult result)) 
                   | i <- dom (substitutionFromResult result) 
-                  ])
+                  ]
                
             case errorsFromResult result of
                [] -> putStrLn "(No errors)"
                es -> let nice (info, lab) =
                             let TopInfo xs = addTopInfo "label" (show lab) info
-                            in "{" ++ concat (intersperse ", " [ a++"="++b | (a, b) <- xs]) ++ "}"
+                            in "{" ++ intercalate ", " [ a++"="++b | (a, b) <- xs] ++ "}"
                      in do putStr (unlines (map nice es))
                            putStrLn ("(Failed with "++show (length es)++" errors)")
   
@@ -190,7 +191,7 @@ pStatements =
 
 pStatement :: Parser (Either (Result TopConstraint) (Result (Constraint TopSolve)))
 pStatement = 
-   tryList (map (\m -> m >>= (return . Right)) decl ++ [ pConstraint >>= (return . Left) ])
+   tryList (map (liftM Right) decl ++ [ liftM Left pConstraint ])
  where
    decl = [ pOperation {-, pSubtypingRule, pClassDecl, pInstanceDecl, pNeverDecl
           , pCloseDecl, pDisjointDecl, pDefaultDecl -}
@@ -233,14 +234,10 @@ pConstraint =
       do sv <- pSigmaVar   
          reservedOp ":="
          reserved "Generalize"
-         (monos, tp) <- parens $ 
-                           do ms <- brackets (commas identifier)
-                              comma
-                              tp <- pType
-                              return (map TCon ms, tp)
+         (monos, tp) <- parens pMonosType
          return $ \info ->
             ( sv : allTypeConstants monos ++ allTypeConstants tp
-            , \varMap -> Generalize (maybe (-1) id $ M.lookup sv varMap) (applyVarMap varMap monos, applyVarMap varMap tp) info
+            , \varMap -> Generalize (fromMaybe (-1) $ M.lookup sv varMap) (applyVarMap varMap monos, applyVarMap varMap tp) info
             )
             
    pInstantiate = 
@@ -297,11 +294,7 @@ pConstraint =
       do t1 <- pType
          reservedOp ":="
          reserved "Implicit"
-         (monos, t2) <- parens $ 
-                           do ms <- brackets (commas identifier)
-                              comma
-                              tp <- pType
-                              return (map TCon ms, tp)
+         (monos, t2) <- parens pMonosType
          return $ \info ->
             ( allTypeConstants t1 ++ allTypeConstants monos ++ allTypeConstants t2
             , \varMap -> Implicit (applyVarMap varMap t1) (applyVarMap varMap monos, applyVarMap varMap t2) info
@@ -415,7 +408,7 @@ pInfo = tryList [ withInfo, withoutInfo ]
    where
       withInfo =
          do reservedOp ":"
-            s <- manyTill anyChar (do { char '\n' ; return () } <|> eof)
+            s <- manyTill anyChar (do { void (char '\n') ; return () } <|> eof)
             whiteSpace
             return (TopInfo [("msg", s)])
       withoutInfo =
@@ -462,13 +455,13 @@ pTypeScheme = do qs <- option [] $
 
 pQualifierList :: Parser TopQualifiers
 pQualifierList = 
-   tryList [ parens (commas pOneQualifier) >>= (return . concat)
+   tryList [ liftM concat (parens (commas pOneQualifier))
            , pOneQualifier
            ]
  
 pOneQualifier :: Parser TopQualifiers
 pOneQualifier = tryList
-   [ pPredicate         >>= return . (:[])
+   [ liftM return pPredicate
    --, pDependency        >>= (return . toTopQual)
    --, pImplicitParameter >>= (return . toTopQual)
    --, pSubtyping         >>= (return . toTopQual)
@@ -527,6 +520,14 @@ pType2 = tryList [
         , do tp <- brackets pType
              return (listType tp)
     ]
+
+pMonosType :: Parser ([Tp], Tp)
+pMonosType = do 
+   ms <- brackets (commas identifier)
+   comma
+   tp <- pType
+   return (map TCon ms, tp)
+    
 ---------------------------------------------------------------------
 -- * Miscellaneous
 
@@ -541,9 +542,9 @@ applyVarMap varmap =
              TCon s   -> maybe (TCon s) TVar (M.lookup s varmap)
              TVar _   -> tp   
    in changeTypes f
-   
+
 commas :: Parser a -> Parser [a]
-commas  p = p `sepBy` comma
+commas = (`sepBy` comma)
 
 tryList :: [Parser a] -> Parser a 
 tryList = foldr1 (<|>) . map try
@@ -553,5 +554,5 @@ toList a = [a]
 
 makeSigma :: VarMap -> Either String (Scheme TopQualifiers) -> Sigma TopQualifiers
 makeSigma vm (Left s)  = let err = internalError "TopSolver.hs" "makeSigma" "sigma var not in variable map" 
-                         in SigmaVar (maybe err id $ M.lookup s vm)
+                         in SigmaVar (fromMaybe err $ M.lookup s vm)
 makeSigma vm (Right s) = SigmaScheme (applyVarMap vm s)

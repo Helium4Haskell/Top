@@ -14,7 +14,7 @@ setE :: Embedding a b -> b -> a -> a
 setE e = changeE e . const
 
 withE :: Embedding a b -> (b -> c) -> a -> c
-withE e f = f . (getE e)
+withE e f = f . getE e
 
 ------------------------------
 -- useful embeddings

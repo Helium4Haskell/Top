@@ -79,7 +79,7 @@ makeScheme monos preds tp =
 instantiateWithNameMap :: Int -> TpScheme -> (Int, Predicates, Tp) -- get rid of this function.
 instantiateWithNameMap unique (Quantification (qs,nm,qtp)) = 
    let sub = listToSubstitution [ (i,TCon s) | (i,s) <- nm, i `elem` qs ]
-       (u, qtp') = instantiate unique (Quantification (qs \\ (map fst nm), [], sub |-> qtp))
+       (u, qtp') = instantiate unique (Quantification (qs \\ map fst nm, [], sub |-> qtp))
        (ps, tp) = split qtp'
    in (u, ps, tp)
 
@@ -93,7 +93,7 @@ data Sigma qs  = SigmaVar    SigmaVar
 type SigmaVar  = Int
 
 instance (ShowQualifiers qs, Substitutable qs) => Show (Sigma qs) where
-   show (SigmaVar i)    = "s" ++ show i
+   show (SigmaVar i)    = 's':show i
    show (SigmaScheme s) = show s
 
 instance Substitutable qs => Substitutable (Sigma qs) where   

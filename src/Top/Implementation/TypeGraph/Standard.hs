@@ -16,7 +16,7 @@ import Top.Implementation.General
 import Top.Types
 import qualified Data.Map as M
 import Data.List (nub)
-import Data.Maybe (isJust)
+import Data.Maybe
 import Utils (internalError)
 
 data StandardTypeGraph info = STG
@@ -133,9 +133,9 @@ instance TypeGraph (StandardTypeGraph info) info where
 -- Helper functions
 combineClasses :: [VertexId] -> StandardTypeGraph info -> StandardTypeGraph info
 combineClasses is stg =
-      case nub (map (flip representativeInGroupOf stg) is) of
+      case nub (map (`representativeInGroupOf` stg) is) of
          list@(i:_:_) ->
-            let eqgroups = map (flip getGroupOf stg) list
+            let eqgroups = map (`getGroupOf` stg) list
                 newGroup = foldr combineGroups emptyGroup eqgroups
             in addPossibleInconsistentGroup i . createGroup newGroup . foldr removeGroup stg $ eqgroups
          _ -> stg
@@ -163,7 +163,7 @@ addClique clique =
 propagateRemoval :: VertexId -> StandardTypeGraph info -> StandardTypeGraph info
 propagateRemoval i stg = 
    let (is, new) = splitClass i stg   
-       ts = map (flip childrenInGroupOf new) is
+       ts = map (`childrenInGroupOf` new) is
 
        (leftList, rightList) = unzip ts
        cliqueLeft  = makeClique (concat leftList)
@@ -201,7 +201,7 @@ createGroup eqgroup stg =
        list = [(i, newGroupNumber) | (i, _) <- vertices eqgroup ]
    in if null list 
         then internalError "Top.TypeGraph.TypeGraphMonad" "createNewGroup" "cannot create an empty equivalence group"
-        else stg { referenceMap            = M.union (referenceMap stg) (M.fromList list)
+        else stg { referenceMap            = referenceMap stg `M.union` M.fromList list
                  , equivalenceGroupMap     = M.insert newGroupNumber eqgroup (equivalenceGroupMap stg)
                  , equivalenceGroupCounter = newGroupNumber + 1
                  }
@@ -209,7 +209,7 @@ createGroup eqgroup stg =
 removeGroup :: EquivalenceGroup info -> StandardTypeGraph info -> StandardTypeGraph info               
 removeGroup eqgroup stg =
    let vertexIds   = map fst (vertices eqgroup)
-       oldGroupNr  = maybe [] (:[]) (M.lookup (head vertexIds) (referenceMap stg))
+       oldGroupNr  = maybeToList (M.lookup (head vertexIds) (referenceMap stg))
    in stg { referenceMap        = foldr M.delete (referenceMap stg) vertexIds
           , equivalenceGroupMap = foldr M.delete (equivalenceGroupMap stg) oldGroupNr
           }
@@ -230,7 +230,7 @@ maybeGetGroupOf vid stg =
 getGroupOf :: VertexId -> StandardTypeGraph info -> EquivalenceGroup info                
 getGroupOf vid =
    let err = internalError "Top.TypeGraph.Standard" "getGroupOf" "the function getGroupOf does no longer create an empty group if the vertexId doesn't exist"
-   in maybe err id . maybeGetGroupOf vid
+   in fromMaybe err . maybeGetGroupOf vid
 
 getAllGroups :: StandardTypeGraph info -> [EquivalenceGroup info]
 getAllGroups = M.elems . equivalenceGroupMap

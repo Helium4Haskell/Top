@@ -16,6 +16,7 @@ import Top.Monad.StateFix
 import Top.Interface.Basic
 import Top.Interface.Substitution
 import Top.Constraint.Information
+import Data.Function
 import Data.List (intersect, sortBy, partition, groupBy)
 import qualified Data.Map as M
 
@@ -55,16 +56,16 @@ instance ( Monad m
          ) => 
            HasTI (StateFixT s m) info where
 
-   getUnique           = deTI $ getUnique
+   getUnique           = deTI getUnique
    setUnique           = deTI . setUnique
    -- type synonym
    setTypeSynonyms     = deTI . setTypeSynonyms
-   getTypeSynonyms     = deTI $ getTypeSynonyms
+   getTypeSynonyms     = deTI getTypeSynonyms
    -- skolem variables
-   getSkolems          = deTI $ getSkolems
+   getSkolems          = deTI getSkolems
    setSkolems          = deTI . setSkolems
    -- type scheme map
-   allTypeSchemes      = deTI $ allTypeSchemes
+   allTypeSchemes      = deTI allTypeSchemes
    getTypeScheme       = deTI . getTypeScheme
    storeTypeScheme i   = deTI . storeTypeScheme i
    
@@ -198,8 +199,8 @@ checkSkolems =
       
       -- skolem constant versus a different skolem constant
       let problems = filter ((>1) . length)
-                   . groupBy (\x y -> fst x == fst y)
-                   . sortBy  (\x y -> fst x `compare` fst y)
+                   . groupBy ((==) `on` fst)
+                   . sortBy  (compare `on` fst)
                    $ [ (i, info) | (pairs, (info, _)) <- list2, (_, TVar i) <- pairs ]
           list3 = let is = concatMap (map fst) problems
                       p (pairs, _) = null (ftv (map snd pairs) `intersect` is)

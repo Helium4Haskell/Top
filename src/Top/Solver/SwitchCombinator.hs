@@ -20,7 +20,7 @@ ConstraintSolver f |>>| ConstraintSolver g = ConstraintSolver $ \options constra
        p (_, ErrorLabel s) = s /= "ambiguous predicate" -- temporary*
        p _                 = True
        switchLog = singleEntry 5 "CombinationSolver: Switching to second solver"
-   in if null (filter p $ errorsFromResult result1)
+   in if not (any p (errorsFromResult result1))
          then (result1, logs1)
          else (result2, logs1 `mappend` switchLog `mappend` logs2) 
 

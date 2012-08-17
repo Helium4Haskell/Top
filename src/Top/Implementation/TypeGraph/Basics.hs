@@ -12,7 +12,7 @@ import Top.Implementation.TypeGraph.Path
 import Top.Types
 import Utils (internalError)
 -- import Data.Maybe
-import Data.List (sort, partition, intersperse)
+import Data.List (sort, partition, intercalate)
 
 -----------------------------------------------------------------------------------------
 
@@ -39,7 +39,7 @@ impliedEdgeNr :: EdgeNr
 impliedEdgeNr = makeEdgeNr (-1)
 
 instance Show EdgeNr where
-   show (EdgeNrX i) = "#" ++ show i
+   show (EdgeNrX i) = '#':show i
 
 instance Show ChildSide where
    show LeftChild  = "(l)"
@@ -82,7 +82,7 @@ newtype Clique  = CliqueX [ParentChild]
 type CliqueList = [Clique]
 
 instance Show Clique where
-   show (CliqueX xs) = "{" ++ concat (intersperse ", " (map show xs)) ++ "}"
+   show (CliqueX xs) = "{" ++ intercalate ", " (map show xs) ++ "}"
 
 instance Eq Clique where 
    CliqueX xs == CliqueX ys = 

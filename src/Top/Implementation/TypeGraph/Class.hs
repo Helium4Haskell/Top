@@ -11,6 +11,7 @@ module Top.Implementation.TypeGraph.Class where
 
 import Top.Types
 import Top.Implementation.TypeGraph.Basics
+import Data.Maybe
 import qualified Data.Set as S
 import Data.List (nub)
 import Utils (internalError)
@@ -78,9 +79,8 @@ class TypeGraph graph info | graph -> info where
       substituteType syns . TVar
       
    substituteType syns tp graph =
-      case substituteTypeSafe syns tp graph of
-         Just stp -> stp
-         Nothing  -> internalError "Top.TypeGraph.TypeGraphState" "substituteType" "inconsistent state"
+      let err = internalError "Top.TypeGraph.TypeGraphState" "substituteType" "inconsistent state"
+      in fromMaybe err (substituteTypeSafe syns tp graph)
          
    -- Extra administration
    markAsPossibleError _     = id

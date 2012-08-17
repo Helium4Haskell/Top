@@ -16,6 +16,7 @@
 
 module Top.Implementation.Basic where
 
+import Control.Arrow
 import Top.Constraint
 import Top.Util.Option
 import Top.Implementation.General
@@ -118,7 +119,7 @@ instance ( MonadState s m
       modify (\s -> s { conditions = (deselectFix check, text) : conditions s})
 
    getChecks =
-      gets (map (\(m, s) -> (selectFix m, s)) . conditions)
+      gets (map (first selectFix) . conditions)
 
    stopAfterFirstError = useOption optionStop  (\x s -> s { optionStop  = x })
    checkConditions     = useOption optionCheck (\x s -> s { optionCheck = x })
