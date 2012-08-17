@@ -1,4 +1,4 @@
-{-# OPTIONS -XMultiParamTypeClasses -XFunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

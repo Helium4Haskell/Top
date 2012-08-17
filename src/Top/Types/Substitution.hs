@@ -1,4 +1,4 @@
-{-# OPTIONS -XExistentialQuantification -XTypeSynonymInstances #-}
+{-# LANGUAGE ExistentialQuantification, TypeSynonymInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

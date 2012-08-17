@@ -1,4 +1,4 @@
-{-# OPTIONS -XEmptyDataDecls  #-}
+{-# LANGUAGE EmptyDataDecls  #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

@@ -1,5 +1,5 @@
-{-# OPTIONS -XUndecidableInstances -XMultiParamTypeClasses -XKindSignatures
-            -XFunctionalDependencies -XFlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances, MultiParamTypeClasses, KindSignatures,
+            FunctionalDependencies, FlexibleInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

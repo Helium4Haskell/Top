@@ -1,4 +1,4 @@
-{-# OPTIONS -XFlexibleInstances -XMultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

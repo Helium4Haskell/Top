@@ -1,4 +1,4 @@
-{-# OPTIONS -XRankNTypes -XFlexibleContexts -XFlexibleContexts #-}
+{-# LANGUAGE RankNTypes, FlexibleContexts #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

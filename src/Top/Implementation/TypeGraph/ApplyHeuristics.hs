@@ -1,4 +1,4 @@
-{-# OPTIONS -XFlexibleContexts -XFlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

@@ -1,5 +1,5 @@
-{-# OPTIONS -XUndecidableInstances -XExistentialQuantification 
-            -XMultiParamTypeClasses -XFlexibleInstances -XRankNTypes #-}
+{-# LANGUAGE UndecidableInstances, ExistentialQuantification,
+            MultiParamTypeClasses, FlexibleInstances, RankNTypes #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

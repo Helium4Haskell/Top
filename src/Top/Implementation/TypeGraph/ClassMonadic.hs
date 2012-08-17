@@ -1,5 +1,5 @@
-{-# OPTIONS -XUndecidableInstances -XFunctionalDependencies -XRankNTypes 
-            -XMultiParamTypeClasses -XFlexibleContexts -XFlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances, FunctionalDependencies, RankNTypes,
+            MultiParamTypeClasses, FlexibleContexts, FlexibleInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

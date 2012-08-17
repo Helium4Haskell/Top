@@ -1,4 +1,4 @@
-{-# OPTIONS -XUndecidableInstances -XOverlappingInstances -XFlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances, OverlappingInstances, FlexibleInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
@@ -109,12 +109,12 @@ instance HasST TopSolve TopInfo where
 lexer :: P.TokenParser ()
 lexer = P.makeTokenParser 
            ( haskellStyle 
-                { reservedOpNames = ["==", "::", "<=", "=>", ":=", "~>", "<:" ] 
-                , reservedNames   = ["forall", "Generalize", "Instantiate", "Skolemize", "Implicit",
-                                     "Prove", "Assume", "MakeConsistent", "LogState", "Stop", 
-                                     "Declare", {- "Enter", "Leave", "ContextReduction",-} 
-                                     "Class", "Instance", "Never", "Close", 
-                                     "Disjoint", "Default" ]
+                { P.reservedOpNames = ["==", "::", "<=", "=>", ":=", "~>", "<:" ] 
+                , P.reservedNames   = ["forall", "Generalize", "Instantiate", "Skolemize", "Implicit",
+                                       "Prove", "Assume", "MakeConsistent", "LogState", "Stop", 
+                                       "Declare", {- "Enter", "Leave", "ContextReduction",-} 
+                                       "Class", "Instance", "Never", "Close", 
+                                       "Disjoint", "Default" ]
                 })
 
 runLex :: Parser (Constraints TopSolve, Int) -> String -> IO ()

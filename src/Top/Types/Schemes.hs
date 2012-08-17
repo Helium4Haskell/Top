@@ -1,4 +1,4 @@
-{-# OPTIONS -XTypeSynonymInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

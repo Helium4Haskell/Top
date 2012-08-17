@@ -1,4 +1,4 @@
-{-# OPTIONS -XOverlappingInstances -XUndecidableInstances -XFlexibleContexts #-}
+{-# LANGUAGE OverlappingInstances, UndecidableInstances, FlexibleContexts #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

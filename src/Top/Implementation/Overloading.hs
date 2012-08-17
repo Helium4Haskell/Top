@@ -1,5 +1,5 @@
-{-# OPTIONS -XUndecidableInstances -XFlexibleInstances 
-            -XMultiParamTypeClasses -XFlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances, FlexibleInstances,
+            MultiParamTypeClasses, FlexibleContexts #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

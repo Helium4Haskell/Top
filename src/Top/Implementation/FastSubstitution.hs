@@ -1,5 +1,5 @@
-{-# OPTIONS -XUndecidableInstances -XOverlappingInstances 
-            -XFlexibleInstances -XMultiParamTypeClasses #-}
+{-# LANGUAGE UndecidableInstances, OverlappingInstances,
+            FlexibleInstances, MultiParamTypeClasses #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

@@ -1,4 +1,4 @@
-{-# OPTIONS -XFlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
