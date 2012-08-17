@@ -1,0 +1,91 @@
+name:                   Top
+version:                1.8
+synopsis:               Feedback services for intelligent tutoring systems
+homepage:               http://ideas.cs.uu.nl/www/
+description:
+
+  ideas provides feedback services to intelligent tutoring systems such as 
+  the digital mathematical environment of the Freudenthal Institute, MathDox,
+  and Activemath. 
+
+category:               Education
+copyright:              (c) 2010
+license:                GPL
+license-file:           LICENSE.txt
+author:                 Bastiaan Heeren, Alex Gerdes, Johan Jeuring
+maintainer:             bastiaan.heeren@ou.nl
+stability:              provisional
+extra-source-files:     CREDITS.txt
+build-type:             Simple
+cabal-version:          >= 1.8.0.2
+tested-with:            GHC == 6.10.1, GHC == 6.12.1
+
+source-repository head
+  type:     svn
+  location: https://subversion.cs.uu.nl/repos/staff.jur.Top/trunk
+
+--------------------------------------------------------------------------------
+
+Executable topsolver
+  Build-Depends:     base >= 3 && < 5, containers, mtl, parsec
+  ghc-options:       -Wall
+  hs-source-dirs: src
+  Main-is:           TopSolver.hs
+
+Library
+  Build-Depends:     base >= 3 && < 5, containers, mtl
+  ghc-options:       -Wall
+  hs-source-dirs: src
+  Exposed-modules:
+    Top.Constraint
+    Top.Constraint.Equality
+    Top.Constraint.Information
+    Top.Constraint.Polymorphism
+    Top.Constraint.Qualifier
+    Top.Implementation.Basic
+    Top.Implementation.FastSubstitution
+    Top.Implementation.General
+    Top.Implementation.Overloading
+    Top.Implementation.SimpleSubstitution
+    Top.Implementation.TypeGraph.ApplyHeuristics
+    Top.Implementation.TypeGraph.Basics
+    Top.Implementation.TypeGraph.Class
+    Top.Implementation.TypeGraph.ClassMonadic
+    Top.Implementation.TypeGraph.DefaultHeuristics
+    Top.Implementation.TypeGraph.EquivalenceGroup
+    Top.Implementation.TypeGraph.Heuristic
+    Top.Implementation.TypeGraph.Path
+    Top.Implementation.TypeGraph.Standard
+    Top.Implementation.TypeGraphSubstitution
+    Top.Implementation.TypeInference
+    Top.Interface.Basic
+    Top.Interface.Qualification
+    Top.Interface.Substitution
+    Top.Interface.TypeInference
+    Top.Monad.Select
+    Top.Monad.StateFix
+    Top.Ordering.Tree
+    Top.Ordering.TreeWalk
+    Top.Solver
+    Top.Solver.Greedy
+    Top.Solver.PartitionCombinator
+    Top.Solver.SwitchCombinator
+    Top.Solver.TypeGraph
+    Top.Types
+    Top.Types.Classes
+    Top.Types.Kinds
+    Top.Types.Primitive
+    Top.Types.Qualification
+    Top.Types.Quantification
+    Top.Types.Schemes
+    Top.Types.Substitution
+    Top.Types.Synonym
+    Top.Types.Unification
+    Top.Util.Embedding
+    Top.Util.Empty
+    Top.Util.Option
+  Exposed-modules:
+    Utils
+
+--------------------------------------------------------------------------------
+
