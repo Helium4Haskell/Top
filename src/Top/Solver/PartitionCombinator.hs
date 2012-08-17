@@ -25,8 +25,8 @@ solveChunkConstraints ::
    
 solveChunkConstraints update (ConstraintSolver f) flattening chunks =
    ConstraintSolver (\os _ -> 
-      let rec_ options [] = (emptyResult (uniqueCounter options), noLogEntries)
-          rec_ options ((_, tree) : rest) =
+      let rec options [] = (emptyResult (uniqueCounter options), noLogEntries)
+          rec options ((_, tree) : rest) =
              let constraintList = flattening tree
                  (result, entries)
                     | null constraintList = 
@@ -36,6 +36,6 @@ solveChunkConstraints update (ConstraintSolver f) flattening chunks =
                  newOption = options { uniqueCounter = uniqueFromResult result }
                  schemeMap = typeschemesFromResult result
                  newRest   = [ (chunkID, fmap (update schemeMap) t) | (chunkID, t) <- rest ]
-                 (resultRec, entriesRec) = rec_ newOption newRest
+                 (resultRec, entriesRec) = rec newOption newRest
              in (result `combineResults` resultRec, entries `mappend` entriesRec)
-      in rec_ os chunks)
+      in rec os chunks)

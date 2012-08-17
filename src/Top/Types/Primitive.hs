@@ -83,17 +83,17 @@ constantsInType tp = case tp of
 -- |Returns the left spine of a type. For instance, if type @t@
 -- is @Either Bool [Int]@, then @leftSpine t@ is @(Either,[Bool,[Int]])@.
 leftSpine :: Tp -> (Tp,Tps)
-leftSpine = rec_ [] where
-   rec_ tps (TApp t1 t2) = rec_ (t2:tps) t1
-   rec_ tps tp           = (tp,tps)
+leftSpine = rec [] where
+   rec tps (TApp t1 t2) = rec (t2:tps) t1
+   rec tps tp           = (tp,tps)
 
 -- |Returns the right spine of a function type. For instance,
 -- if type @t@ is @Int -> (Bool -> String)@, then @functionSpine t@
 -- is @([Int,Bool],String)@.
 functionSpine :: Tp -> (Tps,Tp)
-functionSpine = rec_ [] where
-   rec_ tps (TApp (TApp (TCon "->") t1) t2) = rec_ (t1:tps) t2
-   rec_ tps tp                              = (reverse tps,tp)
+functionSpine = rec [] where
+   rec tps (TApp (TApp (TCon "->") t1) t2) = rec (t1:tps) t2
+   rec tps tp                              = (reverse tps,tp)
 
 -- |Returns the right spine of a function type of a maximal length.
 functionSpineOfLength :: Int -> Tp -> (Tps, Tp)
@@ -175,17 +175,17 @@ instance Show Tp where
     where
       showTp tp = 
          case leftSpine tp of
-            (TCon "->",[t1,t2]) -> rec_ (<1) t1 ++ " -> " ++ rec_ (const False) t2
+            (TCon "->",[t1,t2]) -> rec (<1) t1 ++ " -> " ++ rec (const False) t2
             (TVar i   ,[]     ) -> 'v' : show i
             (TCon s   ,[]     ) -> s
-            (TCon "[]",[t1]   ) -> "[" ++ rec_ (const False) t1 ++ "]"
-            (TCon s   ,ts     ) | isTupleConstructor s -> let ts'  = map (rec_ (const False)) ts
+            (TCon "[]",[t1]   ) -> "[" ++ rec (const False) t1 ++ "]"
+            (TCon s   ,ts     ) | isTupleConstructor s -> let ts'  = map (rec (const False)) ts
                                                               f [] = ""
                                                               f xs = foldr1 (\x y -> x++", "++y) xs
                                                           in "(" ++ f ts' ++ ")"
-            (t,ts) -> unwords (map (rec_ (<2)) (t:ts))
+            (t,ts) -> unwords (map (rec (<2)) (t:ts))
       
-      rec_ p t = parIf (p (priorityOfType t)) (showTp t) 
+      rec p t = parIf (p (priorityOfType t)) (showTp t) 
       parIf True  s = "("++s++")"
       parIf False s = s
       

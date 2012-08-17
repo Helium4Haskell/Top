@@ -148,12 +148,12 @@ instance HasSkolems Tp where
                               Nothing -> []
    allSkolems (TApp l r) = allSkolems l `union` allSkolems r   
    
-   changeSkolems skMap = rec_ where
-      rec_ tp@(TVar _) = tp
-      rec_ tp@(TCon s) = case fromSkolemString s of
+   changeSkolems skMap = rec where
+      rec tp@(TVar _) = tp
+      rec tp@(TCon s) = case fromSkolemString s of
                               Just i  -> fromMaybe tp (lookup i skMap)
                               Nothing -> tp
-      rec_ (TApp l r)  = TApp (rec_ l) (rec_ r)
+      rec (TApp l r)  = TApp (rec l) (rec r)
       
 instance HasSkolems a => HasSkolems [a] where
    allSkolems = foldr (union . allSkolems) []

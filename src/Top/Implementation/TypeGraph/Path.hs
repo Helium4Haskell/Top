@@ -61,11 +61,11 @@ mCombine op mp1 mp2 =
 (<++>) = mCombine (++)
 
 steps :: Path a -> [a]
-steps = ($ []) . rec_ where
-   rec_ path = 
+steps = ($ []) . rec where
+   rec path = 
       case path of 
-         x :|: y -> rec_ x . rec_ y
-         x :+: y -> rec_ x . rec_ y
+         x :|: y -> rec x . rec y
+         x :+: y -> rec x . rec y
          Step a  -> (a:)
          Fail  -> id
          Empty -> id
@@ -74,13 +74,13 @@ mapPath :: (a -> b) -> Path a -> Path b
 mapPath f = changeStep (Step . f) 
 
 changeStep :: (a -> Path b) -> Path a -> Path b
-changeStep f = rec_
+changeStep f = rec
  where
-   rec_ path = 
+   rec path = 
       case path of
          Step a  -> f a
-         x :|: y -> rec_ x :|: rec_ y
-         x :+: y -> rec_ x :+: rec_ y
+         x :|: y -> rec x :|: rec y
+         x :+: y -> rec x :+: rec y
          Fail    -> Fail
          Empty   -> Empty  
       
@@ -94,12 +94,12 @@ changeStepM f path =
       Empty   -> return Empty          
              
 minCompleteInPath :: (a -> a -> Ordering) -> Path a -> Maybe a
-minCompleteInPath f = rec_ . simplifyPath
+minCompleteInPath f = rec . simplifyPath
    where 
-      rec_ path = 
+      rec path = 
          case path of
-            x :|: y -> do v1 <- rec_ x; v2 <- rec_ y; return (minimumBy f [v1, v2])
-            x :+: y -> do v1 <- rec_ x; v2 <- rec_ y; return (maximumBy f [v1, v2])
+            x :|: y -> do v1 <- rec x; v2 <- rec y; return (minimumBy f [v1, v2])
+            x :+: y -> do v1 <- rec x; v2 <- rec y; return (maximumBy f [v1, v2])
             Step a  -> Just a
             Fail    -> Nothing
             Empty   -> Nothing
@@ -128,7 +128,7 @@ tailSharingBy compf thePath =
    case simplifyPath thePath of 
       Empty -> Empty
       Fail  -> Fail
-      p     -> rec_ p
+      p     -> rec p
       
  where
   eqf x y  = compf  x y == EQ
@@ -137,10 +137,10 @@ tailSharingBy compf thePath =
   compfM (Just x) (Just y) = compf x y
   compfM m1       _        = if isJust m1 then GT else LT
   
-  -- invariant: rec_ does not have Empty's or Fail's
-  rec_ (Step a)    = Step a
-  rec_ (p1 :+: p2) = p1 :+: rec_ p2 
-  rec_ path =  
+  -- invariant: rec does not have Empty's or Fail's
+  rec (Step a)    = Step a
+  rec (p1 :+: p2) = p1 :+: rec p2 
+  rec path =  
      let sharedTail = map (\((p, tl):rest) -> combine (p:map fst rest) tl)
                     . groupBy (eqfM `on` snd)
                     . sortBy  (compfM `on` snd)
@@ -185,18 +185,18 @@ flattenPath path =
 
 -- returns a list with 'smallest minimal sets'
 minimalSets :: (a -> a -> Bool) -> Path a -> [[a]]
-minimalSets eqF = rec_ where
+minimalSets eqF = rec where
 
-   -- invariant: rec_ returns lists with the same length                
-   rec_ path =
+   -- invariant: rec returns lists with the same length                
+   rec path =
       case simplifyPath path of 
          Empty -> []
          Fail  -> [[]]
          p     -> 
             let a    = head (steps p)
-                sol1 = rec_ (changeStep (\b -> if a `eqF` b then Empty else Step b) p) 
+                sol1 = rec (changeStep (\b -> if a `eqF` b then Empty else Step b) p) 
                 sol2 = [ a : set
-                       | set <- rec_ (changeStep (\b -> if a `eqF` b then Fail else Step b) p) 
+                       | set <- rec (changeStep (\b -> if a `eqF` b then Fail else Step b) p) 
                        ]
             in case (sol1, sol2) of
                   (x:_, y:_) -> 
@@ -207,8 +207,8 @@ minimalSets eqF = rec_ where
                   _ -> sol1 ++ sol2
 
 removeSomeDuplicates :: Ord b => (a -> b) -> Path a -> Path a
-removeSomeDuplicates toOrd = simplifyPath . rec_ M.empty where
-   rec_ fm path = 
+removeSomeDuplicates toOrd = simplifyPath . rec M.empty where
+   rec fm path = 
       case path of
       
          left :+: right ->
@@ -216,20 +216,20 @@ removeSomeDuplicates toOrd = simplifyPath . rec_ M.empty where
                Step a    -> let int = toOrd a
                                 fm' = M.insert int Empty fm
                             in case M.lookup int fm of 
-                                 Just left' -> left' :+: rec_ fm  right 
-                                 Nothing    -> left  :+: rec_ fm' right
-               p1 :+: p2 -> rec_ fm (p1 :+: (p2 :+: right))
-               _         -> rec_ fm left :+: rec_ fm right
+                                 Just left' -> left' :+: rec fm  right 
+                                 Nothing    -> left  :+: rec fm' right
+               p1 :+: p2 -> rec fm (p1 :+: (p2 :+: right))
+               _         -> rec fm left :+: rec fm right
    
          left :|: right -> 
             case left of
                Step a    -> let int = toOrd a
                                 fm' = M.insert int Fail fm
                             in case M.lookup int fm of 
-                                  Just left' -> left' :|: rec_ fm  right
-                                  Nothing    -> left  :|: rec_ fm' right
-               p1 :|: p2 -> rec_ fm (p1 :|: (p2 :|: right))
-               _         -> rec_ fm left :|: rec_ fm right
+                                  Just left' -> left' :|: rec fm  right
+                                  Nothing    -> left  :|: rec fm' right
+               p1 :|: p2 -> rec fm (p1 :|: (p2 :|: right))
+               _         -> rec fm left :|: rec fm right
   
          Step a -> 
             M.findWithDefault path (toOrd a) fm
@@ -267,24 +267,24 @@ reduceNumberOfPaths :: Path a -> Path a
 reduceNumberOfPaths = maybe id limitNumberOfPaths maxNumberOfEqualPaths
 
 limitNumberOfPaths :: Int -> Path a -> Path a
-limitNumberOfPaths size = fst . rec_ size
+limitNumberOfPaths size = fst . rec size
  where
    fromInt :: Num a => Int -> a
    fromInt = fromInteger . toInteger
    
-   rec_ sz path = 
+   rec sz path = 
       case path of
          Empty     -> (path, 1)
          Fail      -> (path, 0)
          Step _    -> (path, 1)
-         p1 :+: p2 -> let (p1', n1) = rec_ sz p1
+         p1 :+: p2 -> let (p1', n1) = rec sz p1
                           newSize   
                              | n1 == 0   = sz 
                              | otherwise = ceiling ((fromInt sz / fromInt n1) :: Double)
-                          (p2', n2) = rec_ newSize p2
+                          (p2', n2) = rec newSize p2
                       in (p1' :+: p2', n1*n2)
-         p1 :|: p2 -> let both@(p1' , n1) = rec_ sz p1
-                          (p2', n2) = rec_ (sz - n1) p2
+         p1 :|: p2 -> let both@(p1' , n1) = rec sz p1
+                          (p2', n2) = rec (sz - n1) p2
                       in if n1 >= sz
                            then both
                            else (p1' :|: p2', n1 + n2)

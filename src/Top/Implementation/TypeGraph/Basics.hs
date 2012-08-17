@@ -92,24 +92,24 @@ instance Ord Clique where
    compare (CliqueX xs) (CliqueX ys) = compare xs ys
 
 isSubsetClique :: Clique -> Clique -> Bool
-isSubsetClique (CliqueX as) (CliqueX bs) = rec_ as bs
+isSubsetClique (CliqueX as) (CliqueX bs) = rec as bs
  where
-   rec_ [] _ = True
-   rec_ _ [] = False
-   rec_ a@(x:xs) (y:ys)
-      | x == y    = rec_ xs ys
-      | x > y     = rec_ a ys
+   rec [] _ = True
+   rec _ [] = False
+   rec a@(x:xs) (y:ys)
+      | x == y    = rec xs ys
+      | x > y     = rec a ys
       | otherwise = False
    
 isDisjointClique :: Clique -> Clique -> Bool
-isDisjointClique (CliqueX as) (CliqueX bs) = rec_ as bs
+isDisjointClique (CliqueX as) (CliqueX bs) = rec as bs
  where
-   rec_ [] _ = True
-   rec_ _ [] = True
-   rec_ a@(x:xs) b@(y:ys)
+   rec [] _ = True
+   rec _ [] = True
+   rec a@(x:xs) b@(y:ys)
       | x == y    = False
-      | x > y     = rec_ a ys
-      | otherwise = rec_ xs b
+      | x > y     = rec a ys
+      | otherwise = rec xs b
       
 cliqueRepresentative :: Clique -> VertexId
 cliqueRepresentative (CliqueX xs) =
