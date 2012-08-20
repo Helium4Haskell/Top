@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, FlexibleContexts #-}
+{-# LANGUAGE RankNTypes, FlexibleContexts, DatatypeContexts #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
