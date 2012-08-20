@@ -1,24 +1,26 @@
 name:                   Top
-version:                1.8
-synopsis:               Feedback services for intelligent tutoring systems
-homepage:               http://ideas.cs.uu.nl/www/
+version:                1.7
+synopsis:               Constraint solving framework employed by the Helium Compiler.
+homepage:               http://www.cs.uu.nl/wiki/bin/view/Helium/WebHome
 description:
 
-  ideas provides feedback services to intelligent tutoring systems such as 
-  the digital mathematical environment of the Freudenthal Institute, MathDox,
-  and Activemath. 
+  At its most general, Top is a framework for constructing abstract interpretations 
+  which focuses on giving good feedback on why an abstract interpretation does not give 
+  any useful information. In a mathematical notation this is usually made explicit by 
+  returning the top element of a (complete) lattice. This is also one of the reasons 
+  for the name of the project.
 
-category:               Education
-copyright:              (c) 2010
+category:               Constraints
+copyright:              (c) 2012
 license:                GPL
 license-file:           LICENSE.txt
-author:                 Bastiaan Heeren, Alex Gerdes, Johan Jeuring
-maintainer:             bastiaan.heeren@ou.nl
+author:                 Bastiaan Heeren, Jurriaan Hage
+maintainer:             helium@cs.uu.nl
 stability:              provisional
 extra-source-files:     CREDITS.txt
 build-type:             Simple
-cabal-version:          >= 1.8.0.2
-tested-with:            GHC == 6.10.1, GHC == 6.12.1
+cabal-version:          >= 1.10.1.0
+tested-with:            GHC == 7.0.2, GHC == 7.0.3, GHC = 7.4.1
 
 source-repository head
   type:     svn
