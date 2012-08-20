@@ -44,6 +44,14 @@ clean:
 	$(RM) $(DOCDIR)/*.gif
 	$(RM) $(DOCDIR)/*.js
 	$(RM) $(DOCDIR)/*.png
+	$(RM) $(SRCDIR)/*.o
+	$(RM) $(SRCDIR)/*/*.o
+	$(RM) $(SRCDIR)/*/*/*.o
+	$(RM) $(SRCDIR)/*/*/*/*.o
+	$(RM) $(SRCDIR)/*.hi
+	$(RM) $(SRCDIR)/*/*.hi
+	$(RM) $(SRCDIR)/*/*/*.hi
+	$(RM) $(SRCDIR)/*/*/*/*.hi
 
 report:
 	$(HLINT) --report=$(DOCDIR)/report.html .

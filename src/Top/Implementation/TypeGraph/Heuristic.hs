@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, FlexibleContexts, DatatypeContexts #-}
+{-# LANGUAGE RankNTypes, FlexibleContexts #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
@@ -21,7 +21,7 @@ import Utils (internalError)
 type PathHeuristics info = Path (EdgeId, info) -> [Heuristic info]
 
 newtype Heuristic  info = Heuristic (forall m . HasTypeGraph m info => HComponent m info)
-data HasTypeGraph m info => Selector m info 
+data Selector m info 
    = Selector       (String, (EdgeId, info) -> m (Maybe (Int, String, [EdgeId], info)))
    | SelectorList   (String, [(EdgeId, info)] -> m (Maybe (Int, String, [EdgeId], info)))
 
