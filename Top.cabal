@@ -84,7 +84,7 @@ Library
     Top.Util.Embedding
     Top.Util.Empty
     Top.Util.Option
-  Exposed-modules:
+  Other-modules:
     Utils
 
 --------------------------------------------------------------------------------
