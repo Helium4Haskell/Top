@@ -20,7 +20,7 @@ stability:              provisional
 extra-source-files:     CREDITS.txt
 build-type:             Simple
 cabal-version:          >= 1.10.1.0
-tested-with:            GHC == 7.0.2, GHC == 7.0.3, GHC = 7.4.1
+tested-with:            GHC == 7.0.2, GHC == 7.0.3, GHC == 7.4.1
 
 source-repository head
   type:     svn
@@ -31,13 +31,15 @@ source-repository head
 Executable topsolver
   Build-Depends:     base >= 3 && < 5, containers, mtl, parsec
   ghc-options:       -Wall
-  hs-source-dirs: src
+  default-language:  Haskell98
+  hs-source-dirs:    src
   Main-is:           TopSolver.hs
 
 Library
   Build-Depends:     base >= 3 && < 5, containers, mtl
   ghc-options:       -Wall
-  hs-source-dirs: src
+  default-language:  Haskell98
+  hs-source-dirs:    src
   Exposed-modules:
     Top.Constraint
     Top.Constraint.Equality
