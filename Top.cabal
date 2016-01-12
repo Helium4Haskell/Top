@@ -1,5 +1,5 @@
 name:                   Top
-version:                1.7
+version:                1.8
 synopsis:               Constraint solving framework employed by the Helium Compiler.
 homepage:               http://www.cs.uu.nl/wiki/bin/view/Helium/WebHome
 description:
@@ -11,7 +11,7 @@ description:
   for the name of the project.
 
 category:               Constraints
-copyright:              (c) 2012
+copyright:              (c) 2012-2016
 license:                GPL
 license-file:           LICENSE.txt
 author:                 Bastiaan Heeren, Jurriaan Hage
@@ -19,12 +19,12 @@ maintainer:             helium@cs.uu.nl
 stability:              provisional
 extra-source-files:     CREDITS.txt
 build-type:             Simple
-cabal-version:          >= 1.10.1.0
-tested-with:            GHC == 7.0.2, GHC == 7.0.3, GHC == 7.4.1
+cabal-version:          >= 1.22.6.0
+tested-with:            GHC == 7.10.3
 
 source-repository head
   type:     svn
-  location: https://subversion.cs.uu.nl/repos/staff.jur.Top/trunk
+  location: https://svn.science.uu.nl/repos/sci.hage0101.Top
 
 --------------------------------------------------------------------------------
 

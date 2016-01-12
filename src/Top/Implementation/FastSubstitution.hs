@@ -1,5 +1,4 @@
-{-# LANGUAGE UndecidableInstances, OverlappingInstances,
-            FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE UndecidableInstances, FlexibleInstances, MultiParamTypeClasses #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

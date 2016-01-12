@@ -16,7 +16,7 @@ import Top.Interface.TypeInference
 import Top.Interface.Basic
 import Top.Monad.Select
 import Top.Util.Embedding
-import Top.Util.Empty
+import Top.Util.Empty()
 
 ------------------------------------------------------------------------
 -- (I)  Algebraic data type

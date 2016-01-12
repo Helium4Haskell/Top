@@ -1,5 +1,5 @@
 {-# LANGUAGE UndecidableInstances, FlexibleInstances, KindSignatures,
-            MultiParamTypeClasses, OverlappingInstances #-}
+            MultiParamTypeClasses #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
@@ -88,13 +88,13 @@ instance (SolveState (f m), SolveState x) => SolveState (Fix f x m) where
    collectStates (Fix a x) = collectStates a ++ collectStates x
 
 -- Embedded
-instance Embedded c (f (g x m) m) s => Embedded c (And f g x m) s  where
+instance {-# OVERLAPPABLE  #-} Embedded c (f (g x m) m) s => Embedded c (And f g x m) s  where
    embedding = composeE Embedding { getE = \(Compose a) -> a, changeE = \f (Compose a) -> Compose (f a) } embedding 
 
-instance Embedded c x s => Embedded c (Simple a x m) s where
+instance {-# OVERLAPPABLE  #-} Embedded c x s => Embedded c (Simple a x m) s where
    embedding = composeE Embedding { getE = \(Simple _ b) -> b, changeE = \f (Simple a b) -> Simple a (f b) } embedding
    
-instance Embedded c x s => Embedded c (Fix a x m) s where
+instance {-# OVERLAPPABLE  #-} Embedded c x s => Embedded c (Fix a x m) s where
    embedding = composeE Embedding { getE = \(Fix _ b) -> b, changeE = \f (Fix a b) -> Fix a (f b) } embedding
 
 fromFstFixE :: Embedding (g m) c -> Embedding (Fix g x m) c

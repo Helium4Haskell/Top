@@ -1,4 +1,4 @@
-{-# LANGUAGE OverlappingInstances, FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 

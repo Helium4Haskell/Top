@@ -21,8 +21,17 @@ import Control.Monad.State
 
 newtype Select t m a = Select (m a)
 
+-- To satisfy the 7.10.x proposal:
+instance Monad m => Functor (Select s m) where
+    fmap  = liftM
+    
+instance Monad m => Applicative (Select s m) where
+   pure   = Select . return 
+   (<*>)  = ap
+
+-- Back to real code:
 instance Monad m => Monad (Select t m) where
-   return a       = Select (return a) 
+   return         = pure
    Select f >>= g = Select (do x <- f
                                let Select h = g x
                                h)
@@ -42,8 +51,17 @@ select = Select
 
 data SelectFix (t :: (* -> *) -> *) (m :: * -> *) a = SelectFix (m a)
 
+-- To satisfy the 7.10.x proposal:
+instance Monad m => Functor (SelectFix t m) where
+    fmap  = liftM
+    
+instance Monad m => Applicative (SelectFix t m) where
+   pure   = SelectFix . return 
+   (<*>)  = ap
+
+-- Back to real code:
 instance Monad m => Monad (SelectFix t m) where
-   return a          = SelectFix (return a)
+   return            = pure
    SelectFix f >>= g = SelectFix (do x <- f
                                      let SelectFix h = g x
                                      h)

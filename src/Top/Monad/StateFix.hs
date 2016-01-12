@@ -20,8 +20,17 @@ type StateFix s = StateFixT s Identity
 
 data StateFixT s m a = Fix { unFix :: StateT (s (StateFixT s m)) m a }
 
+-- To satisfy the 7.10.x proposal:
+instance Monad m => Functor (StateFixT s m) where
+    fmap  = liftM
+    
+instance Monad m => Applicative (StateFixT s m) where
+   pure = Fix . return
+   (<*>) = ap
+   
+-- Back to real code:   
 instance Monad m => Monad (StateFixT s m) where 
-   return  = Fix . return
+   return  = pure
    m >>= f = Fix (unFix m >>= unFix . f)
 
 instance Monad m => MonadState (s (StateFixT s m)) (StateFixT s m) where

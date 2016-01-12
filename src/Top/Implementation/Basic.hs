@@ -1,5 +1,4 @@
-{-# LANGUAGE UndecidableInstances, OverlappingInstances,
-            FlexibleInstances, MultiParamTypeClasses#-}
+{-# LANGUAGE UndecidableInstances, FlexibleInstances, MultiParamTypeClasses#-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
@@ -24,7 +23,7 @@ import Top.Interface.Basic
 import Top.Monad.Select
 -- import Control.Monad.State
 import Top.Util.Embedding
-import Top.Util.Empty
+import Top.Util.Empty()
 
 ------------------------------------------------------------------------
 -- (I)  Algebraic data type
