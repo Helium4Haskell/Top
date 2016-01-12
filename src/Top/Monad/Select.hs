@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances, MultiParamTypeClasses, KindSignatures,
+{-# LANGUAGE UndecidableInstances, MultiParamTypeClasses, OverlappingInstances, KindSignatures,
             FunctionalDependencies, FlexibleInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL

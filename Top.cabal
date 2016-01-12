@@ -19,7 +19,7 @@ maintainer:             helium@cs.uu.nl
 stability:              provisional
 extra-source-files:     CREDITS.txt
 build-type:             Simple
-cabal-version:          >= 1.22.6.0
+cabal-version:          >= 1.10.1.0
 tested-with:            GHC == 7.10.3
 
 source-repository head
