@@ -18,7 +18,7 @@ import Top.Implementation.General
 import Top.Interface.TypeInference
 -- import Data.List
 import qualified Data.Map as M
-import Top.Util.Empty
+--import Top.Util.Empty
 import Top.Monad.Select
 -- import Control.Monad.State
 import Utils (internalError)
