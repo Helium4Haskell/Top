@@ -92,6 +92,9 @@ instance Substitution FixpointSubstitution where
    dom (FixpointSubstitution fm) = M.keys fm
    cod (FixpointSubstitution fm) = M.elems fm
 
+instance Show FixpointSubstitution where
+  show (FixpointSubstitution fm) = concatMap (\(a, b) -> show a ++ " --> " ++ show b ++ "\n") $ M.assocs fm
+
 -- |The empty fixpoint substitution 
 emptyFPS :: FixpointSubstitution
 emptyFPS = FixpointSubstitution M.empty

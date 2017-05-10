@@ -32,7 +32,7 @@ instance SolveState (GreedyState info) where
    stateName _ = "Greedy Substitution State"
   
 instance Show (GreedyState info) where
-   show gs = let FixpointSubstitution hs = unGS gs in show hs -- _ = "<Greedy Substitution>"
+   show = show . unGS
 
 instance Empty (GreedyState info) where
    empty = GreedyState (FixpointSubstitution M.empty)

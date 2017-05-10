@@ -45,6 +45,7 @@ instance ShowQualifiers Predicate
 -- * Class environments and instances
 
 type ClassEnvironment = M.Map String Class
+-- | (Superclasses, Instances)
 type Class            = ([String], Instances)
 type Instances        = [Instance]
 type Instance         = (Predicate, Predicates)
