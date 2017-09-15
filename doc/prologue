@@ -10,4 +10,4 @@ Helium compiler). For this reason, Top may also be read as Typing Our Programs.
 However, the approach that we used can also be deployed for other program analyses for which 
 good feedback is desirable.
 
-The sources can be obtained from <https://svn.cs.uu.nl:12443/repos/Top/trunk/>.
+The sources can be obtained from <https://github.com/Helium4Haskell/Top.git>.
