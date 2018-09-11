@@ -29,18 +29,18 @@ type ErrorInfo info = ([EdgeId], info)
 
 applyHeuristics :: HasTypeGraph m info => (Path (EdgeId, info) -> [Heuristic info]) -> m [ErrorInfo info]
 applyHeuristics heuristics =
-   let rec thePath = 
+   let rec' thePath = 
           case simplifyPath thePath of
              Empty -> internalError "Top.TypeGraph.ApplyHeuristics" "applyHeuristics" "unexpected empty path"
              Fail  -> return []
              path  ->
                 do err <- evalHeuristics path (heuristics path)
                    let restPath = changeStep (\t@(a,_) -> if a `elem` fst err then Fail else Step t) path
-                   errs <- rec restPath
+                   errs <- rec' restPath
                    return (err : errs)
    in 
       do errorPath <- allErrorPaths
-         rec (removeSomeDuplicates info2ToEdgeNr errorPath)
+         rec' (removeSomeDuplicates info2ToEdgeNr errorPath)
 
 -- These functions are used to describe for a change due to a heuristic how it affected the error path
 -- showing whether the set of constraints shrunk and if so, whether it has now become a singleton.
@@ -59,25 +59,25 @@ shrunkAndFinalMsg old new =
 
 
 evalHeuristics :: HasTypeGraph m info => Path (EdgeId, info) -> [Heuristic info] -> m (ErrorInfo info)
-evalHeuristics path = rec edgesBegin
+evalHeuristics path = rec' edgesBegin
  where
    edgesBegin = nubBy eqInfo2 (steps path)
    
-   rec edges [] = 
+   rec' edges [] = 
       case edges of
          (edgeId@(EdgeId _ _ cnr), info) : _ -> 
             do logMsg ("\n*** The selected constraint: " ++ show cnr ++ " ***\n")
                return ([edgeId], info)
          _ -> internalError "Top.TypeGraph.ApplyHeuristics" "evalHeuristics" "empty list"
              
-   rec edges (Heuristic heuristic:rest) = 
+   rec' edges (Heuristic heuristic:rest) = 
       case heuristic of
 
          Filter name f -> 
             do edges' <- f edges
                logMsg (name ++ " (filter) " ++ shrunkAndFinalMsg edges edges')
                logMsg ("   " ++ showSet [ i | (EdgeId _ _ i, _) <- edges' ])
-               rec edges' rest
+               rec' edges' rest
 
          Voting selectors -> 
             do logMsg ("Voting with "++show (length selectors) ++ " heuristics")
@@ -93,11 +93,11 @@ evalHeuristics path = rec edgesBegin
                    remainingEdges = map snd listWithBest
                case listWithBest of 
                   [] -> do logMsg "Unfortunately, none of the heuristics could be applied"
-                           rec edges rest
+                           rec' edges rest
                   _  -> do logMsg ("Selected heuristics are " ++ unwords heuristicNames ++ ". "
                                    ++ shrunkAndFinalMsg edges remainingEdges)  
                            logMsg ("   selected with priority "++show thePrio++": "++showSet (map fst remainingEdges)++"\n")
-                           rec remainingEdges rest
+                           rec' remainingEdges rest
 
 evalSelector :: (MonadWriter LogEntries m, HasTypeGraph m info) => [(EdgeId, info)] -> Selector m info -> m [(Int, [EdgeId], info)]
 evalSelector edges selector = 
@@ -203,14 +203,14 @@ infiniteTypePaths cGraph =
 type ChildGraph = [((VertexId, VertexId), [(VertexId, VertexId)])]
       
 childrenGraph :: HasTypeGraph m info => [VertexId] -> m ChildGraph
-childrenGraph = rec [] 
+childrenGraph = rec' [] 
    where 
-      rec as []     = return as
-      rec as (i:is) = 
+      rec' as []     = return as
+      rec' as (i:is) = 
          do vertices <- verticesInGroupOf i
             ri       <- representativeInGroupOf i           
             if ri `elem` map (fst . fst) as
-              then rec as is
+              then rec' as is
               else do let cs = concat [ [(n, l), (n, r)] | (n, (VApp l r, _)) <- vertices ]
                       cs' <- let f t = do r <- representativeInGroupOf (snd t)
                                           return (r, t)
@@ -219,7 +219,7 @@ childrenGraph = rec []
                                    . groupBy ((==) `on` fst)
                                    . sortBy  (compare `on` fst)
                                    $ cs'
-                      rec ([ ((ri, rc), xs) | (rc, xs) <- children ] ++ as) (map fst children ++ is)      
+                      rec' ([ ((ri, rc), xs) | (rc, xs) <- children ] ++ as) (map fst children ++ is)      
 
 infiniteGroups :: [(VertexId, VertexId)] -> [[VertexId]]
 infiniteGroups xs = 
@@ -238,10 +238,10 @@ infiniteGroups xs =
    in recursive
 
 allSubPathsList :: HasTypeGraph m info => [(VertexId, VertexId)] -> VertexId -> [VertexId] -> m (TypeGraphPath info) 
-allSubPathsList childList vertex targets = rec S.empty vertex
+allSubPathsList childList vertex targets = rec' S.empty vertex
  where
-   rec :: HasTypeGraph m info => S.Set VertexId -> VertexId -> m (TypeGraphPath info)
-   rec without start =  
+   rec' :: HasTypeGraph m info => S.Set VertexId -> VertexId -> m (TypeGraphPath info)
+   rec' without start =  
       do vs <- verticesInGroupOf start
          if any (`elem` map fst vs) targets
             then sameGroup 
@@ -260,7 +260,7 @@ allSubPathsList childList vertex targets = rec S.empty vertex
       recDown vs (newStart, childTargets) = do
          let newWithout = without `S.union` S.fromList (map fst vs){- don't return to this equivalence group -}
              f ct = let set = S.fromList [ t | t <- childTargets, t /= ct ]
-                    in rec (set `S.union` newWithout) ct
+                    in rec' (set `S.union` newWithout) ct
          path     <- allPathsListWithout without start [newStart]
          newPaths <- mapM f childTargets
          return (path :+: altList newPaths)
