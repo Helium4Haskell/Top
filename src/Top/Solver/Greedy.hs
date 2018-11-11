@@ -9,6 +9,7 @@
 
 module Top.Solver.Greedy where
 
+import Top.Interface.Substitution      
 import Top.Implementation.General
 import Top.Implementation.Basic
 import Top.Implementation.TypeInference
@@ -31,7 +32,7 @@ type GreedyS info = And ( Fix (BasicState info) )
                         )
 
 solveGreedy :: (Solvable constraint (Greedy info), TypeConstraintInfo info) =>
-               SolveOptions -> [constraint] -> Greedy info (SolveResult info)
+               SolveOptions info -> [constraint] -> Greedy info (SolveResult info)
 solveGreedy = solveConstraints
 
 greedyConstraintSolver :: (TypeConstraintInfo info, Solvable constraint (Greedy info)) => ConstraintSolver constraint info
@@ -48,7 +49,7 @@ type GreedySimpleS info = And ( Fix (BasicState info) )
                               )
 
 solveSimple :: (Solvable constraint (GreedySimple info), TypeConstraintInfo info) =>
-               SolveOptions -> [constraint] -> GreedySimple info (SolveResult info)
+               SolveOptions info -> [constraint] -> GreedySimple info (SolveResult info)
 solveSimple = solveConstraints
 
 greedySimpleConstraintSolver :: (TypeConstraintInfo info, Solvable constraint (GreedySimple info)) => ConstraintSolver constraint info

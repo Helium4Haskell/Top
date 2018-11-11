@@ -167,39 +167,4 @@ associatedContextReduction synonyms classes ps =
                            
    in (loop [] predicates, errors)
                              
----------------------------------------------------------------------- 
--- * Standard class environment
 
--- This environment is only used at three places:
---   o  MiscErrors.ag
---   o  Warnings.ag
---   o  Collect.ag  (initialization in import environment)
-standardClasses :: ClassEnvironment
-standardClasses = M.fromList $ 
-
-   -- only two instances for Num: Int and Float
-   ( "Num",  
-     ( ["Eq","Show"] -- superclasses
-     , [ (Predicate "Num" intType  , []) -- instances
-       , (Predicate "Num" floatType, [])
-       ]
-     )
-   ) :
-   ( "Enum", ([], [ (Predicate "Enum" tp, []) | tp <- [voidType, charType, intType, floatType, boolType]])
-   ) :
-   -- Eq, Ord and Show all have the same instances
-   [ ("Eq" ,  ([]    , makeInstances "Eq"  ))
-   , ("Ord",  (["Eq"], makeInstances "Ord" ))
-   , ("Show", ([],     makeInstances "Show"))
-   ]
-   
-   where 
-     makeInstances className = 
-        let basicTypes = [intType, floatType, boolType, charType]
-            makeTupleInstance i = 
-               ( Predicate className (tupleType [ TVar n | n <- [1..i] ])
-               , [ Predicate className (TVar n) | n <- [1..i] ]
-               ) 
-        in (Predicate className (listType (TVar 0)), [Predicate className (TVar 0)]) -- instance for Lists
-           :  [ (Predicate className tp, []) | tp <- basicTypes ]
-           ++ map makeTupleInstance (0 : [2..10])

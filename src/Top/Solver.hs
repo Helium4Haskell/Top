@@ -17,6 +17,8 @@ import Top.Interface.Basic
 import Top.Interface.TypeInference
 import Top.Interface.Substitution
 import Top.Interface.Qualification
+import Top.Implementation.Overloading hiding (classEnvironment, typeClassDirectives)
+import Top.Implementation.TypeClassDirectives
 import Top.Implementation.General
 import Top.Util.Option
 import Top.Monad.StateFix
@@ -25,14 +27,14 @@ import qualified Data.Map as M
 import Top.Constraint.Information
 import Control.Monad.Writer
 
-data ConstraintSolver constraint info = ConstraintSolver (SolveOptions -> [constraint] -> (SolveResult info, LogEntries))
+data ConstraintSolver constraint info = ConstraintSolver (SolveOptions info -> [constraint] -> (SolveResult info, LogEntries))
 
 makeConstraintSolver :: (Empty (f () (BasicMonad f))) =>
-                           (SolveOptions -> [constraint] -> BasicMonad f (SolveResult info))
+                           (SolveOptions info -> [constraint] -> BasicMonad f (SolveResult info))
                            -> ConstraintSolver constraint info
 makeConstraintSolver f = ConstraintSolver (\options -> evalBasicMonad . f options)
 
-solve :: SolveOptions -> [constraint] -> ConstraintSolver constraint info -> (SolveResult info, LogEntries)
+solve :: SolveOptions info -> [constraint] -> ConstraintSolver constraint info -> (SolveResult info, LogEntries)
 solve options constraints (ConstraintSolver f) = f options constraints
 
 ---
@@ -70,7 +72,7 @@ solveConstraints ::
    , SolveState s
    , MonadWriter LogEntries m
    ) =>
-     SolveOptions ->
+     SolveOptions info ->
      [constraint] -> 
      m (SolveResult info)
 
@@ -118,32 +120,34 @@ combineResults (SolveResult _ s1 ts1 qs1 er1) (SolveResult unique s2 ts2 qs2 er2
 
 --------------------------------------------------------------------------------  
 
-data SolveOptions = SolveOptions_ 
+data SolveOptions info = SolveOptions_ 
    { 
      -- initial values
      uniqueCounter    :: Int
    , typeSynonyms     :: OrderedTypeSynonyms
    , classEnvironment :: ClassEnvironment
-   
+   , typeClassDirectives :: TypeClassDirectives info
    -- optional settings
    , setStopAfterFirstError :: Bool -- see Basic
    , setCheckConditions     :: Bool -- see Basic
    }
 
-solveOptions :: SolveOptions
+solveOptions :: SolveOptions info
 solveOptions = SolveOptions_
    { uniqueCounter          = -1
    , typeSynonyms           = noOrderedTypeSynonyms
-   , classEnvironment       = standardClasses
+   , classEnvironment       = emptyClassEnvironment
+   , typeClassDirectives    = empty
    , setStopAfterFirstError = currentValue stopOption
    , setCheckConditions     = currentValue checkOption
    } 
 
-initialize :: (HasBasic m info, HasQual m info, HasTI m info, Substitutable a) => a -> SolveOptions -> m ()
+initialize :: (HasBasic m info, HasQual m info, HasTI m info, Substitutable a) => a -> SolveOptions info -> m ()
 initialize cs options = 
    do setUnique           unique
       setTypeSynonyms     (typeSynonyms options)
       setClassEnvironment (classEnvironment options)
+      setTypeClassDirectives (typeClassDirectives options)
       setOption stopAfterFirstError (setStopAfterFirstError options)
       setOption checkConditions     (setCheckConditions options)
  where

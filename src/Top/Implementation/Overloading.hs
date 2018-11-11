@@ -12,8 +12,11 @@ module Top.Implementation.Overloading where
 
 import Top.Types hiding (contextReduction)
 import qualified Top.Types (contextReduction)
+import Top.Constraint
 import Top.Constraint.Information
+import Top.Constraint.Equality
 import Top.Implementation.General
+import Top.Implementation.TypeClassDirectives
 import Top.Interface.TypeInference (getTypeSynonyms, HasTI, getSkolems)
 import Top.Interface.Basic
 import Top.Interface.Substitution
@@ -37,7 +40,7 @@ data OverloadingState info = OverloadingState
 -- (II)  Instance of SolveState (Empty, Show)
 
 instance Empty (OverloadingState info) where
-   empty = OverloadingState 
+   empty =  OverloadingState 
       { classEnvironment    = emptyClassEnvironment
       , predicateMap        = empty
       , typeClassDirectives = []
@@ -64,6 +67,7 @@ instance Embedded ClassQual (Simple (OverloadingState info) x m) (OverloadingSta
 instance ( MonadState s m
          , HasBasic m info
          , HasTI    m info
+         , HasSubst m info
          , TypeConstraintInfo info
          , Embedded ClassQual s (OverloadingState info)
          ) =>
@@ -74,6 +78,9 @@ instance ( MonadState s m
       
    getClassEnvironment =
       gets classEnvironment
+
+   setTypeClassDirectives env = modify (\s -> s { typeClassDirectives = env})
+   getTypeClassDirectives = gets typeClassDirectives
       
    proveQualifier info p =
       modifyPredicateMap (\qm -> qm { globalQualifiers = (p, info) : globalQualifiers qm })
@@ -122,12 +129,15 @@ instance ( MonadState s m
  
    ambiguousQualifiers =
       do ps <- proveQsSubst
-         select (ambiguous ps)
+         syns        <- select getTypeSynonyms
+         classEnv    <- getClassEnvironment
+         directives  <- gets typeClassDirectives
+         select (ambiguous syns directives classEnv ps)
          
 ------------------------------------------------------------------------
 -- (IV)  Helper-functions
 
-simplify :: (HasTI m info, TypeConstraintInfo info, HasBasic m info)
+simplify :: (HasSubst m info, HasTI m info, TypeConstraintInfo info, HasBasic m info)
                => OrderedTypeSynonyms -> ClassEnvironment -> TypeClassDirectives info -> [(Predicate, info)] -> m [(Predicate, info)]
 simplify syns classEnv directives psNew = 
    do let loopIn t@(p@(Predicate className _), info)
@@ -174,12 +184,36 @@ simplify syns classEnv directives psNew =
       hnf <- loopInList psNew
       testDisjoints (loopSc [] hnf)
       
-ambiguous :: (HasBasic m info, HasTI m info, TypeConstraintInfo info) 
-                => [(Predicate, info)] -> m ()
-ambiguous listStart =
+ambiguous :: (HasSubst m info, HasBasic m info, HasTI m info, TypeConstraintInfo info) 
+                => OrderedTypeSynonyms -> [TypeClassDirective info] ->  ClassEnvironment -> [(Predicate, info)] -> m ()
+ambiguous syns directives classEnv listStart =
    do skolems <- getSkolems
+      -- try to use a defaulting directive before reporting an error message
+      let
+            tryToDefault (i, ts) = do
+                  candidates <- 
+                        let 
+                              f (Predicate cn _) = 
+                                    case [(tps, info) | DefaultDirective s tps info <- directives, s == cn ] of 
+                                    [(tps, info)] ->
+                                          let 
+                                              op result tp = 
+                                                      do    let sub = singleSubstitution i tp
+                                                            let b = entailList syns classEnv [] [ sub |-> x | (x, _) <- ts ]
+                                                            return $ if b then (tp, info) : result else result
+                                          in foldM op [] (reverse tps)
+                                    _ -> return []
+                        in mapM (f . fst) ts
+                              
+                  case [ x | x:_ <- candidates ] of 
+                        (tp, info) : rest | all (tp ==) (map fst rest) -> 
+                              do    solveConstraint ( TVar i .==. tp $ info )
+                                    makeSubstConsistent -- ??
+                                    return []
+                        
+                        _ -> return ts
+
       let skolemPairs = [ (is, info) | (is, info, _) <- skolems ]
-      
           reportAmbiguous (p, info) = 
              addLabeledError ambiguousLabel (ambiguousPredicate p info)
              
@@ -189,33 +223,17 @@ ambiguous listStart =
           f pair@(Predicate _ (TVar i), _) = 
              case [ info2 | (is, info2) <- skolemPairs, i `elem` is ] of
                 info2:_ -> reportMissing pair info2
-                _       -> reportAmbiguous pair
+                _       -> do
+                              def <- tryToDefault (i, [pair])
+                              if null def 
+                                    then do
+                                          return ()
+                                    else do 
+                                          reportAmbiguous pair
           f pair = reportAmbiguous pair
 
+      
       mapM_ f listStart
-
-{-
-   -- try to use a defaulting directive before reporting an error message
-   tryToDefault (i, ts) =
-      do candidates <- 
-            let f (Predicate cn _) = 
-                   case [ (tps, info) | DefaultDirective s tps info <- directives, s == cn ] of 
-                      [(tps, info)] ->
-                         let op result tp = 
-                                do let sub = singleSubstitution i tp
-                                   let b = entailList syns classEnv [] [ sub |-> x | (x, _) <- ts ]
-                                   return $ if b then (tp, info) : result else result
-                         in foldM op [] (reverse tps)
-                      _ -> return []
-             in mapM (f . fst) ts
-                    
-         case [ x | x:_ <- candidates ] of
-            (tp, info) : rest | all (tp ==) (map fst rest) -> 
-               do solveConstraint ( TVar i .==. tp $ info )
-                  makeSubstConsistent -- ??
-                  return []
-                  
-            _ -> return ts -}
       
 modifyPredicateMap :: MonadState (OverloadingState info) m => (PredicateMap info -> PredicateMap info) -> m ()
 modifyPredicateMap f = 
@@ -234,18 +252,6 @@ substPredicate (p, info) =
    do new <- applySubst p
       return (new, info)
 
--- Type class directives
-type TypeClassDirectives info = [TypeClassDirective info]
-
-data TypeClassDirective info 
-   = NeverDirective     Predicate  info
-   | CloseDirective     String     info
-   | DisjointDirective  [String]   info
-   | DefaultDirective   String Tps info
-
-instance Show (TypeClassDirective info) where
-   show _ = "<<type class directive>>"
-   
 -- Predicate map
 data PredicateMap info = 
    PredicateMap

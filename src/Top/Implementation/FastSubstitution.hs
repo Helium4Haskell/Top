@@ -97,7 +97,8 @@ writeExpandedType synonyms = writeTypeType where
             case expandTypeConstructorOneStep (snd synonyms) atp of
                Just atp' -> writeTypeType atp' utp original
                Nothing   -> internalError "Top.Solvers.GreedySubst" "writeTypeType" ("inconsistent types(1)" ++ show (atp, utp))      
-    
+         ((TVar i, s), _) ->
+            writeIntType i utp original
          _ -> internalError "Top.Solvers.GreedySubst" "writeTypeType" ("inconsistent types(2)" ++ show (atp, utp))  
       
    writeIntType :: Int -> Tp -> FixpointSubstitution -> FixpointSubstitution     
@@ -111,7 +112,7 @@ writeExpandedType synonyms = writeTypeType where
                
          Just atp ->
             case (leftSpine atp,leftSpine utp) of
-               ((TVar j,[]),_) -> writeIntType j utp original
+               ((TVar j,_),_) -> writeIntType j utp original
                ((TCon s,as),(TCon t,bs)) | s == t -> foldr (uncurry writeTypeType) original (zip as bs)
                ((TCon _, _), _) -> case expandTypeConstructorOneStep (snd synonyms) atp of
                                       Just atp' -> writeIntType i utp (FixpointSubstitution (M.insert i atp' fm))

@@ -61,6 +61,7 @@ Library
     Top.Implementation.TypeGraph.Path
     Top.Implementation.TypeGraph.Standard
     Top.Implementation.TypeGraphSubstitution
+    Top.Implementation.TypeClassDirectives
     Top.Implementation.TypeInference
     Top.Interface.Basic
     Top.Interface.Qualification
