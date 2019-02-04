@@ -168,9 +168,11 @@ singleEntry i s = LogEntries (LogEntry i s:)
 evalBasicMonad :: Empty (f () (BasicMonad f)) => BasicMonad f a -> (a, LogEntries)
 evalBasicMonad = runWriter . flip evalStateFixT empty
 
+instance Semigroup LogEntries where
+   (LogEntries f) <> (LogEntries g) = LogEntries (f . g)
+
 instance Monoid LogEntries where
    mempty = LogEntries id
-   mappend (LogEntries f) (LogEntries g) = LogEntries (f . g)
 
 instance Show LogEntry where
    show = msg
