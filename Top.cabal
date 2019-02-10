@@ -39,6 +39,8 @@ Executable topsolver
 
 Library
   Build-Depends:     base >= 3 && < 5, containers, mtl
+  if !impl(ghc >= 8.0)
+    Build-Depends:   semigroups == 0.18.*
   ghc-options:       -Wall
   default-language:  Haskell98
   hs-source-dirs:    src
