@@ -159,9 +159,9 @@ isTupleConstructor ('(':[]) = False
 isTupleConstructor ('(':cs) = all (','==) (init cs) && last cs == ')'
 isTupleConstructor _        = False
 
-isIOType :: Tp -> Bool
-isIOType (TApp (TCon "IO") _) = True
-isIOType _                    = False
+isIOType :: Tp -> Maybe Tp
+isIOType (TApp (TCon "IO") tp) = Just tp
+isIOType _ = Nothing
 
 ----------------------------------------------------------------------
 -- Show and Read instances
