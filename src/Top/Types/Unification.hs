@@ -47,10 +47,10 @@ mgu t1 t2 =
 --
 -- Note: the boolean indicates whether expansions were necessary
 mguWithTypeSynonyms :: OrderedTypeSynonyms -> Tp -> Tp -> Either UnificationError (Bool, MapSubstitution)
-mguWithTypeSynonyms typesynonyms t1 t2 = rec emptySubst t1 t2
+mguWithTypeSynonyms typesynonyms = rec' emptySubst
 
  where
-   rec sub t1 t2 =
+   rec' sub t1 t2 =
      case (leftSpine t1, leftSpine t2) of
         ((TVar i,[]), _) -> recVar sub i t2
         (_, (TVar i,[])) -> recVar sub i t1
@@ -60,7 +60,7 @@ mguWithTypeSynonyms typesynonyms t1 t2 = rec emptySubst t1 t2
            | otherwise ->
                 case expandOneStepOrdered typesynonyms (t1, t2) of
                    Just (t1', t2') ->
-                      case rec sub t1' t2' of
+                      case rec' sub t1' t2' of
                          Left  uError    -> Left uError
                          Right (_, sub') -> Right (True, sub')
                    Nothing -> Left (ConstantClash s t)
@@ -72,7 +72,7 @@ mguWithTypeSynonyms typesynonyms t1 t2 = rec emptySubst t1 t2
    recVar sub i tp =
       case M.lookup i sub of
          Just t2 ->
-            case rec sub tp t2 of
+            case rec' sub tp t2 of
                Right (True,sub') ->
                   let mtp = equalUnderTypeSynonyms typesynonyms (sub' |-> tp) (sub' |-> t2)
                   in case mtp of
@@ -87,7 +87,7 @@ mguWithTypeSynonyms typesynonyms t1 t2 = rec emptySubst t1 t2
 
    recList sub [] [] = Right (False,sub)
    recList sub (s:ss) (t:tt) =
-      case rec sub s t of
+      case rec' sub s t of
          Left uError -> Left uError
          Right (b,sub') ->
             case recList sub' ss tt of

@@ -1,0 +1,6 @@
+*.o
+*.hi
+topsolver
+*.html
+*.css
+*.gif
