@@ -1,7 +1,7 @@
 name:                   Top
-version:                1.8
+version:                1.9
 synopsis:               Constraint solving framework employed by the Helium Compiler.
-homepage:               http://www.cs.uu.nl/wiki/bin/view/Helium/WebHome
+homepage:               https://github.com/Helium4Haskell/Top
 description:
 
   At its most general, Top is a framework for constructing abstract interpretations 
@@ -19,8 +19,8 @@ maintainer:             helium4haskell@gmail.com
 stability:              provisional
 extra-source-files:     CREDITS.txt
 build-type:             Simple
-cabal-version:          >= 1.10.1.0
-tested-with:            GHC == 7.10.3
+cabal-version:          >= 2
+tested-with:            GHC == 8.4.4
 
 source-repository head
   type:     git
