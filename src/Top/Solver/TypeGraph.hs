@@ -12,6 +12,7 @@ module Top.Solver.TypeGraph where
 import Top.Solver
 import Top.Constraint
 import Top.Constraint.Information
+import Top.Interface.Substitution
 import Top.Implementation.General
 import Top.Implementation.Basic
 import Top.Implementation.Overloading
@@ -29,7 +30,7 @@ type TGS info = And ( Fix (BasicState info) )
                         )
 
 solveTypeGraph :: (Solvable constraint (TG info), TypeConstraintInfo info) 
-                     => TG info () -> SolveOptions -> [constraint] -> TG info (SolveResult info)
+                     => TG info () -> SolveOptions info -> [constraint] -> TG info (SolveResult info)
 solveTypeGraph m options cs =
    do initialize cs options >> m
       onlySolveConstraints cs

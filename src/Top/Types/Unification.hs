@@ -75,9 +75,9 @@ mguWithTypeSynonyms typesynonyms = rec' emptySubst
             case rec' sub tp t2 of
                Right (True,sub') ->
                   let mtp = equalUnderTypeSynonyms typesynonyms (sub' |-> tp) (sub' |-> t2)
-                  in case mtp of
-                        Just newTP -> Right (True,singleSubstitution i newTP @@ removeDom [i] sub')
-                        Nothing -> internalError "Top.Types.Unification" "mguWithTypeSynonyms" "illegal types"
+                  in case mtp of 
+                        Just newTP -> Right (True, singleSubstitution i newTP @@ removeDom [i] sub')
+                        Nothing -> internalError "Top.Types.Unification" "mguWithTypeSynonyms" "illegal types" 
                answer -> answer
          Nothing ->
             case sub |-> tp of
@@ -100,10 +100,15 @@ mguWithTypeSynonyms typesynonyms = rec' emptySubst
 -- (i.e., the least number of expansions)
 equalUnderTypeSynonyms :: OrderedTypeSynonyms -> Tp -> Tp -> Maybe Tp
 equalUnderTypeSynonyms typesynonyms t1 t2 =
-   case (leftSpine t1,leftSpine t2) of
-      ((TVar i,[]),(TVar _,[])) -> Just (TVar i)
-      ((TCon s,ss),(TCon t,tt))
-         | s == t && not (isPhantomTypeSynonym typesynonyms s) ->
+   case (leftSpine t1,leftSpine t2) of 
+      ((TVar i,[]),(TVar _,[])) -> Just (TVar i) 
+      ((TVar i, ss),(TVar j, tt)) ->
+            do 
+                  let f = uncurry (equalUnderTypeSynonyms typesynonyms)
+                  xs <- mapM f (zip ss tt)
+                  Just (foldl TApp (TVar i) xs)
+      ((TCon s,ss),(TCon t,tt)) 
+         | s == t && not (isPhantomTypeSynonym typesynonyms s) -> 
               do let f = uncurry (equalUnderTypeSynonyms typesynonyms)
                  xs <- mapM f (zip ss tt)
                  Just (foldl TApp (TCon s) xs)

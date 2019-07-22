@@ -14,6 +14,7 @@ import Top.Monad.Select
 import Top.Monad.StateFix
 import Top.Types hiding (contextReduction)
 import Top.Interface.Substitution
+import Top.Implementation.TypeClassDirectives
 
 ------------------------------------------------------------------------
 -- (I)  Class name and (dedicated) deselect function
@@ -46,7 +47,10 @@ class Monad m => HasQual m info | m -> info where
     -- class environment
    setClassEnvironment :: ClassEnvironment -> m ()
    getClassEnvironment :: m ClassEnvironment
-   
+
+   getTypeClassDirectives :: m (TypeClassDirectives info)
+   setTypeClassDirectives :: TypeClassDirectives info -> m ()
+
    -- default definitions   
    generalizeWithQualifiers monos = 
       return . generalize monos . ([] .=>.)
@@ -91,6 +95,9 @@ instance ( Monad m
    
    setClassEnvironment      = deQual . setClassEnvironment
    getClassEnvironment      = deQual getClassEnvironment
+
+   setTypeClassDirectives   = deQual . setTypeClassDirectives
+   getTypeClassDirectives   = deQual getTypeClassDirectives
       
 ------------------------------------------------------------------------
 -- (IV)  Additional functions
