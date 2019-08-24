@@ -102,7 +102,7 @@ equalUnderTypeSynonyms :: OrderedTypeSynonyms -> Tp -> Tp -> Maybe Tp
 equalUnderTypeSynonyms typesynonyms t1 t2 =
    case (leftSpine t1,leftSpine t2) of 
       ((TVar i,[]),(TVar _,[])) -> Just (TVar i) 
-      ((TVar i, ss),(TVar j, tt)) ->
+      ((TVar i, ss),(TVar _, tt)) ->
             do 
                   let f = uncurry (equalUnderTypeSynonyms typesynonyms)
                   xs <- mapM f (zip ss tt)

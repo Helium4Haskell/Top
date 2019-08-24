@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE MonoLocalBinds, UndecidableInstances, FlexibleInstances, MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL

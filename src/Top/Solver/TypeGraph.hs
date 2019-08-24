@@ -12,7 +12,7 @@ module Top.Solver.TypeGraph where
 import Top.Solver
 import Top.Constraint
 import Top.Constraint.Information
-import Top.Interface.Substitution
+import Top.Interface.Substitution()
 import Top.Implementation.General
 import Top.Implementation.Basic
 import Top.Implementation.Overloading

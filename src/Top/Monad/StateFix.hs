@@ -15,7 +15,7 @@ module Top.Monad.StateFix
 import Control.Monad.State
 import Control.Monad.Identity
 import Control.Monad.Writer
-import Control.Applicative
+--import Control.Applicative
 
 type StateFix s = StateFixT s Identity
 

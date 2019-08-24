@@ -17,7 +17,7 @@ import Top.Interface.Basic
 import Top.Interface.TypeInference
 import Top.Interface.Substitution
 import Top.Interface.Qualification
-import Top.Implementation.Overloading hiding (classEnvironment, typeClassDirectives)
+import Top.Implementation.Overloading()
 import Top.Implementation.TypeClassDirectives
 import Top.Implementation.General
 import Top.Util.Option

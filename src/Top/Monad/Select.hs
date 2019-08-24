@@ -15,7 +15,7 @@ module Top.Monad.Select
 
 import Top.Util.Embedding
 import Control.Monad.State
-import Control.Applicative
+--import Control.Applicative
 
 --------------------------------------------------------
 -- Select Monad

@@ -192,14 +192,16 @@ instance Show Tp where
 instance Read Tp where 
    readsPrec _ = tpParser
 
+-- The local name <**> is chosen in order not to shadow <*>, but
+-- morally, it's intent is the same. The same goes for <**, **>, <$$>
 tpParser :: String -> [(Tp, String)]
 tpParser = level0 
  where
-   level0 = foldr1 (.->.) <$> seplist (tok "->") level1
-   level1 = foldl1 TApp <$> list1 level2
+   level0 = foldr1 (.->.) <$$> seplist (tok "->") level1
+   level1 = foldl1 TApp <$$> list1 level2
    level2 =  ident 
-         <|> (listType <$> bracks level0) 
-         <|> ((\xs -> if length xs == 1 then head xs else tupleType xs) <$> pars (commaList level0))
+         <||> (listType <$$> bracks level0) 
+         <||> ((\xs -> if length xs == 1 then head xs else tupleType xs) <$$> pars (commaList level0))
 
    ident xs =
       case break (\c -> isSpace c || c `elem` "[]()-,") (dropWhile isSpace xs) of
@@ -208,21 +210,21 @@ tpParser = level0
                                -> [ (TVar (read $ drop 1 s), xs2) ]
                   |  otherwise -> [ (TCon s, xs2) ]     
                 
-   (p <*> q) xs = [ (f a, xs2) | (f, xs1) <- p xs, (a, xs2) <- q xs1 ]
-   (f <$> p) xs = [ (f a, xs1) | (a, xs1) <- p xs ]
-   (p <|> q) xs = p xs ++ q xs
-   p <* q = const <$> p <*> q
-   p *> q = flip const <$> p <*> q
+   (p <**> q) xs = [ (f a, xs2) | (f, xs1) <- p xs, (a, xs2) <- q xs1 ]
+   (f <$$> p) xs = [ (f a, xs1) | (a, xs1) <- p xs ]
+   (p <||> q) xs = p xs ++ q xs
+   p <** q = const <$$> p <**> q
+   p **> q = flip const <$$> p <**> q
    succeed a xs = [(a, xs)]
    tok s xs = 
       let ys = dropWhile isSpace xs
       in [ (s, drop (length s) ys) | not (null ys), s `isPrefixOf` ys ]
-   pars   p = tok "(" *> p <* tok ")"
-   bracks p = tok "[" *> p <* tok "]"
-   list p = ((:) <$> p <*> list p) <|> succeed []
-   list1 p = (:) <$> p <*> list p
-   seplist sep p = (:) <$> p <*> list (sep *> p)
-   commaList p = seplist (tok ",") p <|> succeed []
+   pars   p = tok "(" **> p <** tok ")"
+   bracks p = tok "[" **> p <** tok "]"
+   list p = ((:) <$$> p <**> list p) <||> succeed []
+   list1 p = (:) <$$> p <**> list p
+   seplist sep p = (:) <$$> p <**> list (sep **> p)
+   commaList p = seplist (tok ",") p <||> succeed []
 
 ----------------------------------------------------------------------
 -- The type class HasTypes

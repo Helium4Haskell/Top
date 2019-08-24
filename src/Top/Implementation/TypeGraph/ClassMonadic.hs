@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances, FunctionalDependencies, RankNTypes,
+{-# LANGUAGE MonoLocalBinds, UndecidableInstances, FunctionalDependencies, RankNTypes,
             MultiParamTypeClasses, FlexibleContexts, FlexibleInstances #-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL

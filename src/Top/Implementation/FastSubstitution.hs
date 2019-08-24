@@ -97,7 +97,7 @@ writeExpandedType synonyms = writeTypeType where
             case expandTypeConstructorOneStep (snd synonyms) atp of
                Just atp' -> writeTypeType atp' utp original
                Nothing   -> internalError "Top.Solvers.GreedySubst" "writeTypeType" ("inconsistent types(1)" ++ show (atp, utp))      
-         ((TVar i, s), _) ->
+         ((TVar i, _), _) ->
             writeIntType i utp original
          _ -> internalError "Top.Solvers.GreedySubst" "writeTypeType" ("inconsistent types(2)" ++ show (atp, utp))  
       

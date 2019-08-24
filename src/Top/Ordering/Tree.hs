@@ -42,6 +42,7 @@ infixr 8 .>. , .>>. , .<. , .<<.
 (.<<.) = makeTreeHelper Spread Up
 
 -- prevents adding an empty list
+makeTreeHelper :: (t2 -> [a] -> t3 -> t3) -> t2 -> [a] -> t3 -> t3
 makeTreeHelper constructor direction xs tree
    | null xs   = tree
    | otherwise = constructor direction xs tree
