@@ -5,4 +5,4 @@ topsolver
 *.html
 *.css
 *.gif
-dist/
+dist/*

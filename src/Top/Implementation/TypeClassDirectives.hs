@@ -13,7 +13,7 @@ data TypeClassDirective info
    | DefaultDirective   String Tps info
 
 instance Show (TypeClassDirective info) where
-    show (NeverDirective predicate info) = show predicate
-    show (CloseDirective n info) = show n
-    show (DisjointDirective ns info) = show ns
-    show (DefaultDirective n tps info) = show n ++ show tps
+    show (NeverDirective predicate _) = show predicate
+    show (CloseDirective n _) = show n
+    show (DisjointDirective ns _) = show ns
+    show (DefaultDirective n tps _) = show n ++ show tps

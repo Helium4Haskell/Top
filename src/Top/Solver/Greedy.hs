@@ -9,7 +9,7 @@
 
 module Top.Solver.Greedy where
 
-import Top.Interface.Substitution      
+import Top.Interface.Substitution()      
 import Top.Implementation.General
 import Top.Implementation.Basic
 import Top.Implementation.TypeInference

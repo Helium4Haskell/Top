@@ -17,7 +17,7 @@ import Top.Interface.Basic
 import Top.Interface.TypeInference
 import Top.Interface.Substitution
 import Top.Interface.Qualification
-import Top.Implementation.Overloading hiding (classEnvironment, typeClassDirectives)
+import Top.Implementation.Overloading()
 import Top.Implementation.TypeClassDirectives
 import Top.Implementation.General
 import Top.Util.Option
@@ -26,6 +26,7 @@ import Top.Constraint
 import qualified Data.Map as M
 import Top.Constraint.Information
 import Control.Monad.Writer
+import Data.Semigroup as Sem
 
 data ConstraintSolver constraint info = ConstraintSolver (SolveOptions info -> [constraint] -> (SolveResult info, LogEntries))
 
@@ -172,9 +173,12 @@ singleEntry i s = LogEntries (LogEntry i s:)
 evalBasicMonad :: Empty (f () (BasicMonad f)) => BasicMonad f a -> (a, LogEntries)
 evalBasicMonad = runWriter . flip evalStateFixT empty
 
+instance Sem.Semigroup LogEntries where
+   (LogEntries f) <> (LogEntries g) = LogEntries (f . g)
+
 instance Monoid LogEntries where
    mempty = LogEntries id
-   mappend (LogEntries f) (LogEntries g) = LogEntries (f . g)
+   mappend = (Sem.<>)
 
 instance Show LogEntry where
    show = msg
