@@ -15,6 +15,7 @@ import Top.Util.Option
 import Top.Monad.Select
 import Top.Monad.StateFix
 import Utils (internalError)
+import Control.Monad (liftM, when, unless, filterM)
 
 ------------------------------------------------------------------------
 -- (I)  Class name and (dedicated) deselect function
@@ -63,7 +64,7 @@ instance ( Monad m
    -- constraints
    pushConstraint        = deBasic . pushConstraint . mapConstraint selectFix
    pushConstraints       = deBasic . pushConstraints . map (mapConstraint selectFix)
-   popConstraint         = deBasic $ liftM (fmap (mapConstraint deBasic)) popConstraint
+   popConstraint         = deBasic $ Control.Monad.liftM (fmap (mapConstraint deBasic)) popConstraint
    discardConstraints    = deBasic discardConstraints
    -- errors
    addLabeledError label = deBasic . addLabeledError label
@@ -89,13 +90,13 @@ addError :: HasBasic m info => info -> m ()
 addError = addLabeledError NoErrorLabel
 
 getErrors :: HasBasic m info => m [info]  
-getErrors = liftM (map fst) getLabeledErrors
+getErrors = Control.Monad.liftM (map fst) getLabeledErrors
 
 doChecks :: HasBasic m info => m ()
 doChecks = 
    do ms <- getChecks
-      bs <- filterM (liftM not . fst) ms
-      unless (null bs) $ 
+      bs <- Control.Monad.filterM (Control.Monad.liftM not . fst) ms
+      Control.Monad.unless (null bs) $ 
          let err = "\n\n  The following constraints were violated:\n" 
                    ++ unlines (map (("  - "++) . snd) bs)
          in internalError "Top.States.BasicState" "doChecks" err
@@ -107,7 +108,7 @@ startSolving =
          Nothing -> 
             do check <- getOption checkConditions
                errs  <- getErrors
-               when (check && null errs) doChecks
+               Control.Monad.when (check && null errs) doChecks
          Just c  -> 
             do solveConstraint c
                addCheck (show c) (checkCondition c)

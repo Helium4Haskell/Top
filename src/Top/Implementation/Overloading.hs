@@ -26,6 +26,7 @@ import Top.Util.Embedding
 import qualified Data.Map as M
 import Data.Maybe
 import Data.List (intercalate, (\\), partition)
+import Control.Monad (foldM)
 
 ------------------------------------------------------------------------
 -- (I)  Algebraic data type
@@ -201,7 +202,7 @@ ambiguous syns directives classEnv listStart =
                                                       do    let sub = singleSubstitution i tp
                                                             let b = entailList syns classEnv [] [ sub |-> x | (x, _) <- ts ]
                                                             return $ if b then (tp, info) : result else result
-                                          in foldM op [] (reverse tps)
+                                          in Control.Monad.foldM op [] (reverse tps)
                                     _ -> return []
                         in mapM (f . fst) ts
                               

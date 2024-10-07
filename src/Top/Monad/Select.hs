@@ -15,6 +15,7 @@ module Top.Monad.Select
 
 import Top.Util.Embedding
 import Control.Monad.State
+import Control.Monad (liftM, ap)
 --import Control.Applicative
 
 --------------------------------------------------------
@@ -24,11 +25,11 @@ newtype Select t m a = Select (m a)
 
 -- To satisfy the 7.10.x proposal:
 instance Monad m => Functor (Select s m) where
-    fmap  = liftM
+    fmap  = Control.Monad.liftM
     
 instance Monad m => Applicative (Select s m) where
    pure   = Select . return 
-   (<*>)  = ap
+   (<*>)  = Control.Monad.ap
 
 -- Back to real code:
 instance Monad m => Monad (Select t m) where
@@ -54,11 +55,11 @@ data SelectFix (t :: (* -> *) -> *) (m :: * -> *) a = SelectFix (m a)
 
 -- To satisfy the 7.10.x proposal:
 instance Monad m => Functor (SelectFix t m) where
-    fmap  = liftM
+    fmap  = Control.Monad.liftM
     
 instance Monad m => Applicative (SelectFix t m) where
    pure   = SelectFix . return 
-   (<*>)  = ap
+   (<*>)  = Control.Monad.ap
 
 -- Back to real code:
 instance Monad m => Monad (SelectFix t m) where

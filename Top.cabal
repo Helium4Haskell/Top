@@ -1,5 +1,5 @@
 name:           Top
-version:        1.9
+version:        1.9.1
 synopsis:           Constraint solving framework employed by the Helium Compiler.
 homepage:           https://github.com/Helium4Haskell/Top
 description:
@@ -19,7 +19,7 @@ maintainer:         helium4haskell@gmail.com
 stability:          provisional
 extra-source-files:     CREDITS.txt
 build-type:         Simple
-cabal-version:      >= 2
+cabal-version:      >= 2.0
 tested-with:        GHC == 8.4.4
 
 source-repository head

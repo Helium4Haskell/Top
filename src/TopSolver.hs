@@ -28,6 +28,7 @@ import Data.Maybe
 import qualified Data.Map as M
 import qualified Data.Set as S
 import System.Environment (getArgs)
+import Control.Monad (void, liftM)
 
 ---------------------------------------------------------------------
 -- * Top logo
@@ -132,8 +133,8 @@ parens, brackets       :: CharParser () a -> CharParser () a
 reserved, reservedOp   :: String -> CharParser () ()
 
 whiteSpace = P.whiteSpace lexer
-comma      = void (P.comma lexer)
-dot        = void (P.dot lexer)
+comma      = Control.Monad.void (P.comma lexer)
+dot        = Control.Monad.void (P.dot lexer)
 parens     = P.parens lexer
 brackets   = P.brackets lexer
 identifier = P.identifier lexer
@@ -191,7 +192,7 @@ pStatements =
 
 pStatement :: Parser (Either (Result TopConstraint) (Result (Constraint TopSolve)))
 pStatement = 
-   tryList (map (liftM Right) decl ++ [ liftM Left pConstraint ])
+   tryList (map (Control.Monad.liftM Right) decl ++ [ Control.Monad.liftM Left pConstraint ])
  where
    decl = [ pOperation {-, pSubtypingRule, pClassDecl, pInstanceDecl, pNeverDecl
           , pCloseDecl, pDisjointDecl, pDefaultDecl -}
@@ -408,7 +409,7 @@ pInfo = tryList [ withInfo, withoutInfo ]
    where
       withInfo =
          do reservedOp ":"
-            s <- manyTill anyChar (do { void (char '\n') ; return () } <|> eof)
+            s <- manyTill anyChar (do { Control.Monad.void (char '\n') ; return () } <|> eof)
             whiteSpace
             return (TopInfo [("msg", s)])
       withoutInfo =
@@ -455,13 +456,13 @@ pTypeScheme = do qs <- option [] $
 
 pQualifierList :: Parser TopQualifiers
 pQualifierList = 
-   tryList [ liftM concat (parens (commas pOneQualifier))
+   tryList [ Control.Monad.liftM concat (parens (commas pOneQualifier))
            , pOneQualifier
            ]
  
 pOneQualifier :: Parser TopQualifiers
 pOneQualifier = tryList
-   [ liftM return pPredicate
+   [ Control.Monad.liftM return pPredicate
    --, pDependency        >>= (return . toTopQual)
    --, pImplicitParameter >>= (return . toTopQual)
    --, pSubtyping         >>= (return . toTopQual)

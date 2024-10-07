@@ -15,6 +15,7 @@ import Top.Implementation.TypeGraph.Path
 import Top.Types
 import Top.Solver
 import Utils (internalError)
+import Control.Monad (filterM)
 
 -----------------------------------------------------------------------------
 
@@ -54,7 +55,7 @@ minimalEdgeFilter = resultsEdgeFilter minimum
 edgeFilter :: Monad m => String -> ((EdgeId, info) -> m Bool) -> HComponent m info
 edgeFilter description function = 
    Filter description $ \es -> 
-      do xs <- filterM function es
+      do xs <- Control.Monad.filterM function es
          return (if null xs then es else xs)
 
 

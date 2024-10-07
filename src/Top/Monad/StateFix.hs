@@ -15,6 +15,7 @@ module Top.Monad.StateFix
 import Control.Monad.State
 import Control.Monad.Identity
 import Control.Monad.Writer
+import Control.Monad (liftM, ap)
 --import Control.Applicative
 
 type StateFix s = StateFixT s Identity
@@ -23,11 +24,11 @@ data StateFixT s m a = Fix { unFix :: StateT (s (StateFixT s m)) m a }
 
 -- To satisfy the 7.10.x proposal:
 instance Monad m => Functor (StateFixT s m) where
-    fmap  = liftM
+    fmap  = Control.Monad.liftM
     
 instance Monad m => Applicative (StateFixT s m) where
    pure = Fix . return
-   (<*>) = ap
+   (<*>) = Control.Monad.ap
    
 -- Back to real code:   
 instance Monad m => Monad (StateFixT s m) where 

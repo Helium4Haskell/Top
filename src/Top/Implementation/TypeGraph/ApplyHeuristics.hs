@@ -24,6 +24,7 @@ import Top.Interface.TypeInference
 import Top.Solver
 import Top.Types 
 import Utils (internalError)
+import Control.Monad (foldM)
 
 type ErrorInfo info = ([EdgeId], info)
 
@@ -112,7 +113,7 @@ evalSelector edges selector =
                          Just (prio, string, es, info) -> 
                             do logMsg ("     "++string++" (prio="++show prio++") => "++showSet es)
                                return ((prio, es, info) : list)
-            foldM op [] edges
+            Control.Monad.foldM op [] edges
      
       SelectorList (name, f) ->
          do result <- f edges

@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances, FlexibleInstances, MultiParamTypeClasses#-}
+{-# LANGUAGE UndecidableInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts#-}
 -----------------------------------------------------------------------------
 -- | License      :  GPL
 -- 
@@ -20,10 +20,18 @@ import Top.Constraint
 import Top.Util.Option
 import Top.Implementation.General
 import Top.Interface.Basic
+    ( ErrorLabel,
+      HasBasic(getLabeledErrors, checkConditions, getChecks, addCheck,
+               updateErrorInfo, addLabeledError, popConstraint, pushConstraints,
+               stopAfterFirstError, discardConstraints),
+      ClassBasic,
+      stopOption,
+      checkOption )
 import Top.Monad.Select
 -- import Control.Monad.State
 import Top.Util.Embedding
 import Top.Util.Empty()
+import Control.Monad (when)
 
 ------------------------------------------------------------------------
 -- (I)  Algebraic data type
@@ -100,7 +108,7 @@ instance ( MonadState s m
    addLabeledError label info =
       do modify (\s -> s { errors = (info, label) : errors s })
          stop <- getOption stopAfterFirstError
-         when stop discardConstraints
+         Control.Monad.when stop discardConstraints
 
    getLabeledErrors = 
       gets errors

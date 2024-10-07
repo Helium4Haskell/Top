@@ -19,6 +19,7 @@ import Top.Constraint.Information
 import Data.Function
 import Data.List (intersect, sortBy, partition, groupBy)
 import qualified Data.Map as M
+import Control.Monad (foldM)
 
 ------------------------------------------------------------------------
 -- (I)  Class name and (dedicated) deselect function
@@ -214,7 +215,7 @@ checkSkolems =
                             []  -> return (this:rest)
                             esc -> do addLabeledError escapingSkolemLabel (escapedSkolems esc info)
                                       return rest
-               in foldM op [] list3
+               in Control.Monad.foldM op [] list3
 
       -- store the remaining skolem constants (that are consistent with the current substitution).
       let new = [ (concatMap (ftv . snd) pairs, info, monos) | (pairs, (info, monos)) <- list4 ]
